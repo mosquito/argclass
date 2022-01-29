@@ -8,6 +8,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import (
     Any, Dict, Iterable, Mapping, Optional, Sequence, Type, TypeVar, Union,
+    NamedTuple,
 )
 
 
@@ -16,30 +17,31 @@ T = TypeVar("T")
 
 class ConfigAction(argparse.Action):
     def __init__(
-        self, option_strings: Sequence[str], dest: str, search_paths=()
+        self, option_strings: Sequence[str], dest: str, search_paths=(),
+        type: Type[MappingProxyType] = MappingProxyType({})
     ):
-        super().__init__(option_strings, dest)
+        if not isinstance(type, MappingProxyType):
+            raise ValueError("type must be MappingProxyType")
+        super().__init__(option_strings, dest, type=Path)
         self.search_paths = list(map(Path, search_paths))
-        self.__parser = configparser.ConfigParser(
-            default_section="__default__"
-        )
+        self._parser = configparser.ConfigParser()
+        self._result = None
 
     def __call__(self, parser, namespace, values, option_string=None):
-        filenames = list(self.search_paths)
-        if values is not None:
-            filenames.insert(0, Path(values))
-        self.__parser.read(filenames)
+        if not self._result:
+            filenames = list(self.search_paths)
+            if values is not None:
+                filenames.insert(0, Path(values))
+            self._parser.read(filenames)
 
-        result = {}
-        for section in self.__parser.sections():
-            config = dict(
-                self.__parser.items(section, raw=True)
+            self._result = dict(
+                self._parser.items(self._parser.default_section, raw=True)
             )
+            for section in self._parser.sections():
+                config = dict(self._parser.items(section, raw=True))
+                self._result[section] = config
 
-            if section == self.__parser.default_section:
-                result.update(**config)
-            else:
-                result[section] = config
+        setattr(namespace, self.dest, MappingProxyType(self._result))
 
 
 class Actions(str, Enum):
@@ -111,6 +113,7 @@ class Argument:
 class Config(Argument):
     action: ConfigAction = ConfigAction
     search_paths: Optional[Iterable[Union[Path, str]]] = None
+    type: Any = None
 
 
 def deep_getattr(name, attrs: Dict[str, Any], *bases: Type) -> Any:
@@ -240,21 +243,42 @@ class Parser(Base):
                 )
                 self._destinations[dest] = (group, name, argument, action)
 
-    def parse_args(self, args: Optional[Sequence[str]]) -> "Parser":
-        ns = self._parser.parse_args(args)
+    def _get_destinations(self, ns: argparse.Namespace) -> "_Destination":
         for attr, dest_value in self._destinations.items():
             target, name, argument, action = dest_value
             value = getattr(ns, attr)
+            yield _Destination(
+                attr=attr, target=target, name=name,
+                argument=argument, action=action, value=value,
+            )
 
-            if argument.action == ConfigAction:
-                action(self._parser, ns, value, None)
-            else:
-                setattr(target, name, value)
+    def parse_args(self, args: Optional[Sequence[str]]) -> "Parser":
+        ns: argparse.Namespace = self._parser.parse_args(args)
+
+        destinations: Iterable[_Destination] = list(self._get_destinations(ns))
+        configs = list(
+            filter(lambda x: x.argument.action == ConfigAction, destinations)
+        )
+
+        for config_dest in configs:
+            config_dest.action(self._parser, ns, config_dest.value, None)
+
+        for dest in self._get_destinations(ns):
+            setattr(dest.target, dest.name, dest.value)
 
         return self
 
     def print_help(self):
         return self._parser.print_help()
+
+
+class _Destination(NamedTuple):
+    attr: str
+    target: Parser
+    name: str
+    argument: Argument
+    action: Union[Actions, ConfigAction]
+    value: Any
 
 
 __all__ = (
