@@ -14,9 +14,9 @@ class TestBasics:
 
     def test_example_config(self, tmp_path):
         config = ConfigParser()
-        config[config.default_section]['foo'] = "bar"
-        config.add_section('test_section')
-        config['test_section']['spam'] = "egg"
+        config[config.default_section]["foo"] = "bar"
+        config.add_section("test_section")
+        config["test_section"]["spam"] = "egg"
 
         config_file = tmp_path / "config.ini"
         with open(config_file, "w") as fp:
@@ -25,4 +25,4 @@ class TestBasics:
         parser = self.Parser()
         parser.parse_args(["--config", str(config_file)])
 
-        assert parser.foo == 'bar'
+        assert parser.foo == "bar"

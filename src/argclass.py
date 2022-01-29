@@ -7,8 +7,8 @@ from enum import Enum
 from pathlib import Path
 from types import MappingProxyType
 from typing import (
-    Any, Dict, Iterable, Mapping, Optional, Sequence, Type, TypeVar, Union,
-    NamedTuple,
+    Any, Dict, Iterable, Mapping, NamedTuple, Optional, Sequence, Type, TypeVar,
+    Union,
 )
 
 
@@ -18,7 +18,7 @@ T = TypeVar("T")
 class ConfigAction(argparse.Action):
     def __init__(
         self, option_strings: Sequence[str], dest: str, search_paths=(),
-        type: Type[MappingProxyType] = MappingProxyType({})
+        type: Type[MappingProxyType] = MappingProxyType({}),
     ):
         if not isinstance(type, MappingProxyType):
             raise ValueError("type must be MappingProxyType")
@@ -35,7 +35,7 @@ class ConfigAction(argparse.Action):
             self._parser.read(filenames)
 
             self._result = dict(
-                self._parser.items(self._parser.default_section, raw=True)
+                self._parser.items(self._parser.default_section, raw=True),
             )
             for section in self._parser.sections():
                 config = dict(self._parser.items(section, raw=True))
@@ -257,7 +257,7 @@ class Parser(Base):
 
         destinations: Iterable[_Destination] = list(self._get_destinations(ns))
         configs = list(
-            filter(lambda x: x.argument.action == ConfigAction, destinations)
+            filter(lambda x: x.argument.action == ConfigAction, destinations),
         )
 
         for config_dest in configs:
