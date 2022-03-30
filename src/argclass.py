@@ -18,9 +18,12 @@ T = TypeVar("T")
 
 
 def read_config(
-    *paths: Union[str, Path]
+    *paths: Union[str, Path], **kwargs
 ) -> Tuple[Dict[str, Any], Tuple[Path, ...]]:
-    parser = configparser.ConfigParser(allow_no_value=True, strict=False)
+    kwargs.setdefault('allow_no_value', True)
+    kwargs.setdefault('strict', False)
+    parser = configparser.ConfigParser(**kwargs)
+
     filenames = list(
         map(
             lambda p: p.resolve(),
