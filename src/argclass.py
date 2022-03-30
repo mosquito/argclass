@@ -18,13 +18,18 @@ T = TypeVar("T")
 
 
 def read_config(*paths: Union[str, Path]) -> Dict[str, Any]:
+    def convert_path(path: Union[str, Path]) -> Path:
+        if path.startswith('~'):
+            path = os.path.expanduser(path)
+        return Path(path)
+
     parser = configparser.ConfigParser()
     filenames = list(
         map(
             lambda p: p.resolve(),
             filter(
                 lambda p: p.is_file(),
-                map(Path, paths)
+                map(convert_path, paths)
             )
         )
     )

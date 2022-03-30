@@ -30,12 +30,16 @@ This module allows you to declare command-line parsers with classes.
         rpc = AddressPortGroup(title="RPC options", defaults=dict(port=9090))
 
 
-    parser = Parser()
+    parser = Parser(
+        config_files=[".example.ini", "~/.example.ini", "/etc/example.ini"],
+        auto_env_var_prefix="EXAMPLE_"
+    )
     parser.parse_args()
 
     logging.basicConfig(level=parser.log_level)
     logging.info('Listening http://%s:%d', parser.http.address, parser.http.port)
     logging.info(f'Listening rpc://%s:%d', parser.rpc.address, parser.rpc.port)
+
 
     assert parser.http.address == '127.0.0.1'
     assert parser.rpc.address == '127.0.0.1'
