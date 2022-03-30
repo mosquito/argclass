@@ -5,7 +5,7 @@ import argclass
 
 class TestBasics:
     class Parser(argclass.Parser):
-        config: list[int] = argclass.Config(search_paths=["test.conf"])
+        config = argclass.Config(search_paths=["test.conf"])
         foo: str = argclass.Argument(help="foo")
 
     def test_simple(self):
@@ -22,7 +22,7 @@ class TestBasics:
         with open(config_file, "w") as fp:
             config.write(fp)
 
-        parser = self.Parser()
+        parser = self.Parser(config_paths=[])
         parser.parse_args(["--config", str(config_file)])
 
-        assert parser.foo == "bar"
+        assert parser.config['foo'] == "bar"
