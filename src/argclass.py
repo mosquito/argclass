@@ -19,7 +19,7 @@ T = TypeVar("T")
 
 def read_config(*paths: Union[str, Path]) -> Dict[str, Any]:
     def convert_path(path: Union[str, Path]) -> Path:
-        if path.startswith('~'):
+        if isinstance(path, str) and path.startswith('~'):
             path = os.path.expanduser(path)
         return Path(path)
 
