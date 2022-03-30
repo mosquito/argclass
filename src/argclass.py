@@ -17,30 +17,27 @@ from typing import (
 T = TypeVar("T")
 
 
-def read_config(*paths: Union[str, Path]) -> Dict[str, Any]:
-    def convert_path(path: Union[str, Path]) -> Path:
-        if isinstance(path, str) and path.startswith('~'):
-            path = os.path.expanduser(path)
-        return Path(path)
-
-    parser = configparser.ConfigParser()
+def read_config(
+    *paths: Union[str, Path]
+) -> Tuple[Dict[str, Any], Tuple[Path, ...]]:
+    parser = configparser.ConfigParser(allow_no_value=True, strict=False)
     filenames = list(
         map(
             lambda p: p.resolve(),
             filter(
                 lambda p: p.is_file(),
-                map(convert_path, paths)
+                map(lambda x: Path(x).expanduser(), paths)
             )
         )
     )
-    parser.read(filenames)
+    paths = parser.read(filenames)
 
     result = dict(parser.items(parser.default_section, raw=True))
     for section in parser.sections():
         config = dict(parser.items(section, raw=True))
         result[section] = config
 
-    return result
+    return result, tuple(map(Path, paths))
 
 
 class ConfigAction(argparse.Action):
@@ -62,7 +59,7 @@ class ConfigAction(argparse.Action):
             filenames = list(self.search_paths)
             if values is not None:
                 filenames.insert(0, Path(values))
-            self._result = read_config(*filenames)
+            self._result, filenames = read_config(*filenames)
         setattr(namespace, self.dest, MappingProxyType(self._result))
 
 
@@ -297,6 +294,19 @@ class Group(AbstractGroup, Base):
 
 # noinspection PyProtectedMember
 class Parser(AbstractParser, Base):
+    HELP_APPENDIX_PREAMBLE = (
+        " Default values will based on following "
+        "configuration files {configs}. "
+    )
+    HELP_APPENDIX_CURRENT = (
+        "Now {num_existent} files has been applied {existent}. "
+    )
+    HELP_APPENDIX_END = (
+        "The configuration files is INI-formatted files "
+        "where configuration groups is INI sections."
+        "See more https://pypi.org/project/argclass/#configs"
+    )
+
     @staticmethod
     def _add_argument(parser: Any, argument: Argument, dest: str, *aliases):
         kwargs = argument.get_kwargs()
@@ -338,19 +348,33 @@ class Parser(AbstractParser, Base):
         **kwargs,
     ):
         super().__init__()
-        self._parser = ArgumentParser(*args, **kwargs)
+        self._config, filenames = read_config(*config_files)
+        epilog = kwargs.pop("epilog", "")
+        epilog += self.HELP_APPENDIX_PREAMBLE.format(
+            configs=repr(config_files),
+        )
+
+        if filenames:
+            epilog += self.HELP_APPENDIX_CURRENT.format(
+                num_existent=len(filenames),
+                existent=repr(list(map(str, filenames)))
+            )
+        epilog += self.HELP_APPENDIX_END
+
+        self._parser = ArgumentParser(*args, epilog=epilog, **kwargs)
         self._groups = {}
         self._destinations = {}
         self._auto_env_var_prefix: Optional[str] = auto_env_var_prefix
         self._subparsers: Optional[argparse.ArgumentParser] = None
-        self._config = read_config(*config_files)
 
         for name, argument in self.__arguments__.items():
             aliases = set(argument.aliases)
             if not aliases:
                 aliases.add(f"--{self.get_cli_name(name)}")
-            argument.env_var = self.get_env_var(name, argument)
-            argument.default = self._config.get(name, argument.default)
+            argument = argument.copy(
+                env_var=self.get_env_var(name, argument),
+                default=self._config.get(name, argument.default)
+            )
             dest, action = self._add_argument(
                 self._parser, argument, name, *aliases
             )
@@ -361,6 +385,7 @@ class Parser(AbstractParser, Base):
                 title=group._title,
                 description=group._description,
             )
+            config = self._config.get(group_name, {})
 
             for name, argument in group.__arguments__.items():
                 aliases = set(argument.aliases)
@@ -372,7 +397,10 @@ class Parser(AbstractParser, Base):
                 dest, action = self._add_argument(
                     parser,
                     argument.copy(
-                        default=group._defaults.get(name, argument.default)
+                        default=config.get(
+                            name, group._defaults.get(name, argument.default)
+                        ),
+                        env_var=self.get_env_var(dest, argument),
                     ),
                     dest, *aliases
                 )
