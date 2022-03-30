@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(
     name="argclass",
-    version="0.1.0",
+    version="0.1.1",
     platforms="all",
     author="Dmitry Orlov",
     author_email="me@mosquito.su",
@@ -15,6 +15,7 @@ setup(
     license="Apache 2",
     long_description=open("README.rst").read(),
     classifiers=[
+        "Development Status :: 3 - Alpha",
         "Environment :: Console",
         "Intended Audience :: Developers",
         "Intended Audience :: System Administrators",
