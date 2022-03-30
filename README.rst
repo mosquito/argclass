@@ -44,12 +44,18 @@ This module allows you to declare command-line parsers with classes.
     assert parser.rpc.port == 9090
 
 
+Run this script:
+
 .. code-block::
+
     $ python example.py
     INFO:root:Listening http://127.0.0.1:8080
     INFO:root:Listening rpc://127.0.0.1:9090
 
+Example of ``--help`` output:
+
 .. code-block::
+
     $ python example.py --help
     usage: example.py [-h] [--log-level {debug,info,warning,error,critical}]
                      [--http-address HTTP_ADDRESS] [--http-port HTTP_PORT]
