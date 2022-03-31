@@ -1,4 +1,9 @@
+import os
+import re
+import uuid
 from typing import List
+
+import pytest
 
 import argclass
 
@@ -80,3 +85,17 @@ class TestFoo:
         parser = self.Parser()
         r = repr(parser)
         assert r == "<Parser: 1 arguments, 2 groups, 0 subparsers>"
+
+    def test_access_to_not_parsed_attrs(self):
+        parser = self.Parser()
+        with pytest.raises(AttributeError):
+            _ = parser.foo
+
+    def test_environment(self):
+        prefix = re.sub(r"\d+", "", uuid.uuid4().hex + uuid.uuid4().hex).upper()
+        expected = uuid.uuid4().hex
+        os.environ[f"{prefix}_FOO"] = expected
+
+        parser = self.Parser(auto_env_var_prefix=f"{prefix}_")
+        parser.parse_args([])
+        assert parser.foo == expected
