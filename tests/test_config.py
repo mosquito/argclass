@@ -22,7 +22,7 @@ class TestBasics:
         with open(config_file, "w") as fp:
             config.write(fp)
 
-        parser = self.Parser(config_paths=[])
+        parser = self.Parser()
         parser.parse_args(["--config", str(config_file)])
 
         assert parser.config['foo'] == "bar"

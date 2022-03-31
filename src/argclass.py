@@ -324,7 +324,9 @@ class Parser(AbstractParser, Base):
         parser: Any, argument: Argument, dest: str, *aliases,
     ) -> Tuple[str, argparse.Action]:
         kwargs = argument.get_kwargs()
-        kwargs["dest"] = dest
+
+        if not argument.is_positional:
+            kwargs["dest"] = dest
 
         if argument.default is not None:
             kwargs["help"] = (
@@ -466,8 +468,7 @@ class Parser(AbstractParser, Base):
 
                 if isinstance(action, ConfigAction):
                     action(parser, parsed_ns, parsed_value, None)
-                    continue
-
+                    parsed_value = getattr(parsed_ns, key)
                 setattr(target, name, parsed_value)
 
         return self
