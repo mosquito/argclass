@@ -10,5 +10,5 @@ def test_subparsers():
 
     parser = Parser()
     parser.parse_args(["subparser", "--foo=bar"])
-    assert parser.subparser.foo == 'bar'
+    assert parser.subparser.foo == "bar"
 

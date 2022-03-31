@@ -27,7 +27,7 @@ class TestBasics:
         parser = self.Parser()
         parser.parse_args(["--config", str(config_file)])
 
-        assert parser.config['foo'] == "bar"
+        assert parser.config["foo"] == "bar"
 
 
 def test_config_type():
@@ -37,4 +37,4 @@ def test_config_type():
     parser = Parser()
 
     with pytest.raises(ValueError):
-        parser.parse_args(['--config=test.ini'])
+        parser.parse_args(["--config=test.ini"])

@@ -1,5 +1,6 @@
-import argclass
 import pytest
+
+import argclass
 
 
 def test_required_argument():

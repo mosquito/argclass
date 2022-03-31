@@ -32,13 +32,13 @@ class TestFoo:
     class Parser(argclass.Parser):
         foo: str = argclass.Argument(help="foo")
         http: HostPortGroup = HostPortGroup(
-            title="HTTP host and port", prefix='api', defaults={
-                'port': 80, 'host': '0.0.0.0',
-            }
+            title="HTTP host and port", prefix="api", defaults={
+                "port": 80, "host": "0.0.0.0",
+            },
         )
         grpc: HostPortGroup = HostPortGroup(
             title="GRPC host and port",
-            defaults={'port': 6000, 'host': '::'}
+            defaults={"port": 6000, "host": "::"},
         )
 
     def test_simple(self):
