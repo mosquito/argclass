@@ -6,11 +6,12 @@ import os
 from abc import ABCMeta
 from argparse import ArgumentParser
 from enum import Enum
+from functools import partial
 from pathlib import Path
-from types import MappingProxyType
+from types import MappingProxyType, SimpleNamespace
 from typing import (
-    Any, Dict, Iterable, Mapping, NamedTuple, Optional, Sequence, Tuple, Type,
-    TypeVar, Union,
+    Any, Dict, Iterable, Mapping, MutableMapping, Optional, Sequence, Set,
+    Tuple, Type, TypeVar, Union,
 )
 
 
@@ -20,8 +21,8 @@ T = TypeVar("T")
 def read_config(
     *paths: Union[str, Path], **kwargs
 ) -> Tuple[Dict[str, Any], Tuple[Path, ...]]:
-    kwargs.setdefault('allow_no_value', True)
-    kwargs.setdefault('strict', False)
+    kwargs.setdefault("allow_no_value", True)
+    kwargs.setdefault("strict", False)
     parser = configparser.ConfigParser(**kwargs)
 
     filenames = list(
@@ -29,9 +30,9 @@ def read_config(
             lambda p: p.resolve(),
             filter(
                 lambda p: p.is_file(),
-                map(lambda x: Path(x).expanduser(), paths)
-            )
-        )
+                map(lambda x: Path(x).expanduser(), paths),
+            ),
+        ),
     )
     paths = parser.read(filenames)
 
@@ -46,13 +47,13 @@ def read_config(
 class ConfigAction(argparse.Action):
     def __init__(
         self, option_strings: Sequence[str], dest: str, search_paths=(),
-        type: Type[MappingProxyType] = MappingProxyType({}), help: str = '',
-        default: Any = None
+        type: Type[MappingProxyType] = MappingProxyType({}), help: str = "",
+        default: Any = None,
     ):
         if not isinstance(type, MappingProxyType):
             raise ValueError("type must be MappingProxyType")
         super().__init__(
-            option_strings, dest, type=Path, help=help, default=default
+            option_strings, dest, type=Path, help=help, default=default,
         )
         self.search_paths = list(map(Path, search_paths))
         self._result = None
@@ -285,10 +286,18 @@ class Base(metaclass=Meta):
         return f"{name}({values})"
 
 
+DestinationsType = MutableMapping[
+    str,
+    Set[Tuple[Base, str, Optional[Argument], Optional[argparse.Action]]],
+]
+
+
 class Group(AbstractGroup, Base):
-    def __init__(self, title: str = None, description: Optional[str] = None,
-                 prefix: Optional[str] = None,
-                 defaults: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self, title: str = None, description: Optional[str] = None,
+        prefix: Optional[str] = None,
+        defaults: Optional[Dict[str, Any]] = None,
+    ):
         self._prefix: Optional[str] = prefix
         self._title: Optional[str] = title
         self._description: Optional[str] = description
@@ -311,23 +320,22 @@ class Parser(AbstractParser, Base):
     )
 
     @staticmethod
-    def _add_argument(parser: Any, argument: Argument, dest: str, *aliases):
+    def _add_argument(
+        parser: Any, argument: Argument, dest: str, *aliases,
+    ) -> Tuple[str, argparse.Action]:
         kwargs = argument.get_kwargs()
         kwargs["dest"] = dest
 
-        if argument.is_positional:
-            dest = kwargs.pop("dest", None)
-
         if argument.default is not None:
-            kwargs['help'] = (
+            kwargs["help"] = (
                 f"{kwargs.get('help', '')} (default: {argument.default})"
             ).strip()
 
         if argument.env_var is not None:
-            kwargs['default'] = os.getenv(
-                argument.env_var, kwargs.get('default')
+            kwargs["default"] = os.getenv(
+                argument.env_var, kwargs.get("default"),
             )
-            kwargs['help'] = (
+            kwargs["help"] = (
                 f"{kwargs.get('help', '')} [ENV: {argument.env_var}]"
             ).strip()
 
@@ -341,50 +349,60 @@ class Parser(AbstractParser, Base):
         if argument.env_var is not None:
             return argument.env_var
         if self._auto_env_var_prefix is not None:
-            return f'{self._auto_env_var_prefix}{name}'.upper()
+            return f"{self._auto_env_var_prefix}{name}".upper()
         return None
 
     def __init__(
-        self, *args,
-        config_files: Iterable[Union[str, Path]] = (),
+        self, config_files: Iterable[Union[str, Path]] = (),
         auto_env_var_prefix: Optional[str] = None,
         **kwargs,
     ):
         super().__init__()
+        self.current_subparser = None
+        self._config_files = config_files
         self._config, filenames = read_config(*config_files)
-        epilog = kwargs.pop("epilog", "")
-        epilog += self.HELP_APPENDIX_PREAMBLE.format(
+
+        self._epilog = kwargs.pop("epilog", "")
+        self._epilog += self.HELP_APPENDIX_PREAMBLE.format(
             configs=repr(config_files),
         )
 
         if filenames:
-            epilog += self.HELP_APPENDIX_CURRENT.format(
+            self._epilog += self.HELP_APPENDIX_CURRENT.format(
                 num_existent=len(filenames),
-                existent=repr(list(map(str, filenames)))
+                existent=repr(list(map(str, filenames))),
             )
-        epilog += self.HELP_APPENDIX_END
+        self._epilog += self.HELP_APPENDIX_END
+        self._auto_env_var_prefix = auto_env_var_prefix
+        self._parser_kwargs = kwargs
 
-        self._parser = ArgumentParser(*args, epilog=epilog, **kwargs)
-        self._groups = {}
-        self._destinations = {}
-        self._auto_env_var_prefix: Optional[str] = auto_env_var_prefix
-        self._subparsers: Optional[argparse.ArgumentParser] = None
+    def _make_parser(
+        self, parser: Optional[argparse.ArgumentParser] = None,
+    ) -> Tuple[ArgumentParser, DestinationsType]:
+        if parser is None:
+            parser: ArgumentParser = ArgumentParser(
+                epilog=self._epilog, **self._parser_kwargs
+            )
+
+        destinations: DestinationsType = collections.defaultdict(set)
 
         for name, argument in self.__arguments__.items():
             aliases = set(argument.aliases)
+
+            # Add default alias
             if not aliases:
                 aliases.add(f"--{self.get_cli_name(name)}")
+
             argument = argument.copy(
                 env_var=self.get_env_var(name, argument),
-                default=self._config.get(name, argument.default)
+                default=self._config.get(name, argument.default),
             )
-            dest, action = self._add_argument(
-                self._parser, argument, name, *aliases
-            )
-            self._destinations[dest] = (self, name, argument, action)
+
+            dest, action = self._add_argument(parser, argument, name, *aliases)
+            destinations[dest].add((self, name, argument, action))
 
         for group_name, group in self.__argument_groups__.items():
-            parser = self._parser.add_argument_group(
+            group_parser = parser.add_argument_group(
                 title=group._title,
                 description=group._description,
             )
@@ -397,63 +415,108 @@ class Parser(AbstractParser, Base):
                 if not aliases:
                     aliases.add(f"--{self.get_cli_name(dest)}")
 
-                dest, action = self._add_argument(
-                    parser,
-                    argument.copy(
-                        default=config.get(
-                            name, group._defaults.get(name, argument.default)
-                        ),
-                        env_var=self.get_env_var(dest, argument),
+                argument = argument.copy(
+                    default=config.get(
+                        name, group._defaults.get(name, argument.default),
                     ),
-                    dest, *aliases
+                    env_var=self.get_env_var(dest, argument),
                 )
-                self._destinations[dest] = (group, name, argument, action)
+                dest, action = self._add_argument(
+                    group_parser, argument, dest, *aliases
+                )
+                destinations[dest].add((group, name, argument, action))
 
         if self.__subparsers__:
-            raise NotImplementedError()
-
-    def _get_destinations(self, ns: argparse.Namespace) -> "_Destination":
-        for attr, dest_value in self._destinations.items():
-            target, name, argument, action = dest_value
-            value = getattr(ns, attr)
-            yield _Destination(
-                attr=attr, target=target, name=name,
-                argument=argument, action=action, value=value,
+            subparsers = parser.add_subparsers()
+            subparser: Parser
+            destinations["current_subparser"].add(
+                (self, "current_subparser", None, None),
             )
 
+            for subparser_name, subparser in self.__subparsers__.items():
+                current_parser, subparser_dests = (
+                    subparser._make_parser(
+                        subparsers.add_parser(
+                            subparser_name, **subparser._parser_kwargs
+                        ),
+                    )
+                )
+                current_parser.set_defaults(current_subparser=subparser)
+                for dest, values in subparser_dests.items():
+                    for target, name, argument, action in values:
+                        destinations[dest].add((
+                            subparser, name, argument, action,
+                        ))
+
+        return parser, destinations
+
     def parse_args(self, args: Optional[Sequence[str]] = None) -> "Parser":
-        ns: argparse.Namespace = self._parser.parse_args(args)
+        parser, destinations = self._make_parser()
+        parsed_ns = parser.parse_args(args)
 
-        destinations: Iterable[_Destination] = list(self._get_destinations(ns))
-        configs = list(
-            filter(lambda x: x.argument.action == ConfigAction, destinations),
-        )
+        for key, values in destinations.items():
+            parsed_value = getattr(parsed_ns, key)
+            for target, name, argument, action in values:
+                if (
+                    target is not self and
+                    isinstance(target, Parser) and
+                    parsed_ns.current_subparser is not target
+                ):
+                    continue
 
-        for config_dest in configs:
-            config_dest.action(self._parser, ns, config_dest.value, None)
+                if isinstance(action, ConfigAction):
+                    action(parser, parsed_ns, parsed_value, None)
+                    continue
 
-        for dest in self._get_destinations(ns):
-            setattr(dest.target, dest.name, dest.value)
+                setattr(target, name, parsed_value)
 
         return self
 
     def print_help(self):
-        return self._parser.print_help()
+        parser, _ = self._make_parser()
+        return parser.print_help()
+
+    def __getattribute__(self, item: str) -> Any:
+        value = super().__getattribute__(item)
+        if item.startswith("_"):
+            return value
+
+        if item in self.__arguments__:
+            class_value = getattr(self.__class__, item)
+            if value is class_value:
+                raise AttributeError(f"Attribute {item!r} was not parsed")
+        return value
 
 
-class _Destination(NamedTuple):
-    attr: str
-    target: Parser
-    name: str
-    argument: Argument
-    action: Union[Actions, ConfigAction]
-    value: Any
+class ParserNamespace(SimpleNamespace):
+    def __init__(self, **kwargs: Any):
+        super().__init__(**kwargs)
+        self._destinations = {}
+
+    @staticmethod
+    def on_value(obj: object, attr: str, value: Any) -> None:
+        setattr(obj, attr, value)
+
+    def add_destination(self, dest: str, obj: object, attr: str, setter=None):
+        if setter is None:
+            setter = partial(self.on_value, obj, attr)
+        self._destinations[dest] = setter
+
+    def __iter__(self):
+        return iter(self._destinations)
+
+    def __setattr__(self, key: str, value: Any):
+        if key.startswith("_"):
+            return super().__setattr__(key, value)
+        target = self._destinations[key]
+        target(value)
+        super(ParserNamespace, self).__setattr__(key, value)
 
 
 LogLevel = Argument(
-    choices=('debug', 'info', 'warning', 'error', 'critical'),
+    choices=("debug", "info", "warning", "error", "critical"),
     type=lambda v: getattr(logging, v.upper(), logging.INFO),
-    default='info'
+    default="info",
 )
 
 
