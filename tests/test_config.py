@@ -26,3 +26,15 @@ class TestBasics:
         parser.parse_args(["--config", str(config_file)])
 
         assert parser.config['foo'] == "bar"
+
+
+def test_subparsers():
+    class Subparser(argclass.Parser):
+        foo: str = argclass.Argument()
+
+    class Parser(argclass.Parser):
+        subparser = Subparser()
+
+    parser = Parser()
+    parser.parse_args(["subparser", "--foo=bar"])
+    assert parser.subparser.foo == 'bar'
