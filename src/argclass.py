@@ -218,6 +218,7 @@ class Argument(ArgumentBase):
 
 
 class Config(Argument):
+    """ Parse INI file and set results as a value """
     action: ConfigAction = ConfigAction
     search_paths: Optional[Iterable[Union[Path, str]]] = None
 
