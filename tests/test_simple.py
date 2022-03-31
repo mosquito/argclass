@@ -120,7 +120,7 @@ def test_env_var(request: pytest.FixtureRequest):
 def test_nargs():
     class Parser(argclass.Parser):
         foo: List[int] = argclass.Argument(
-            nargs=argclass.Nargs.ZERO_OR_MORE, type=int
+            nargs=argclass.Nargs.ZERO_OR_MORE, type=int,
         )
         bar: int = argclass.Argument(nargs="*")
         spam: int = argclass.Argument(nargs=1)

@@ -560,7 +560,7 @@ def Argument(
         metavar=metavar,
         nargs=nargs,
         required=required,
-        type=type
+        type=type,
     )    # type: ignore
 
 
@@ -589,7 +589,7 @@ def Config(
         metavar=metavar,
         nargs=nargs,
         required=required,
-        type=type
+        type=type,
     )    # type: ignore
 
 

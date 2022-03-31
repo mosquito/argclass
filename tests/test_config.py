@@ -54,4 +54,4 @@ def test_config_defaults(tmp_path: Path):
 
     parser = Parser(config_files=[config_file])
     parser.parse_args([])
-    assert parser.foo == 'bar'
+    assert parser.foo == "bar"
