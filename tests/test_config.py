@@ -1,5 +1,7 @@
 from configparser import ConfigParser
 
+import pytest
+
 import argclass
 
 
@@ -28,13 +30,11 @@ class TestBasics:
         assert parser.config['foo'] == "bar"
 
 
-def test_subparsers():
-    class Subparser(argclass.Parser):
-        foo: str = argclass.Argument()
-
+def test_config_type():
     class Parser(argclass.Parser):
-        subparser = Subparser()
+        config = argclass.Config(type=str)
 
     parser = Parser()
-    parser.parse_args(["subparser", "--foo=bar"])
-    assert parser.subparser.foo == 'bar'
+
+    with pytest.raises(ValueError):
+        parser.parse_args(['--config=test.ini'])

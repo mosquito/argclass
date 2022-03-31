@@ -156,7 +156,9 @@ class Store(metaclass=StoreMeta):
         }
 
     def __repr__(self) -> str:
-        values = ", ".join([f"{k!s}={v!r}" for k, v in self.as_dict().items()])
+        values = ", ".join([
+            f"{k!s}={v!r}" for k, v in sorted(self.as_dict().items())
+        ])
         return f"<{self.__class__.__name__}: {values}>"
 
 
@@ -273,18 +275,24 @@ class Base(metaclass=Meta):
     __argument_groups__: Mapping[str, "Group"]
     __subparsers__: Mapping[str, "Parser"]
 
-    def __repr__(self) -> str:
-        name = self.__class__.__name__
-        attrs = {}
-        for attr in self.__arguments__.keys():
-            attrs[attr] = getattr(self, attr)
-        for attr in self.__argument_groups__.keys():
-            attrs[attr] = getattr(self, attr)
-        for attr in self.__subparsers__.keys():
-            attrs[attr] = getattr(self, attr)
+    def __getattribute__(self, item: str) -> Any:
+        value = super().__getattribute__(item)
+        if item.startswith("_"):
+            return value
 
-        values = ", ".join(f"{k}={v!r}" for k, v in attrs.items())
-        return f"{name}({values})"
+        if item in self.__arguments__:
+            class_value = getattr(self.__class__, item, None)
+            if value is class_value:
+                raise AttributeError(f"Attribute {item!r} was not parsed")
+        return value
+
+    def __repr__(self) -> str:
+        return (
+            f"<{self.__class__.__name__}: "
+            f"{len(self.__arguments__)} arguments, "
+            f"{len(self.__argument_groups__)} groups, "
+            f"{len(self.__subparsers__)} subparsers>"
+        )
 
 
 DestinationsType = MutableMapping[
@@ -477,17 +485,6 @@ class Parser(AbstractParser, Base):
     def print_help(self):
         parser, _ = self._make_parser()
         return parser.print_help()
-
-    def __getattribute__(self, item: str) -> Any:
-        value = super().__getattribute__(item)
-        if item.startswith("_"):
-            return value
-
-        if item in self.__arguments__:
-            class_value = getattr(self.__class__, item)
-            if value is class_value:
-                raise AttributeError(f"Attribute {item!r} was not parsed")
-        return value
 
 
 class ParserNamespace(SimpleNamespace):

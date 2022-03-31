@@ -75,3 +75,8 @@ class TestFoo:
         assert parser.http.port == 80
         assert parser.grpc.host == "::"
         assert parser.grpc.port == 6000
+
+    def test_parser_repr(self):
+        parser = self.Parser()
+        r = repr(parser)
+        assert r == "<Parser: 1 arguments, 2 groups, 0 subparsers>"
