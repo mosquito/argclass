@@ -138,3 +138,71 @@ So the full example of config file for above example is:
     [rpc]
     address=127.0.0.1
     port=9090
+
+
+Subparsers
+++++++++++
+
+Complex example with subparsers:
+
+.. code-block:: python
+
+    import logging
+    from functools import singledispatch
+    from pathlib import Path
+    from typing import Optional, Any
+
+    import argclass
+
+
+    class AddressPortGroup(argclass.Group):
+        address: str = argclass.Argument(default="127.0.0.1")
+        port: int
+
+
+    class CommitCommand(argclass.Parser):
+        comment: str = argclass.Argument()
+
+
+    class PushCommand(argclass.Parser):
+        comment: str = argclass.Argument()
+
+
+    class Parser(argclass.Parser):
+        log_level: int = argclass.LogLevel
+        endpoint = AddressPortGroup(
+            title="Endpoint options",
+            defaults=dict(port=8080)
+        )
+        commit: Optional[CommitCommand] = CommitCommand()
+        push: Optional[PushCommand] = PushCommand()
+
+
+    @singledispatch
+    def handle_subparser(subparser: Any) -> None:
+        raise NotImplementedError(
+            f"Unexpected subparser type {subparser.__class__!r}"
+        )
+
+
+    @handle_subparser.register(type(None))
+    def handle_commit(_: None) -> None:
+        pass
+
+
+    @handle_subparser.register(CommitCommand)
+    def handle_commit(subparser: CommitCommand) -> None:
+        pass
+
+
+    @handle_subparser.register(PushCommand)
+    def handle_commit(subparser: PushCommand) -> None:
+        pass
+
+
+    parser = Parser(
+        config_files=["example.ini", "~/.example.ini", "/etc/example.ini"],
+        auto_env_var_prefix="EXAMPLE_"
+    )
+    parser.parse_args()
+    handle_subparser(parser.current_subparser)
