@@ -11,12 +11,12 @@ import argclass
 class TestBasics:
     class Parser(argclass.Parser):
         integers: List[int] = argclass.Argument(
-            aliases=["integers"], type=int,
+            "integers", type=int,
             nargs=argclass.Nargs.ONE_OR_MORE, metavar="N",
             help="an integer for the accumulator",
         )
         accumulate = argclass.Argument(
-            aliases=["--sum"], action=argclass.Actions.STORE_CONST, const=sum,
+            "--sum", action=argclass.Actions.STORE_CONST, const=sum,
             default=max, help="sum the integers (default: find the max)",
         )
 
@@ -91,11 +91,65 @@ class TestFoo:
         with pytest.raises(AttributeError):
             _ = parser.foo
 
-    def test_environment(self):
+    def test_environment(self, request: pytest.FixtureRequest):
         prefix = re.sub(r"\d+", "", uuid.uuid4().hex + uuid.uuid4().hex).upper()
         expected = uuid.uuid4().hex
         os.environ[f"{prefix}_FOO"] = expected
+        request.addfinalizer(lambda: os.environ.pop(f"{prefix}_FOO"))
 
         parser = self.Parser(auto_env_var_prefix=f"{prefix}_")
         parser.parse_args([])
         assert parser.foo == expected
+
+
+def test_env_var(request: pytest.FixtureRequest):
+    env_var = re.sub(r"\d+", "", uuid.uuid4().hex + uuid.uuid4().hex).upper()
+
+    class Parser(argclass.Parser):
+        foo: str = argclass.Argument(env_var=env_var)
+
+    expected = uuid.uuid4().hex
+    os.environ[env_var] = expected
+    request.addfinalizer(lambda: os.environ.pop(env_var))
+
+    parser = Parser()
+    parser.parse_args([])
+    assert parser.foo == expected
+
+
+def test_nargs():
+    class Parser(argclass.Parser):
+        foo: List[int] = argclass.Argument(
+            nargs=argclass.Nargs.ZERO_OR_MORE, type=int
+        )
+        bar: int = argclass.Argument(nargs="*")
+        spam: int = argclass.Argument(nargs=1)
+
+    parser = Parser()
+    parser.parse_args(["--foo", "1", "2", "--bar=3", "--spam=4"])
+    assert parser.foo == [1, 2]
+    assert parser.bar == [3]
+    assert parser.spam == [4]
+
+
+def test_group_aliases():
+    class Group(argclass.Group):
+        foo: str = argclass.Argument("-F")
+
+    class Parser(argclass.Parser):
+        group = Group()
+
+    parser = Parser()
+    parser.parse_args(["-F", "egg"])
+    assert parser.group.foo == "egg"
+
+
+def test_short_parser_definition():
+    class Parser(argclass.Parser):
+        foo: str
+        bar: int
+
+    parser = Parser()
+    parser.parse_args(["--foo=spam", "--bar=1"])
+    assert parser.foo == "spam"
+    assert parser.bar == 1

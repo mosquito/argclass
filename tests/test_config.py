@@ -1,4 +1,5 @@
 from configparser import ConfigParser
+from pathlib import Path
 
 import pytest
 
@@ -38,3 +39,19 @@ def test_config_type():
 
     with pytest.raises(ValueError):
         parser.parse_args(["--config=test.ini"])
+
+
+def test_config_defaults(tmp_path: Path):
+    config = ConfigParser()
+    config[config.default_section]["foo"] = "bar"
+
+    config_file = tmp_path / "config.ini"
+    with open(config_file, "w") as fp:
+        config.write(fp)
+
+    class Parser(argclass.Parser):
+        foo = argclass.Argument(default="spam")
+
+    parser = Parser(config_files=[config_file])
+    parser.parse_args([])
+    assert parser.foo == 'bar'

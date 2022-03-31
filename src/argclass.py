@@ -1,17 +1,17 @@
-import argparse
 import collections
 import configparser
 import logging
 import os
+import sys
 from abc import ABCMeta
-from argparse import ArgumentParser
+from argparse import Action, ArgumentParser
 from enum import Enum
 from functools import partial
 from pathlib import Path
 from types import MappingProxyType, SimpleNamespace
 from typing import (
-    Any, Dict, Iterable, Mapping, MutableMapping, Optional, Sequence, Set,
-    Tuple, Type, TypeVar, Union,
+    Any, Callable, Dict, Iterable, Mapping, MutableMapping, Optional, Sequence,
+    Set, Tuple, Type, TypeVar, Union,
 )
 
 
@@ -19,7 +19,7 @@ T = TypeVar("T")
 
 
 def read_config(
-    *paths: Union[str, Path], **kwargs
+    *paths: Union[str, Path], **kwargs: Any
 ) -> Tuple[Dict[str, Any], Tuple[Path, ...]]:
     kwargs.setdefault("allow_no_value", True)
     kwargs.setdefault("strict", False)
@@ -34,20 +34,24 @@ def read_config(
             ),
         ),
     )
-    paths = parser.read(filenames)
+    config_paths = parser.read(filenames)
 
-    result = dict(parser.items(parser.default_section, raw=True))
+    result: Dict[str, Union[str, Dict[str, str]]] = dict(
+        parser.items(parser.default_section, raw=True),
+    )
+
     for section in parser.sections():
         config = dict(parser.items(section, raw=True))
         result[section] = config
 
-    return result, tuple(map(Path, paths))
+    return result, tuple(map(Path, config_paths))
 
 
-class ConfigAction(argparse.Action):
+class ConfigAction(Action):
     def __init__(
-        self, option_strings: Sequence[str], dest: str, search_paths=(),
-        type: Type[MappingProxyType] = MappingProxyType({}), help: str = "",
+        self, option_strings: Sequence[str], dest: str,
+        search_paths: Iterable[Union[str, Path]] = (),
+        type: MappingProxyType = MappingProxyType({}), help: str = "",
         default: Any = None,
     ):
         if not isinstance(type, MappingProxyType):
@@ -71,7 +75,6 @@ class Actions(str, Enum):
     APPEND = "append"
     APPEND_CONST = "append_const"
     COUNT = "count"
-    EXTEND = "extend"
     HELP = "help"
     PARSERS = "parsers"
     STORE = "store"
@@ -80,9 +83,12 @@ class Actions(str, Enum):
     STORE_TRUE = "store_true"
     VERSION = "version"
 
+    if sys.version_info >= (3, 8):
+        EXTEND = "extend"
+
     @classmethod
     def default(cls):
-        return cls.STORE
+        return None
 
 
 class Nargs(Enum):
@@ -108,7 +114,7 @@ def deep_getattr(name, attrs: Dict[str, Any], *bases: Type) -> Any:
 def merge_annotations(
     annotations: Dict[str, Any], *bases: Type
 ) -> Dict[str, Any]:
-    result = {}
+    result: Dict[str, Any] = {}
 
     for base in bases:
         result.update(getattr(base, "__annotations__", {}))
@@ -122,18 +128,26 @@ class StoreMeta(type):
             attrs.get("__annotations__", {}), *bases
         )
         attrs["__annotations__"] = annotations
-        attrs["_fields"] = tuple(annotations.keys())
+        attrs["_fields"] = tuple(
+            filter(
+                lambda x: not x.startswith("_"),
+                annotations.keys(),
+            ),
+        )
         return super().__new__(mcs, name, bases, attrs)
 
 
 class Store(metaclass=StoreMeta):
     _default_value = object()
+    _fields: Tuple[str, ...]
 
     def __new__(cls, **kwargs):
         obj = super().__new__(cls)
 
         type_map: Dict[str, Tuple[Type, Any]] = {}
         for key, value in obj.__annotations__.items():
+            if key.startswith("_"):
+                continue
             type_map[key] = (value, getattr(obj, key, cls._default_value))
 
         for key, (value_type, default) in type_map.items():
@@ -143,7 +157,7 @@ class Store(metaclass=StoreMeta):
             setattr(obj, key, value)
         return obj
 
-    def copy(self, **overrides) -> "Store":
+    def copy(self, **overrides):
         kwargs = self.as_dict()
         for key, value in overrides.items():
             kwargs[key] = value
@@ -163,11 +177,6 @@ class Store(metaclass=StoreMeta):
 
 
 class ArgumentBase(Store):
-    aliases: Iterable[str] = frozenset()
-    nargs: Optional[Union[int, Nargs]] = Nargs.default()
-    action: Union[Actions, argparse.Action] = Actions.default()
-    type: Any = None
-
     def __init__(self, **kwargs):
         self._values = collections.OrderedDict()
 
@@ -205,23 +214,23 @@ class ArgumentBase(Store):
         return {k: v for k, v in kwargs.items() if v is not None}
 
 
-class Argument(ArgumentBase):
-    action: Union[Actions, argparse.Action] = Actions.default()
+class _Argument(ArgumentBase):
+    action: Union[Actions, Type[Action]] = Actions.default()
     aliases: Iterable[str] = frozenset()
-    choices: Optional[Iterable[T]] = None
-    const: Optional[T] = None
-    default: Optional[T] = None
+    choices: Optional[Iterable[str]] = None
+    const: Optional[Any] = None
+    default: Optional[Any] = None
+    env_var: Optional[str] = None
     help: Optional[str] = None
     metavar: Optional[str] = None
     nargs: Optional[Union[int, Nargs]] = Nargs.default()
     required: Optional[bool] = None
-    env_var: Optional[str] = None
     type: Any = None
 
 
-class Config(Argument):
+class _Config(_Argument):
     """ Parse INI file and set results as a value """
-    action: ConfigAction = ConfigAction
+    action: Type[ConfigAction] = ConfigAction
     search_paths: Optional[Iterable[Union[Path, str]]] = None
 
 
@@ -246,9 +255,9 @@ class Meta(ABCMeta):
             try:
                 value = deep_getattr(key, attrs, *bases)
             except KeyError:
-                value = Argument(type=kind)
+                value = _Argument(type=kind)
 
-            if isinstance(value, Argument):
+            if isinstance(value, _Argument):
                 if value.type is None:
                     value.type = kind
                 arguments[key] = value
@@ -256,7 +265,7 @@ class Meta(ABCMeta):
                 argument_groups[key] = value
 
         for key, value in attrs.items():
-            if isinstance(value, Argument):
+            if isinstance(value, _Argument):
                 arguments[key] = value
             elif isinstance(value, AbstractGroup):
                 argument_groups[key] = value
@@ -271,7 +280,7 @@ class Meta(ABCMeta):
 
 
 class Base(metaclass=Meta):
-    __arguments__: Mapping[str, Argument]
+    __arguments__: Mapping[str, _Argument]
     __argument_groups__: Mapping[str, "Group"]
     __subparsers__: Mapping[str, "Parser"]
 
@@ -297,7 +306,7 @@ class Base(metaclass=Meta):
 
 DestinationsType = MutableMapping[
     str,
-    Set[Tuple[Base, str, Optional[Argument], Optional[argparse.Action]]],
+    Set[Tuple[Base, str, Optional[_Argument], Optional[Action]]],
 ]
 
 
@@ -330,8 +339,8 @@ class Parser(AbstractParser, Base):
 
     @staticmethod
     def _add_argument(
-        parser: Any, argument: Argument, dest: str, *aliases,
-    ) -> Tuple[str, argparse.Action]:
+        parser: Any, argument: _Argument, dest: str, *aliases,
+    ) -> Tuple[str, Action]:
         kwargs = argument.get_kwargs()
 
         if not argument.is_positional:
@@ -356,7 +365,7 @@ class Parser(AbstractParser, Base):
     def get_cli_name(name: str) -> str:
         return name.replace("_", "-")
 
-    def get_env_var(self, name: str, argument: Argument) -> Optional[str]:
+    def get_env_var(self, name: str, argument: _Argument) -> Optional[str]:
         if argument.env_var is not None:
             return argument.env_var
         if self._auto_env_var_prefix is not None:
@@ -388,15 +397,25 @@ class Parser(AbstractParser, Base):
         self._parser_kwargs = kwargs
 
     def _make_parser(
-        self, parser: Optional[argparse.ArgumentParser] = None,
+        self, parser: Optional[ArgumentParser] = None,
     ) -> Tuple[ArgumentParser, DestinationsType]:
         if parser is None:
-            parser: ArgumentParser = ArgumentParser(
+            parser = ArgumentParser(
                 epilog=self._epilog, **self._parser_kwargs
             )
 
         destinations: DestinationsType = collections.defaultdict(set)
 
+        self._fill_arguments(destinations, parser)
+        self._fill_groups(destinations, parser)
+        if self.__subparsers__:
+            self._fill_subparsers(destinations, parser)
+
+        return parser, destinations
+
+    def _fill_arguments(
+        self, destinations: DestinationsType, parser: ArgumentParser,
+    ) -> None:
         for name, argument in self.__arguments__.items():
             aliases = set(argument.aliases)
 
@@ -405,6 +424,7 @@ class Parser(AbstractParser, Base):
                 aliases.add(f"--{self.get_cli_name(name)}")
 
             argument = argument.copy(
+                aliases=aliases,
                 env_var=self.get_env_var(name, argument),
                 default=self._config.get(name, argument.default),
             )
@@ -412,6 +432,9 @@ class Parser(AbstractParser, Base):
             dest, action = self._add_argument(parser, argument, name, *aliases)
             destinations[dest].add((self, name, argument, action))
 
+    def _fill_groups(
+        self, destinations: DestinationsType, parser: ArgumentParser,
+    ) -> None:
         for group_name, group in self.__argument_groups__.items():
             group_parser = parser.add_argument_group(
                 title=group._title,
@@ -437,29 +460,29 @@ class Parser(AbstractParser, Base):
                 )
                 destinations[dest].add((group, name, argument, action))
 
-        if self.__subparsers__:
-            subparsers = parser.add_subparsers()
-            subparser: Parser
-            destinations["current_subparser"].add(
-                (self, "current_subparser", None, None),
-            )
+    def _fill_subparsers(
+        self, destinations: DestinationsType, parser: ArgumentParser,
+    ) -> None:
+        subparsers = parser.add_subparsers()
+        subparser: Parser
+        destinations["current_subparser"].add(
+            (self, "current_subparser", None, None),
+        )
 
-            for subparser_name, subparser in self.__subparsers__.items():
-                current_parser, subparser_dests = (
-                    subparser._make_parser(
-                        subparsers.add_parser(
-                            subparser_name, **subparser._parser_kwargs
-                        ),
-                    )
+        for subparser_name, subparser in self.__subparsers__.items():
+            current_parser, subparser_dests = (
+                subparser._make_parser(
+                    subparsers.add_parser(
+                        subparser_name, **subparser._parser_kwargs
+                    ),
                 )
-                current_parser.set_defaults(current_subparser=subparser)
-                for dest, values in subparser_dests.items():
-                    for target, name, argument, action in values:
-                        destinations[dest].add((
-                            subparser, name, argument, action,
-                        ))
-
-        return parser, destinations
+            )
+            current_parser.set_defaults(current_subparser=subparser)
+            for dest, values in subparser_dests.items():
+                for target, name, argument, action in values:
+                    destinations[dest].add((
+                        subparser, name, argument, action,
+                    ))
 
     def parse_args(self, args: Optional[Sequence[str]] = None) -> "Parser":
         parser, destinations = self._make_parser()
@@ -490,7 +513,7 @@ class Parser(AbstractParser, Base):
 class ParserNamespace(SimpleNamespace):
     def __init__(self, **kwargs: Any):
         super().__init__(**kwargs)
-        self._destinations = {}
+        self._destinations: Dict[str, Callable[[Any], Any]] = {}
 
     @staticmethod
     def on_value(obj: object, attr: str, value: Any) -> None:
@@ -512,7 +535,65 @@ class ParserNamespace(SimpleNamespace):
         super(ParserNamespace, self).__setattr__(key, value)
 
 
-LogLevel = Argument(
+# noinspection PyPep8Naming
+def Argument(
+    *aliases: str,
+    action: Union[Actions, Type[Action]] = Actions.default(),
+    choices: Optional[Iterable[str]] = None,
+    const: Optional[Any] = None,
+    default: Optional[Any] = None,
+    env_var: Optional[str] = None,
+    help: Optional[str] = None,
+    metavar: Optional[str] = None,
+    nargs: Optional[Union[int, str, Nargs]] = Nargs.default(),
+    required: Optional[bool] = None,
+    type: Any = None
+) -> Any:
+    return _Argument(
+        action=action,
+        aliases=aliases,
+        choices=choices,
+        const=const,
+        default=default,
+        env_var=env_var,
+        help=help,
+        metavar=metavar,
+        nargs=nargs,
+        required=required,
+        type=type
+    )    # type: ignore
+
+
+# noinspection PyPep8Naming
+def Config(
+    *aliases: str,
+    search_paths: Optional[Iterable[Union[Path, str]]] = None,
+    choices: Optional[Iterable[str]] = None,
+    const: Optional[Any] = None,
+    default: Optional[Any] = None,
+    env_var: Optional[str] = None,
+    help: Optional[str] = None,
+    metavar: Optional[str] = None,
+    nargs: Optional[Union[int, str, Nargs]] = Nargs.default(),
+    required: Optional[bool] = None,
+    type: Any = None
+) -> Any:
+    return _Config(
+        search_paths=search_paths,
+        aliases=aliases,
+        choices=choices,
+        const=const,
+        default=default,
+        env_var=env_var,
+        help=help,
+        metavar=metavar,
+        nargs=nargs,
+        required=required,
+        type=type
+    )    # type: ignore
+
+
+LogLevel: Any = Argument(
     choices=("debug", "info", "warning", "error", "critical"),
     type=lambda v: getattr(logging, v.upper(), logging.INFO),
     default="info",
