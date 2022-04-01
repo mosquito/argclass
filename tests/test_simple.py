@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 import uuid
@@ -153,3 +154,31 @@ def test_short_parser_definition():
     parser.parse_args(["--foo=spam", "--bar=1"])
     assert parser.foo == "spam"
     assert parser.bar == 1
+
+
+def test_print_help(capsys: pytest.CaptureFixture):
+    class Parser(argclass.Parser):
+        foo: str
+        bar: int
+
+    parser = Parser()
+    parser.print_help()
+    captured = capsys.readouterr()
+    assert "--foo" in captured.out
+    assert "--bar" in captured.out
+    assert "--help" in captured.out
+    assert "[--foo FOO]" in captured.out
+    assert "[--bar BAR]" in captured.out
+
+
+def test_print_log_level(capsys: pytest.CaptureFixture):
+    class Parser(argclass.Parser):
+        log_level: int = argclass.LogLevel
+
+    parser = Parser()
+    parser.parse_args(["--log-level", "info"])
+    assert parser.log_level == logging.INFO
+
+    parser.parse_args(["--log-level=warning"])
+    assert parser.log_level == logging.WARNING
+

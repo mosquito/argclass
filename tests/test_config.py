@@ -31,13 +31,21 @@ class TestBasics:
         assert parser.config["foo"] == "bar"
 
 
-def test_config_type():
+def test_config_type_not_exists():
     class Parser(argclass.Parser):
-        config = argclass.Config(type=str)
+        config = argclass.Config()
 
     parser = Parser()
+    parser.parse_args(["--config=test.ini"])
+    assert parser.config == {}
 
-    with pytest.raises(ValueError):
+
+def test_config_required():
+    class Parser(argclass.Parser):
+        config = argclass.Config(required=True)
+
+    parser = Parser()
+    with pytest.raises(SystemExit):
         parser.parse_args(["--config=test.ini"])
 
 
