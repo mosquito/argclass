@@ -10,8 +10,8 @@ from enum import Enum
 from pathlib import Path
 from types import MappingProxyType
 from typing import (
-    Any, Dict, Iterable, Mapping, MutableMapping, Optional, Sequence,
-    Set, Tuple, Type, TypeVar, Union, NamedTuple, Callable,
+    Any, Callable, Dict, Iterable, Mapping, MutableMapping, NamedTuple,
+    Optional, Sequence, Set, Tuple, Type, TypeVar, Union,
 )
 
 
@@ -59,7 +59,7 @@ class ConfigAction(Action):
             raise ValueError("type must be MappingProxyType")
         super().__init__(
             option_strings, dest, type=Path, help=help, default=default,
-            required=required
+            required=required,
         )
         self.search_paths = list(map(Path, search_paths))
         self._result = None
@@ -73,7 +73,7 @@ class ConfigAction(Action):
             if self.required and not filenames:
                 raise argparse.ArgumentError(
                     argument=self,
-                    message="is required but no one config loaded"
+                    message="is required but no one config loaded",
                 )
         setattr(namespace, self.dest, MappingProxyType(self._result))
 
@@ -218,7 +218,7 @@ class ArgumentBase(Store):
         kwargs.pop("env_var", None)
 
         if kwargs.pop("converter", None):
-            kwargs.pop('type', None)
+            kwargs.pop("type", None)
 
         kwargs.update(action=action, nargs=nargs)
 
@@ -451,8 +451,9 @@ class Parser(AbstractParser, Base):
                     target=self,
                     attribute=name,
                     argument=argument,
-                    action=action
-                ))
+                    action=action,
+                ),
+            )
 
     def _fill_groups(
         self, destinations: DestinationsType, parser: ArgumentParser,
@@ -480,24 +481,28 @@ class Parser(AbstractParser, Base):
                 dest, action = self._add_argument(
                     group_parser, argument, dest, *aliases
                 )
-                destinations[dest].add(Destination(
-                    target=group,
-                    attribute=name,
-                    argument=argument,
-                    action=action
-                ))
+                destinations[dest].add(
+                    Destination(
+                        target=group,
+                        attribute=name,
+                        argument=argument,
+                        action=action,
+                    ),
+                )
 
     def _fill_subparsers(
         self, destinations: DestinationsType, parser: ArgumentParser,
     ) -> None:
         subparsers = parser.add_subparsers()
         subparser: Parser
-        destinations["current_subparser"].add(Destination(
-            target=self,
-            attribute="current_subparser",
-            argument=None,
-            action=None
-        ))
+        destinations["current_subparser"].add(
+            Destination(
+                target=self,
+                attribute="current_subparser",
+                argument=None,
+                action=None,
+            ),
+        )
 
         for subparser_name, subparser in self.__subparsers__.items():
             current_parser, subparser_dests = (
@@ -510,12 +515,14 @@ class Parser(AbstractParser, Base):
             current_parser.set_defaults(current_subparser=subparser)
             for dest, values in subparser_dests.items():
                 for target, name, argument, action in values:
-                    destinations[dest].add(Destination(
-                        target=subparser,
-                        attribute=name,
-                        argument=argument,
-                        action=action,
-                    ))
+                    destinations[dest].add(
+                        Destination(
+                            target=subparser,
+                            attribute=name,
+                            argument=argument,
+                            action=action,
+                        ),
+                    )
 
     def parse_args(self, args: Optional[Sequence[str]] = None) -> "Parser":
         parser, destinations = self._make_parser()
