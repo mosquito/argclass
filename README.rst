@@ -12,6 +12,25 @@ applicable in this case.
 This module allows you to declare command-line parsers with classes.
 
 .. code-block:: python
+    :name: test_simple_example
+
+    import logging
+
+    import argclass
+
+
+    class CopyParser(argclass.Parser):
+        recursive: bool
+        preserve_attributes: bool
+
+
+    parser = CopyParser()
+    parser.parse_args(["--recursive", "--preserve-attributes"])
+    assert parser.recursive
+    assert parser.preserve_attributes
+
+
+.. code-block:: python
     :name: test_example
 
     import logging
@@ -34,7 +53,7 @@ This module allows you to declare command-line parsers with classes.
         config_files=[".example.ini", "~/.example.ini", "/etc/example.ini"],
         auto_env_var_prefix="EXAMPLE_"
     )
-    parser.parse_args()
+    parser.parse_args([])
 
     logging.basicConfig(level=parser.log_level)
     logging.info('Listening http://%s:%d', parser.http.address, parser.http.port)

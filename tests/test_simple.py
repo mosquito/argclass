@@ -181,4 +181,3 @@ def test_print_log_level(capsys: pytest.CaptureFixture):
 
     parser.parse_args(["--log-level=warning"])
     assert parser.log_level == logging.WARNING
-

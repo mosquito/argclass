@@ -210,10 +210,14 @@ class ArgumentBase(Store):
             nargs = nargs.value
 
         action = self.action
+        kwargs = self.as_dict()
+
+        if action in (Actions.STORE_TRUE, Actions.STORE_FALSE, Actions.COUNT):
+            kwargs.pop('type', None)
+
         if isinstance(action, Actions):
             action = action.value
 
-        kwargs = self.as_dict()
         kwargs.pop("aliases", None)
         kwargs.pop("env_var", None)
 
@@ -267,7 +271,10 @@ class Meta(ABCMeta):
             try:
                 value = deep_getattr(key, attrs, *bases)
             except KeyError:
-                value = _Argument(type=kind)
+                kw = {'type': kind}
+                if kind is bool:
+                    kw['action'] = Actions.STORE_TRUE
+                value = _Argument(**kw)
 
             if isinstance(value, _Argument):
                 if value.type is None:

@@ -19,5 +19,3 @@ def test_store_repr():
     store = Store(foo="spam", bar=2)
     r = repr(store)
     assert r == "<Store: bar=2, foo='spam'>"
-
-
