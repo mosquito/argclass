@@ -1,6 +1,23 @@
 argclass
 ========
 
+.. image:: https://coveralls.io/repos/github/mosquito/argclass/badge.svg?branch=master
+   :target: https://coveralls.io/github/mosquito/argclass?branch=master
+
+.. image:: https://github.com/mosquito/argclass/workflows/tox/badge.svg
+   :target: https://github.com/mosquito/argclass/actions?query=workflow%3Atox
+   :alt: Actions
+
+.. image:: https://img.shields.io/pypi/v/argclass.svg
+   :target: https://pypi.python.org/pypi/argclass/
+   :alt: Latest Version
+
+.. image:: https://img.shields.io/pypi/pyversions/argclass.svg
+   :target: https://pypi.python.org/pypi/argclass/
+
+.. image:: https://img.shields.io/pypi/l/argclass.svg
+   :target: https://pypi.python.org/pypi/argclass/
+
 A wrapper around the standard ``argparse`` module that allows you to describe
 argument parsers declaratively.
 
