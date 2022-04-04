@@ -28,6 +28,8 @@ applicable in this case.
 
 This module allows you to declare command-line parsers with classes.
 
+Simple example:
+
 .. code-block:: python
     :name: test_simple_example
 
@@ -46,6 +48,10 @@ This module allows you to declare command-line parsers with classes.
     assert parser.recursive
     assert parser.preserve_attributes
 
+As you can see this example shown a basic module usage, when you want specify
+argument default and other options you have to use ``argclass.Argument``.
+
+Following example use ``argclass.Argument`` and argument groups:
 
 .. code-block:: python
     :name: test_example
