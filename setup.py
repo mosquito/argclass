@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(
     name="argclass",
-    version="0.4.1",
+    version="0.4.2",
     platforms="all",
     author="Dmitry Orlov",
     author_email="me@mosquito.su",
@@ -14,7 +14,7 @@ setup(
         "you to describe argument parsers declaratively."
     ),
     package_dir={"": "src"},
-    packages=[],
+    packages=[""],
     license="Apache 2",
     long_description=open("README.rst").read(),
     classifiers=[
