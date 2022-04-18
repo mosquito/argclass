@@ -227,3 +227,17 @@ def test_argument_defaults():
     assert parser.confused_default is False
     assert parser.pool_size == 2
     assert parser.forks == 8
+
+
+def test_inheritance():
+    class AddressPort(argclass.Group):
+        address: str
+        port: int
+
+    class Parser(argclass.Parser, AddressPort):
+        pass
+
+    parser = Parser()
+    parser.parse_args(['--address=0.0.0.0', '--port=9876'])
+    assert parser.address == '0.0.0.0'
+    assert parser.port == 9876
