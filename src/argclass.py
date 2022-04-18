@@ -214,7 +214,7 @@ class ArgumentBase(Store):
         kwargs = self.as_dict()
 
         if action in (Actions.STORE_TRUE, Actions.STORE_FALSE, Actions.COUNT):
-            kwargs.pop('type', None)
+            kwargs.pop("type", None)
 
         if isinstance(action, Actions):
             action = action.value
@@ -260,7 +260,7 @@ class AbstractParser:
 
 
 TEXT_TRUE_VALUES = frozenset((
-    "y", "yes", "true", "t", "enable", "enabled", "1", "on"
+    "y", "yes", "true", "t", "enable", "enabled", "1", "on",
 ))
 
 
@@ -269,20 +269,20 @@ def parse_bool(value: str) -> bool:
 
 
 def _make_action_true_argument(
-    kind: typing.Type, default: Any = None
+    kind: typing.Type, default: Any = None,
 ) -> _Argument:
-    kw = {'type': kind}
+    kw: Dict[str, Any] = {"type": kind}
     if kind is bool:
         if default is False:
-            kw['action'] = Actions.STORE_TRUE
+            kw["action"] = Actions.STORE_TRUE
         elif default is True:
-            kw['action'] = Actions.STORE_FALSE
+            kw["action"] = Actions.STORE_FALSE
         else:
-            raise TypeError(f'Can not set default {default!r} for bool')
+            raise TypeError(f"Can not set default {default!r} for bool")
     elif kind == typing.Optional[bool]:
-        kw['action'] = Actions.STORE
-        kw['type'] = parse_bool
-        kw['default'] = None
+        kw["action"] = Actions.STORE
+        kw["type"] = parse_bool
+        kw["default"] = None
     return _Argument(**kw)
 
 
