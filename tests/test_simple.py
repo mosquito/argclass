@@ -2,7 +2,7 @@ import logging
 import os
 import re
 import uuid
-from typing import List
+from typing import List, Optional
 
 import pytest
 
@@ -181,3 +181,49 @@ def test_print_log_level(capsys: pytest.CaptureFixture):
 
     parser.parse_args(["--log-level=warning"])
     assert parser.log_level == logging.WARNING
+
+
+def test_optional_type():
+    class Parser(argclass.Parser):
+        flag: bool
+        optional: Optional[bool]
+
+    parser = Parser()
+    parser.parse_args([])
+    assert parser.optional is None
+    assert not parser.flag
+
+    parser.parse_args(["--flag"])
+    assert parser.flag
+
+    for variant in ("yes", "Y", "yeS", "enable", "ENABLED", "1"):
+        parser.parse_args([f"--optional={variant}"])
+        assert parser.optional is True
+
+    for variant in ("no", "crap", "false", "disabled", "MY_HANDS_TYPING_WORDS"):
+        parser.parse_args([f"--optional={variant}"])
+        assert parser.optional is False
+
+
+def test_argument_defaults():
+    class Parser(argclass.Parser):
+        debug: bool = False
+        confused_default: bool = True
+        pool_size: int = 4
+        forks: int = 2
+
+    parser = Parser()
+
+    parser.parse_args([])
+    assert parser.debug is False
+    assert parser.confused_default is True
+    assert parser.pool_size == 4
+    assert parser.forks == 2
+
+    parser.parse_args([
+        "--debug", "--forks=8", "--pool-size=2", "--confused-default"
+    ])
+    assert parser.debug is True
+    assert parser.confused_default is False
+    assert parser.pool_size == 2
+    assert parser.forks == 8

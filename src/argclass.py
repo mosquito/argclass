@@ -4,6 +4,7 @@ import configparser
 import logging
 import os
 import sys
+import typing
 from abc import ABCMeta
 from argparse import Action, ArgumentParser
 from enum import Enum
@@ -86,7 +87,7 @@ class Actions(str, Enum):
     PARSERS = "parsers"
     STORE = "store"
     STORE_CONST = "store_const"
-    STORE_FALSE = "store_true"
+    STORE_FALSE = "store_false"
     STORE_TRUE = "store_true"
     VERSION = "version"
 
@@ -258,6 +259,37 @@ class AbstractParser:
     pass
 
 
+TEXT_TRUE_VALUES = frozenset((
+    "y", "yes", "true", "t", "enable", "enabled", "1", "on"
+))
+
+
+def parse_bool(value: str) -> bool:
+    return value.lower() in TEXT_TRUE_VALUES
+
+
+def _make_action_true_argument(
+    kind: typing.Type, default: Any = None
+) -> _Argument:
+    kw = {'type': kind}
+    if kind is bool:
+        if default is False:
+            kw['action'] = Actions.STORE_TRUE
+        elif default is True:
+            kw['action'] = Actions.STORE_FALSE
+        else:
+            raise TypeError(f'Can not set default {default!r} for bool')
+    elif kind == typing.Optional[bool]:
+        kw['action'] = Actions.STORE
+        kw['type'] = parse_bool
+        kw['default'] = None
+    return _Argument(**kw)
+
+
+def _type_is_bool(kind: typing.Type) -> bool:
+    return kind is bool or kind == typing.Optional[bool]
+
+
 class Meta(ABCMeta):
     def __new__(mcs, name, bases, attrs: Dict[str, Any]):
         annotations = merge_annotations(
@@ -268,22 +300,35 @@ class Meta(ABCMeta):
         argument_groups = {}
         subparsers = {}
         for key, kind in annotations.items():
-            try:
-                value = deep_getattr(key, attrs, *bases)
-            except KeyError:
-                kw = {'type': kind}
-                if kind is bool:
-                    kw['action'] = Actions.STORE_TRUE
-                value = _Argument(**kw)
+            if key.startswith("_"):
+                continue
 
-            if isinstance(value, _Argument):
-                if value.type is None:
-                    value.type = kind
-                arguments[key] = value
-            elif isinstance(value, AbstractGroup):
-                argument_groups[key] = value
+            try:
+                argument = deep_getattr(key, attrs, *bases)
+            except KeyError:
+                argument = None
+                if kind is bool:
+                    argument = False
+
+            if not isinstance(argument, (_Argument, AbstractGroup)):
+                attrs[key] = ...
+
+                if _type_is_bool(kind):
+                    argument = _make_action_true_argument(kind, argument)
+                else:
+                    argument = _Argument(type=kind, default=argument)
+
+            if isinstance(argument, _Argument):
+                if argument.type is None:
+                    argument.type = kind
+                arguments[key] = argument
+            elif isinstance(argument, AbstractGroup):
+                argument_groups[key] = argument
 
         for key, value in attrs.items():
+            if key.startswith("_"):
+                continue
+
             if isinstance(value, _Argument):
                 arguments[key] = value
             elif isinstance(value, AbstractGroup):
