@@ -2,7 +2,8 @@ import logging
 import os
 import re
 import uuid
-from typing import List, Optional
+from functools import singledispatch
+from typing import List, Optional, Any
 
 import pytest
 
@@ -241,3 +242,25 @@ def test_inheritance():
     parser.parse_args(['--address=0.0.0.0', '--port=9876'])
     assert parser.address == '0.0.0.0'
     assert parser.port == 9876
+
+
+def test_config_for_required(tmp_path):
+    class Parser(argclass.Parser):
+        required: int = argclass.Argument(required=True)
+
+    config_path = tmp_path / "config.ini"
+
+    with open(config_path, "w") as fp:
+        fp.write("[DEFAULT]\n")
+        fp.write("required = 10\n")
+        fp.write("\n")
+
+    parser = Parser(config_files=[config_path])
+    parser.parse_args([])
+
+    assert parser.required == 10
+
+    parser = Parser(config_files=[])
+
+    with pytest.raises(SystemExit):
+        parser.parse_args([])
