@@ -1,5 +1,5 @@
 from functools import singledispatch
-from typing import Optional, Any
+from typing import Any, Optional
 
 import pytest
 
@@ -65,7 +65,7 @@ def test_current_subparsers():
         log_level: int = argclass.LogLevel
         endpoint = AddressPortGroup(
             title="Endpoint options",
-            defaults=dict(port=8080)
+            defaults=dict(port=8080),
         )
         commit: Optional[CommitCommand] = CommitCommand()
         push: Optional[PushCommand] = PushCommand()
@@ -75,7 +75,7 @@ def test_current_subparsers():
     @singledispatch
     def handle_subparser(subparser: Any) -> None:
         raise NotImplementedError(
-            f"Unexpected subparser type {subparser.__class__!r}"
+            f"Unexpected subparser type {subparser.__class__!r}",
         )
 
     @handle_subparser.register(type(None))
@@ -85,11 +85,11 @@ def test_current_subparsers():
 
     @handle_subparser.register(CommitCommand)
     def handle_commit(subparser: CommitCommand) -> None:
-        state['commit'] = subparser
+        state["commit"] = subparser
 
     @handle_subparser.register(PushCommand)
     def handle_push(subparser: PushCommand) -> None:
-        state['push'] = subparser
+        state["push"] = subparser
 
     parser = Parser()
     parser.parse_args([])
@@ -99,11 +99,11 @@ def test_current_subparsers():
 
     assert e.value.code == 12
 
-    parser.parse_args(['commit'])
+    parser.parse_args(["commit"])
     handle_subparser(parser.current_subparser)
-    assert 'commit' in state
-    assert 'push' not in state
+    assert "commit" in state
+    assert "push" not in state
 
-    parser.parse_args(['push'])
+    parser.parse_args(["push"])
     handle_subparser(parser.current_subparser)
-    assert 'push' in state
+    assert "push" in state

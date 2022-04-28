@@ -2,8 +2,7 @@ import logging
 import os
 import re
 import uuid
-from functools import singledispatch
-from typing import List, Optional, Any
+from typing import List, Optional
 
 import pytest
 
@@ -222,7 +221,7 @@ def test_argument_defaults():
     assert parser.forks == 2
 
     parser.parse_args([
-        "--debug", "--forks=8", "--pool-size=2", "--confused-default"
+        "--debug", "--forks=8", "--pool-size=2", "--confused-default",
     ])
     assert parser.debug is True
     assert parser.confused_default is False
@@ -239,8 +238,8 @@ def test_inheritance():
         pass
 
     parser = Parser()
-    parser.parse_args(['--address=0.0.0.0', '--port=9876'])
-    assert parser.address == '0.0.0.0'
+    parser.parse_args(["--address=0.0.0.0", "--port=9876"])
+    assert parser.address == "0.0.0.0"
     assert parser.port == 9876
 
 

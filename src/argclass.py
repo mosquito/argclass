@@ -311,7 +311,7 @@ class Meta(ABCMeta):
                     argument = False
 
             if not isinstance(
-                argument, (_Argument, AbstractGroup, AbstractParser)
+                argument, (_Argument, AbstractGroup, AbstractParser),
             ):
                 attrs[key] = ...
 
@@ -589,7 +589,8 @@ class Parser(AbstractParser, Base):
         parser, destinations = self._make_parser()
         parsed_ns = parser.parse_args(args)
 
-        current_subparser = getattr(parsed_ns, 'current_subparser', None)
+        parsed_value: Any
+        current_subparser = getattr(parsed_ns, "current_subparser", None)
 
         for key, values in destinations.items():
             parsed_value = getattr(parsed_ns, key, None)
