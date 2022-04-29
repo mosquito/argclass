@@ -310,7 +310,9 @@ class Meta(ABCMeta):
                 if kind is bool:
                     argument = False
 
-            if not isinstance(argument, (_Argument, AbstractGroup)):
+            if not isinstance(
+                argument, (_Argument, AbstractGroup, AbstractParser),
+            ):
                 attrs[key] = ...
 
                 if _type_is_bool(kind):
@@ -491,11 +493,15 @@ class Parser(AbstractParser, Base):
             if not aliases:
                 aliases.add(f"--{self.get_cli_name(name)}")
 
+            default = self._config.get(name, argument.default)
             argument = argument.copy(
                 aliases=aliases,
                 env_var=self.get_env_var(name, argument),
-                default=self._config.get(name, argument.default),
+                default=default,
             )
+
+            if default and argument.required:
+                argument = argument.copy(required=False)
 
             dest, action = self._add_argument(parser, argument, name, *aliases)
             destinations[dest].add(
@@ -524,12 +530,15 @@ class Parser(AbstractParser, Base):
                 if not aliases:
                     aliases.add(f"--{self.get_cli_name(dest)}")
 
+                default = config.get(
+                    name, group._defaults.get(name, argument.default),
+                )
                 argument = argument.copy(
-                    default=config.get(
-                        name, group._defaults.get(name, argument.default),
-                    ),
+                    default=default,
                     env_var=self.get_env_var(dest, argument),
                 )
+                if default and argument.required:
+                    argument = argument.copy(required=False)
                 dest, action = self._add_argument(
                     group_parser, argument, dest, *aliases
                 )
@@ -580,13 +589,16 @@ class Parser(AbstractParser, Base):
         parser, destinations = self._make_parser()
         parsed_ns = parser.parse_args(args)
 
+        parsed_value: Any
+        current_subparser = getattr(parsed_ns, "current_subparser", None)
+
         for key, values in destinations.items():
-            parsed_value = getattr(parsed_ns, key)
+            parsed_value = getattr(parsed_ns, key, None)
             for target, name, argument, action in values:
                 if (
                     target is not self and
                     isinstance(target, Parser) and
-                    parsed_ns.current_subparser is not target
+                    current_subparser is not target
                 ):
                     continue
 

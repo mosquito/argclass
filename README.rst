@@ -228,18 +228,19 @@ Complex example with subparsers:
 
 
     @handle_subparser.register(type(None))
-    def handle_commit(_: None) -> None:
-        pass
+    def handle_none(_: None) -> None:
+        Parser().print_help()
+        exit(2)
 
 
     @handle_subparser.register(CommitCommand)
     def handle_commit(subparser: CommitCommand) -> None:
-        pass
+        print("Commit command called", subparser)
 
 
     @handle_subparser.register(PushCommand)
-    def handle_commit(subparser: PushCommand) -> None:
-        pass
+    def handle_push(subparser: PushCommand) -> None:
+        print("Push command called", subparser)
 
 
     parser = Parser(

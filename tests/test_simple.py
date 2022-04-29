@@ -221,7 +221,7 @@ def test_argument_defaults():
     assert parser.forks == 2
 
     parser.parse_args([
-        "--debug", "--forks=8", "--pool-size=2", "--confused-default"
+        "--debug", "--forks=8", "--pool-size=2", "--confused-default",
     ])
     assert parser.debug is True
     assert parser.confused_default is False
@@ -238,6 +238,28 @@ def test_inheritance():
         pass
 
     parser = Parser()
-    parser.parse_args(['--address=0.0.0.0', '--port=9876'])
-    assert parser.address == '0.0.0.0'
+    parser.parse_args(["--address=0.0.0.0", "--port=9876"])
+    assert parser.address == "0.0.0.0"
     assert parser.port == 9876
+
+
+def test_config_for_required(tmp_path):
+    class Parser(argclass.Parser):
+        required: int = argclass.Argument(required=True)
+
+    config_path = tmp_path / "config.ini"
+
+    with open(config_path, "w") as fp:
+        fp.write("[DEFAULT]\n")
+        fp.write("required = 10\n")
+        fp.write("\n")
+
+    parser = Parser(config_files=[config_path])
+    parser.parse_args([])
+
+    assert parser.required == 10
+
+    parser = Parser(config_files=[])
+
+    with pytest.raises(SystemExit):
+        parser.parse_args([])
