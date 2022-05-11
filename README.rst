@@ -253,9 +253,10 @@ Complex example with subparsers:
 Value conversion
 ++++++++++++++++
 
-If the argument has complex or composite type, then it is necessary to
-explicitly specify it as an argument, while specifying a converter function
-to convert the type.
+If the argument has a generic or composite type, then you must explicitly
+describe it using ``argclass.Argument``, while specifying the converter
+function with ``type`` or ``converter`` argument to transform the value
+after parsing the arguments.
 
 The exception to this rule is `Optional` with a single type. In this case,
 an argument without a default value will not be required,
