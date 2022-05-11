@@ -427,7 +427,9 @@ class Parser(AbstractParser, Base):
             kwargs["help"] = (
                 f"{kwargs.get('help', '')} [ENV: {argument.env_var}]"
             ).strip()
-            self._used_env_vars.add(argument.env_var)
+
+            if argument.env_var in os.environ:
+                self._used_env_vars.add(argument.env_var)
 
         return dest, parser.add_argument(*aliases, **kwargs)
 
