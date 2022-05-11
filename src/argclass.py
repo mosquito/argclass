@@ -347,7 +347,7 @@ class Meta(ABCMeta):
                     )
 
             if isinstance(argument, _Argument):
-                if argument.type is None:
+                if argument.type is None and argument.converter is None:
                     if kind.__class__.__module__ == "typing":
                         kind = unwrap_optional(kind)
                         argument.default = None

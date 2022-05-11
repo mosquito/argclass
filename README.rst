@@ -253,7 +253,7 @@ Complex example with subparsers:
 Value conversion
 ++++++++++++++++
 
-If the argument is a complex or composite type, then it is necessary to
+If the argument has complex or composite type, then it is necessary to
 explicitly specify it as an argument, while specifying a converter function
 to convert the type.
 
