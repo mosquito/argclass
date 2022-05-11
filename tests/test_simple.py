@@ -159,7 +159,7 @@ def test_short_parser_definition():
 def test_print_help(capsys: pytest.CaptureFixture):
     class Parser(argclass.Parser):
         foo: str
-        bar: int
+        bar: int = 0
 
     parser = Parser()
     parser.print_help()
@@ -167,7 +167,7 @@ def test_print_help(capsys: pytest.CaptureFixture):
     assert "--foo" in captured.out
     assert "--bar" in captured.out
     assert "--help" in captured.out
-    assert "[--foo FOO]" in captured.out
+    assert "--foo FOO" in captured.out
     assert "[--bar BAR]" in captured.out
 
 
@@ -263,3 +263,31 @@ def test_config_for_required(tmp_path):
 
     with pytest.raises(SystemExit):
         parser.parse_args([])
+
+
+def test_minimal_optional(tmp_path):
+    class Parser(argclass.Parser):
+        optional: Optional[int]
+
+    parser = Parser()
+    parser.parse_args([])
+
+    assert parser.optional is None
+
+    parser.parse_args(["--optional=10"])
+
+    assert parser.optional == 10
+
+
+def test_minimal_required(tmp_path):
+    class Parser(argclass.Parser):
+        required: int
+
+    parser = Parser()
+
+    with pytest.raises(SystemExit):
+        parser.parse_args([])
+
+    parser.parse_args(["--required=20"])
+
+    assert parser.required == 20

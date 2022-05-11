@@ -18,6 +18,8 @@ from typing import (
 
 T = TypeVar("T")
 ConverterType = Callable[[str], Any]
+NoneType = type(None)
+UnionClass = Union[None, int].__class__
 
 
 def read_config(
@@ -315,10 +317,34 @@ class Meta(ABCMeta):
             ):
                 attrs[key] = ...
 
+                is_required = argument is None
+
                 if _type_is_bool(kind):
                     argument = _make_action_true_argument(kind, argument)
                 else:
-                    argument = _Argument(type=kind, default=argument)
+                    if kind.__class__ == UnionClass:
+                        union_args = [
+                            a for a in kind.__args__ if a is not NoneType
+                        ]
+
+                        if len(union_args) == 1:
+                            kind = union_args[0]
+                            is_required = False
+                        else:
+                            raise AttributeError(
+                                "Complex types mustn't be "
+                                "used in short form \n"
+                                "You have to specify converter or "
+                                "type function. See example bellow: \n\n"
+                                f"    class {name}(argclass.Parser):\n"
+                                f"        ...\n"
+                                f"        {key}: {kind} = argclass.Argument("
+                                f"..., type=some_class_or_function)\n",
+                            )
+
+                    argument = _Argument(
+                        type=kind, default=argument, required=is_required,
+                    )
 
             if isinstance(argument, _Argument):
                 if argument.type is None:

@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(
     name="argclass",
-    version="0.5.1",
+    version="0.7.0",
     platforms="all",
     author="Dmitry Orlov",
     author_email="me@mosquito.su",
@@ -29,7 +29,6 @@ setup(
         "Operating System :: Microsoft :: Windows",
         "Programming Language :: Python",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
