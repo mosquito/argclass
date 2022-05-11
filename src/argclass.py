@@ -271,19 +271,16 @@ def parse_bool(value: str) -> bool:
 
 
 def unwrap_optional(typespec: Any) -> Optional[Any]:
-    exc = TypeError(
-        "Complex types mustn't be used in short form. "
-        "You have to specify argclass.Argument with "
-        "converter or type function."
-    )
-
     if typespec.__class__ != UnionClass:
         return None
 
     union_args = [a for a in typespec.__args__ if a is not NoneType]
 
     if len(union_args) != 1:
-        raise exc
+        raise TypeError(
+            "Complex types mustn't be used in short form. You have to "
+            "specify argclass.Argument with converter or type function."
+        )
 
     return union_args[0]
 
