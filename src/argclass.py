@@ -465,7 +465,7 @@ class Parser(AbstractParser, Base):
         self._epilog += self.HELP_APPENDIX_END
         self._auto_env_var_prefix = auto_env_var_prefix
         self._parser_kwargs = kwargs
-        self._used_env_vars = set()
+        self._used_env_vars: Set[str] = set()
 
     def _make_parser(
         self, parser: Optional[ArgumentParser] = None,
@@ -614,7 +614,7 @@ class Parser(AbstractParser, Base):
 
         return self
 
-    def print_help(self):
+    def print_help(self) -> None:
         parser, _ = self._make_parser()
         return parser.print_help()
 
