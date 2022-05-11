@@ -620,7 +620,7 @@ class Parser(AbstractParser, Base):
 
     def sanitize_env(self) -> None:
         for name in self._used_env_vars:
-            os.environ.pop(name)
+            os.environ.pop(name, None)
         self._used_env_vars.clear()
 
 
