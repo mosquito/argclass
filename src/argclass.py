@@ -270,6 +270,24 @@ def parse_bool(value: str) -> bool:
     return value.lower() in TEXT_TRUE_VALUES
 
 
+def unwrap_optional(typespec: Union[T, None]) -> Optional[Type[T]]:
+    exc = TypeError(
+        "Complex types mustn't be used in short form. "
+        "You have to specify argclass.Argument with "
+        "converter or type function."
+    )
+
+    if typespec.__class__ != UnionClass:
+        return None
+
+    union_args = [a for a in typespec.__args__ if a is not NoneType]
+
+    if len(union_args) != 1:
+        raise exc
+
+    return union_args[0]
+
+
 def _make_action_true_argument(
     kind: typing.Type, default: Any = None,
 ) -> _Argument:
@@ -322,25 +340,10 @@ class Meta(ABCMeta):
                 if _type_is_bool(kind):
                     argument = _make_action_true_argument(kind, argument)
                 else:
-                    if kind.__class__ == UnionClass:
-                        union_args = [
-                            a for a in kind.__args__ if a is not NoneType
-                        ]
-
-                        if len(union_args) == 1:
-                            kind = union_args[0]
-                            is_required = False
-                        else:
-                            raise AttributeError(
-                                "Complex types mustn't be "
-                                "used in short form \n"
-                                "You have to specify converter or "
-                                "type function. See example bellow: \n\n"
-                                f"    class {name}(argclass.Parser):\n"
-                                f"        ...\n"
-                                f"        {key}: {kind} = argclass.Argument("
-                                f"..., type=some_class_or_function)\n",
-                            )
+                    optional_type = unwrap_optional(kind)
+                    if optional_type is not None:
+                        is_required = False
+                        kind = optional_type
 
                     argument = _Argument(
                         type=kind, default=argument, required=is_required,
@@ -348,6 +351,9 @@ class Meta(ABCMeta):
 
             if isinstance(argument, _Argument):
                 if argument.type is None:
+                    if kind.__class__.__module__ == "typing":
+                        kind = unwrap_optional(kind)
+                        argument.default = None
                     argument.type = kind
                 arguments[key] = argument
             elif isinstance(argument, AbstractGroup):

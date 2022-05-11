@@ -279,6 +279,19 @@ def test_minimal_optional(tmp_path):
     assert parser.optional == 10
 
 
+def test_optional_is_not_required(tmp_path):
+    class Parser(argclass.Parser):
+        optional: Optional[int] = argclass.Argument(required=False)
+
+    parser = Parser()
+
+    parser.parse_args([])
+    assert parser.optional is None
+
+    parser.parse_args(["--optional=20"])
+    assert parser.optional == 20
+
+
 def test_minimal_required(tmp_path):
     class Parser(argclass.Parser):
         required: int
