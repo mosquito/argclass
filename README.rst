@@ -78,6 +78,9 @@ Following example use ``argclass.Argument`` and argument groups:
     )
     parser.parse_args([])
 
+    # Remove all affected keys from os.environ
+    parser.sanitize_env()
+
     logging.basicConfig(level=parser.log_level)
     logging.info('Listening http://%s:%d', parser.http.address, parser.http.port)
     logging.info(f'Listening rpc://%s:%d', parser.rpc.address, parser.rpc.port)
