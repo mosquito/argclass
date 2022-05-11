@@ -270,7 +270,7 @@ def parse_bool(value: str) -> bool:
     return value.lower() in TEXT_TRUE_VALUES
 
 
-def unwrap_optional(typespec: Union[T, None]) -> Optional[Type[T]]:
+def unwrap_optional(typespec: Any) -> Optional[Any]:
     exc = TypeError(
         "Complex types mustn't be used in short form. "
         "You have to specify argclass.Argument with "
