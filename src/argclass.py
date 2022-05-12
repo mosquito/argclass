@@ -436,9 +436,8 @@ class Parser(AbstractParser, Base):
         "See more https://pypi.org/project/argclass/#configs"
     )
 
-    @staticmethod
     def _add_argument(
-        parser: Any, argument: _Argument, dest: str, *aliases,
+        self, parser: Any, argument: _Argument, dest: str, *aliases,
     ) -> Tuple[str, Action]:
         kwargs = argument.get_kwargs()
 
@@ -457,6 +456,9 @@ class Parser(AbstractParser, Base):
             kwargs["help"] = (
                 f"{kwargs.get('help', '')} [ENV: {argument.env_var}]"
             ).strip()
+
+            if argument.env_var in os.environ:
+                self._used_env_vars.add(argument.env_var)
 
         return dest, parser.add_argument(*aliases, **kwargs)
 
@@ -494,6 +496,7 @@ class Parser(AbstractParser, Base):
         self._epilog += self.HELP_APPENDIX_END
         self._auto_env_var_prefix = auto_env_var_prefix
         self._parser_kwargs = kwargs
+        self._used_env_vars: Set[str] = set()
 
     def _make_parser(
         self, parser: Optional[ArgumentParser] = None,
@@ -615,6 +618,7 @@ class Parser(AbstractParser, Base):
                     )
 
     def parse_args(self, args: Optional[Sequence[str]] = None) -> "Parser":
+        self._used_env_vars.clear()
         parser, destinations = self._make_parser()
         parsed_ns = parser.parse_args(args)
 
@@ -641,9 +645,14 @@ class Parser(AbstractParser, Base):
 
         return self
 
-    def print_help(self):
+    def print_help(self) -> None:
         parser, _ = self._make_parser()
         return parser.print_help()
+
+    def sanitize_env(self) -> None:
+        for name in self._used_env_vars:
+            os.environ.pop(name, None)
+        self._used_env_vars.clear()
 
 
 # noinspection PyPep8Naming
