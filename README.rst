@@ -249,3 +249,54 @@ Complex example with subparsers:
     )
     parser.parse_args()
     handle_subparser(parser.current_subparser)
+
+Value conversion
+++++++++++++++++
+
+If the argument has a generic or composite type, then you must explicitly
+describe it using ``argclass.Argument``, while specifying the converter
+function with ``type`` or ``converter`` argument to transform the value
+after parsing the arguments.
+
+The exception to this rule is `Optional` with a single type. In this case,
+an argument without a default value will not be required,
+and its value can be None.
+
+.. code-block:: python
+    :name: test_converter
+
+    import argclass
+    from typing import Optional, Union
+
+    def converter(value: str) -> Optional[Union[int, str, bool]]:
+        if value.lower() == "none":
+            return None
+        if value.isdigit():
+            return int(value)
+        if value.lower() in ("yes", "true", "enabled", "enable", "on"):
+            return True
+        return False
+
+
+    class Parser(argclass.Parser):
+        gizmo: Optional[Union[int, str, bool]] = argclass.Argument(
+            converter=converter
+        )
+        optional: Optional[int]
+
+
+    parser = Parser()
+
+    parser.parse_args(["--gizmo=65535"])
+    assert parser.gizmo == 65535
+
+    parser.parse_args(["--gizmo=None"])
+    assert parser.gizmo is None
+
+    parser.parse_args(["--gizmo=on"])
+    assert parser.gizmo is True
+    assert parser.optional is None
+
+    parser.parse_args(["--gizmo=off", "--optional=10"])
+    assert parser.gizmo is False
+    assert parser.optional == 10

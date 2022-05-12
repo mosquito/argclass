@@ -18,6 +18,8 @@ from typing import (
 
 T = TypeVar("T")
 ConverterType = Callable[[str], Any]
+NoneType = type(None)
+UnionClass = Union[None, int].__class__
 
 
 def read_config(
@@ -268,6 +270,21 @@ def parse_bool(value: str) -> bool:
     return value.lower() in TEXT_TRUE_VALUES
 
 
+def unwrap_optional(typespec: Any) -> Optional[Any]:
+    if typespec.__class__ != UnionClass:
+        return None
+
+    union_args = [a for a in typespec.__args__ if a is not NoneType]
+
+    if len(union_args) != 1:
+        raise TypeError(
+            "Complex types mustn't be used in short form. You have to "
+            "specify argclass.Argument with converter or type function."
+        )
+
+    return union_args[0]
+
+
 def _make_action_true_argument(
     kind: typing.Type, default: Any = None,
 ) -> _Argument:
@@ -315,13 +332,25 @@ class Meta(ABCMeta):
             ):
                 attrs[key] = ...
 
+                is_required = argument is None
+
                 if _type_is_bool(kind):
                     argument = _make_action_true_argument(kind, argument)
                 else:
-                    argument = _Argument(type=kind, default=argument)
+                    optional_type = unwrap_optional(kind)
+                    if optional_type is not None:
+                        is_required = False
+                        kind = optional_type
+
+                    argument = _Argument(
+                        type=kind, default=argument, required=is_required,
+                    )
 
             if isinstance(argument, _Argument):
-                if argument.type is None:
+                if argument.type is None and argument.converter is None:
+                    if kind.__class__.__module__ == "typing":
+                        kind = unwrap_optional(kind)
+                        argument.default = None
                     argument.type = kind
                 arguments[key] = argument
             elif isinstance(argument, AbstractGroup):
