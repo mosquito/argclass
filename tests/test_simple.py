@@ -304,3 +304,59 @@ def test_minimal_required(tmp_path):
     parser.parse_args(["--required=20"])
 
     assert parser.required == 20
+
+
+def test_log_group():
+    class LogGroup(argclass.Group):
+        level: int = argclass.LogLevel
+        format = argclass.Argument(
+            choices=("json", "stream"), default="stream"
+        )
+
+    class Parser(argclass.Parser):
+        log = LogGroup()
+
+    parser = Parser()
+    parser.parse_args([])
+
+    assert parser.log.level == logging.INFO
+    assert parser.log.format == "stream"
+
+    parser.parse_args(["--log-level=debug", "--log-format=json"])
+
+    assert parser.log.level == logging.DEBUG
+    assert parser.log.format == "json"
+
+
+def test_log_group_defaults():
+    class LogGroup(argclass.Group):
+        level: int = argclass.LogLevel
+        format: str = argclass.Argument(
+            choices=("json", "stream")
+        )
+
+    class Parser(argclass.Parser):
+        log = LogGroup(defaults=dict(format="json", level="error"))
+
+    parser = Parser()
+    parser.parse_args([])
+
+    assert parser.log.level == logging.ERROR
+    assert parser.log.format == "json"
+
+
+def test_environment_required():
+    class Parser(argclass.Parser):
+        required: int
+
+    parser = Parser(auto_env_var_prefix="TEST_")
+
+    os.environ['TEST_REQUIRED'] = "100"
+
+    parser.parse_args([])
+    assert parser.required == 100
+
+    os.environ.pop('TEST_REQUIRED')
+
+    with pytest.raises(SystemExit):
+        parser.parse_args([])

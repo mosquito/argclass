@@ -460,6 +460,9 @@ class Parser(AbstractParser, Base):
             if argument.env_var in os.environ:
                 self._used_env_vars.add(argument.env_var)
 
+        if kwargs.get("default"):
+            kwargs['required'] = False
+
         return dest, parser.add_argument(*aliases, **kwargs)
 
     @staticmethod
@@ -569,8 +572,6 @@ class Parser(AbstractParser, Base):
                     default=default,
                     env_var=self.get_env_var(dest, argument),
                 )
-                if default and argument.required:
-                    argument = argument.copy(required=False)
                 dest, action = self._add_argument(
                     group_parser, argument, dest, *aliases
                 )
