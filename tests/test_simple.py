@@ -388,3 +388,19 @@ def test_nargs_and_converter_not_required():
     parser.parse_args(["--args-set", "1", "2", "3", "4", "5"])
     assert isinstance(parser.args_set, frozenset)
     assert parser.args_set == frozenset([1, 2, 3, 4, 5])
+
+
+def test_nargs_1():
+    class Parser(argclass.Parser):
+        args_set: FrozenSet[int] = argclass.Argument(
+            type=int, nargs=1, converter=frozenset
+        )
+
+    parser = Parser()
+    parser.parse_args([])
+    assert isinstance(parser.args_set, frozenset)
+    assert parser.args_set == frozenset([])
+
+    parser.parse_args(["--args-set", "1"])
+    assert isinstance(parser.args_set, frozenset)
+    assert parser.args_set == frozenset([1])
