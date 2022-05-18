@@ -223,10 +223,7 @@ class ArgumentBase(Store):
 
         kwargs.pop("aliases", None)
         kwargs.pop("env_var", None)
-
-        if kwargs.pop("converter", None):
-            kwargs.pop("type", None)
-
+        kwargs.pop("converter", None)
         kwargs.update(action=action, nargs=nargs)
 
         return {k: v for k, v in kwargs.items() if v is not None}

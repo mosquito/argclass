@@ -56,6 +56,7 @@ Following example use ``argclass.Argument`` and argument groups:
 .. code-block:: python
     :name: test_example
 
+    from typing import FrozenSet
     import logging
 
     import argclass
@@ -70,6 +71,9 @@ Following example use ``argclass.Argument`` and argument groups:
         log_level: int = argclass.LogLevel
         http = AddressPortGroup(title="HTTP options", defaults=dict(port=8080))
         rpc = AddressPortGroup(title="RPC options", defaults=dict(port=9090))
+        user_id: FrozenSet[int] = argclass.Argument(
+            nargs="*", type=int, converter=frozenset
+        )
 
 
     parser = Parser(
@@ -78,7 +82,7 @@ Following example use ``argclass.Argument`` and argument groups:
     )
     parser.parse_args([])
 
-    # Remove all affected keys from os.environ
+    # Remove all used environment variables from os.environ
     parser.sanitize_env()
 
     logging.basicConfig(level=parser.log_level)

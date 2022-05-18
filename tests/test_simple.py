@@ -2,7 +2,7 @@ import logging
 import os
 import re
 import uuid
-from typing import List, Optional
+from typing import List, Optional, FrozenSet
 
 import pytest
 
@@ -360,3 +360,15 @@ def test_environment_required():
 
     with pytest.raises(SystemExit):
         parser.parse_args([])
+
+
+def test_nargs_and_converter():
+    class Parser(argclass.Parser):
+        args_set: FrozenSet[int] = argclass.Argument(
+            type=int, nargs="+", converter=frozenset
+        )
+
+    parser = Parser()
+    parser.parse_args(["--args-set", "1", "2", "3", "4", "5"])
+    assert isinstance(parser.args_set, frozenset)
+    assert parser.args_set == frozenset([1, 2, 3, 4, 5])
