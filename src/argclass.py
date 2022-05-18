@@ -638,6 +638,8 @@ class Parser(AbstractParser, Base):
                     parsed_value = getattr(parsed_ns, key)
 
                 if argument is not None and argument.converter is not None:
+                    if argument.nargs and parsed_value is None:
+                        parsed_value = []
                     parsed_value = argument.converter(parsed_value)
                 setattr(target, name, parsed_value)
 
