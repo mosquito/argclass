@@ -1,4 +1,5 @@
 import argparse
+import ast
 import collections
 import configparser
 import logging
@@ -243,6 +244,14 @@ class _Argument(ArgumentBase):
     required: Optional[bool] = None
     type: Any = None
 
+    @property
+    def is_nargs(self) -> bool:
+        if self.nargs == Nargs.ANY:
+            return False
+        if isinstance(self.nargs, int):
+            return self.nargs > 1
+        return True
+
 
 class _Config(_Argument):
     """ Parse INI file and set results as a value """
@@ -447,9 +456,17 @@ class Parser(AbstractParser, Base):
             ).strip()
 
         if argument.env_var is not None:
-            kwargs["default"] = os.getenv(
-                argument.env_var, kwargs.get("default"),
-            )
+            default = kwargs.get("default")
+            kwargs["default"] = os.getenv(argument.env_var, default)
+
+            if kwargs["default"] and argument.is_nargs:
+                kwargs["default"] = list(
+                    map(
+                        argument.type or str,
+                        ast.literal_eval(kwargs["default"]),
+                    )
+                )
+
             kwargs["help"] = (
                 f"{kwargs.get('help', '')} [ENV: {argument.env_var}]"
             ).strip()

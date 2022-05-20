@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(
     name="argclass",
-    version="0.7.3",
+    version="0.8.0",
     platforms="all",
     author="Dmitry Orlov",
     author_email="me@mosquito.su",

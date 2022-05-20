@@ -404,3 +404,55 @@ def test_nargs_1():
     parser.parse_args(["--args-set", "1"])
     assert isinstance(parser.args_set, frozenset)
     assert parser.args_set == frozenset([1])
+
+
+def test_nargs_env_var():
+    class Parser(argclass.Parser):
+        nargs: FrozenSet[int] = argclass.Argument(
+            type=int, nargs="*", converter=frozenset, env_var="NARGS"
+        )
+
+    os.environ['NARGS'] = "[1, 2, 3]"
+    try:
+        parser = Parser()
+        parser.parse_args([])
+    finally:
+        del os.environ['NARGS']
+
+    assert parser.nargs == frozenset({1, 2, 3})
+
+
+def test_nargs_config_list(tmp_path):
+    class Parser(argclass.Parser):
+        nargs: FrozenSet[int] = argclass.Argument(
+            type=int, nargs="*", converter=frozenset, env_var="NARGS"
+        )
+
+    conf_file = tmp_path / "config.ini"
+
+    with open(conf_file, "w") as fp:
+        fp.write("[DEFAULT]\n")
+        fp.write("nargs = [1, 2, 3, 4]\n")
+
+    parser = Parser(config_files=[conf_file])
+    parser.parse_args([])
+
+    assert parser.nargs == frozenset({1, 2, 3, 4})
+
+
+def test_nargs_config_set(tmp_path):
+    class Parser(argclass.Parser):
+        nargs: FrozenSet[int] = argclass.Argument(
+            type=int, nargs="*", converter=frozenset, env_var="NARGS"
+        )
+
+    conf_file = tmp_path / "config.ini"
+
+    with open(conf_file, "w") as fp:
+        fp.write("[DEFAULT]\n")
+        fp.write("nargs = {1, 2, 3, 4}\n")
+
+    parser = Parser(config_files=[conf_file])
+    parser.parse_args([])
+
+    assert parser.nargs == frozenset({1, 2, 3, 4})

@@ -155,6 +155,9 @@ one of passed configuration files.
         log_level: int = argclass.LogLevel
         http = AddressPortGroup(title="HTTP options")
         rpc = AddressPortGroup(title="RPC options")
+        user_ids = argclass.Argument(
+            type=int, converter=frozenset, nargs=argclass.Nargs.ONE_OR_MORE
+        )
 
 
     # Trying to parse all passed configuration files
@@ -179,6 +182,7 @@ So the full example of config file for above example is:
     log_level=info
     spam=egg
     quantity=100
+    user_ids=[1, 2, 3]
 
     [http]
     address=127.0.0.1
