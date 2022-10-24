@@ -427,6 +427,9 @@ class Group(AbstractGroup, Base):
         self._defaults: Mapping[str, Any] = MappingProxyType(defaults or {})
 
 
+ParserType = TypeVar("ParserType", bound="Parser")
+
+
 # noinspection PyProtectedMember
 class Parser(AbstractParser, Base):
     HELP_APPENDIX_PREAMBLE = (
@@ -632,7 +635,9 @@ class Parser(AbstractParser, Base):
                         ),
                     )
 
-    def parse_args(self, args: Optional[Sequence[str]] = None) -> "Parser":
+    def parse_args(
+        self: ParserType, args: Optional[Sequence[str]] = None,
+    ) -> ParserType:
         self._used_env_vars.clear()
         parser, destinations = self._make_parser()
         parsed_ns = parser.parse_args(args)
