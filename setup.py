@@ -15,6 +15,9 @@ setup(
     ),
     package_dir={"": "src"},
     packages=[""],
+    install_requires=[
+        "typing-extensions>=4.0,<5"
+    ],
     license="Apache 2",
     long_description=open("README.rst").read(),
     classifiers=[

@@ -15,6 +15,7 @@ from typing import (
     Any, Callable, Dict, Iterable, Mapping, MutableMapping, NamedTuple,
     Optional, Sequence, Set, Tuple, Type, TypeVar, Union,
 )
+from typing_extensions import Self
 
 
 T = TypeVar("T")
@@ -632,7 +633,7 @@ class Parser(AbstractParser, Base):
                         ),
                     )
 
-    def parse_args(self, args: Optional[Sequence[str]] = None) -> "Parser":
+    def parse_args(self, args: Optional[Sequence[str]] = None) -> Self:
         self._used_env_vars.clear()
         parser, destinations = self._make_parser()
         parsed_ns = parser.parse_args(args)
