@@ -16,6 +16,7 @@ from typing import (
     Optional, Sequence, Set, Tuple, Type, TypeVar, Union,
 )
 
+
 T = TypeVar("T")
 ConverterType = Callable[[str], Any]
 NoneType = type(None)
