@@ -15,7 +15,10 @@ from typing import (
     Any, Callable, Dict, Iterable, Mapping, MutableMapping, NamedTuple,
     Optional, Sequence, Set, Tuple, Type, TypeVar, Union,
 )
-from typing_extensions import Self
+try:
+    from typing import Self
+except ImportError:
+    from typing_extensions import Self
 
 
 T = TypeVar("T")
