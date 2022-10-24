@@ -15,11 +15,6 @@ from typing import (
     Any, Callable, Dict, Iterable, Mapping, MutableMapping, NamedTuple,
     Optional, Sequence, Set, Tuple, Type, TypeVar, Union,
 )
-try:
-    from typing import Self
-except ImportError:
-    from typing_extensions import Self
-
 
 T = TypeVar("T")
 ConverterType = Callable[[str], Any]
@@ -431,6 +426,9 @@ class Group(AbstractGroup, Base):
         self._defaults: Mapping[str, Any] = MappingProxyType(defaults or {})
 
 
+ParserType = TypeVar("ParserType", bound="Parser")
+
+
 # noinspection PyProtectedMember
 class Parser(AbstractParser, Base):
     HELP_APPENDIX_PREAMBLE = (
@@ -636,7 +634,9 @@ class Parser(AbstractParser, Base):
                         ),
                     )
 
-    def parse_args(self, args: Optional[Sequence[str]] = None) -> Self:
+    def parse_args(
+        self: ParserType, args: Optional[Sequence[str]] = None,
+    ) -> ParserType:
         self._used_env_vars.clear()
         parser, destinations = self._make_parser()
         parsed_ns = parser.parse_args(args)
