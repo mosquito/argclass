@@ -422,6 +422,22 @@ def test_nargs_env_var():
     assert parser.nargs == frozenset({1, 2, 3})
 
 
+def test_nargs_env_var_str():
+    class Parser(argclass.Parser):
+        nargs: FrozenSet[int] = argclass.Argument(
+            type=str, nargs="*", converter=frozenset, env_var="NARGS"
+        )
+
+    os.environ['NARGS'] = '["a", "b", "c"]'
+    try:
+        parser = Parser()
+        parser.parse_args([])
+    finally:
+        del os.environ['NARGS']
+
+    assert parser.nargs == frozenset({"a", "b", "c"})
+
+
 def test_nargs_config_list(tmp_path):
     class Parser(argclass.Parser):
         nargs: FrozenSet[int] = argclass.Argument(
@@ -456,3 +472,18 @@ def test_nargs_config_set(tmp_path):
     parser.parse_args([])
 
     assert parser.nargs == frozenset({1, 2, 3, 4})
+
+
+def test_secret_argument(tmp_path, capsys):
+    class Parser(argclass.Parser):
+        token: str = argclass.Argument(secret=True, default="TOP_SECRET")
+        pubkey: str = argclass.Argument(secret=False, default="NO_SECRET")
+        secret: str = argclass.Secret(default="FORBIDDEN")
+
+    parser = Parser()
+    parser.print_help()
+
+    captured = capsys.readouterr()
+    assert "TOP_SECRET" not in captured.out
+    assert "NO_SECRET" in captured.out
+    assert "FORBIDDEN" not in captured.out
