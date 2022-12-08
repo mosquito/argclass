@@ -146,18 +146,26 @@ or use the special default constructor `argclass.Secret` instead of
 `argclass.Argument`.
 
 .. code-block:: python
+
     import argclass
+
 
     class HttpAuthentication(argclass.Group):
         username: str = argclass.Argument()
         password: str = argclass.Secret()
 
+
     class HttpBearerAuthentication(argclass.Group):
         token: str = argclass.Argument(secret=True)
+
 
     class Parser(argclass.Parser):
         http_basic = HttpAuthentication()
         http_bearer = HttpBearerAuthentication()
+
+
+    parser = Parser()
+    parser.print_help()
 
 Configs
 +++++++
