@@ -152,7 +152,7 @@ class Store(metaclass=StoreMeta):
     _default_value = object()
     _fields: Tuple[str, ...]
 
-    def __new__(cls, **kwargs):
+    def __new__(cls, **kwargs) -> "Store":
         obj = super().__new__(cls)
 
         type_map: Dict[str, Tuple[Type, Any]] = {}
@@ -419,7 +419,7 @@ DestinationsType = MutableMapping[str, Set[Destination]]
 
 class Group(AbstractGroup, Base):
     def __init__(
-        self, title: str = None, description: Optional[str] = None,
+        self, title: Optional[str] = None, description: Optional[str] = None,
         prefix: Optional[str] = None,
         defaults: Optional[Dict[str, Any]] = None,
     ):
@@ -431,14 +431,14 @@ class Group(AbstractGroup, Base):
 
 # noinspection PyProtectedMember
 class Parser(AbstractParser, Base):
-    HELP_APPENDIX_PREAMBLE = (
+    HELP_APPENDIX_PREAMBLE: str = (
         " Default values will based on following "
         "configuration files {configs}. "
     )
-    HELP_APPENDIX_CURRENT = (
+    HELP_APPENDIX_CURRENT: str = (
         "Now {num_existent} files has been applied {existent}. "
     )
-    HELP_APPENDIX_END = (
+    HELP_APPENDIX_END: str = (
         "The configuration files is INI-formatted files "
         "where configuration groups is INI sections."
         "See more https://pypi.org/project/argclass/#configs"
