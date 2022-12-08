@@ -5,7 +5,6 @@ import configparser
 import logging
 import os
 import sys
-import typing
 from abc import ABCMeta
 from argparse import Action, ArgumentParser
 from enum import Enum
@@ -13,7 +12,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import (
     Any, Callable, Dict, Iterable, Mapping, MutableMapping, NamedTuple,
-    Optional, Sequence, Set, Tuple, Type, TypeVar, Union,
+    Optional, Sequence, Set, Tuple, Type, TypeVar, Union, List,
 )
 
 
@@ -65,14 +64,17 @@ class ConfigAction(Action):
             option_strings, dest, type=Path, help=help, default=default,
             required=required,
         )
-        self.search_paths = list(map(Path, search_paths))
-        self._result = None
+        self.search_paths: List[Path] = list(map(Path, search_paths))
+        self._result: Optional[Any] = None
 
-    def __call__(self, parser, namespace, values, option_string=None):
+    def __call__(
+        self, parser: argparse.ArgumentParser, namespace: argparse.Namespace,
+        values: Optional[Union[str, Any]], option_string: Optional[str] = None
+    ) -> None:
         if not self._result:
-            filenames = list(self.search_paths)
+            filenames: Sequence[Path] = list(self.search_paths)
             if values:
-                filenames.insert(0, Path(values))
+                filenames = [Path(values)] + list(filenames)
             self._result, filenames = read_config(*filenames)
             if self.required and not filenames:
                 raise argparse.ArgumentError(
@@ -98,7 +100,7 @@ class Actions(str, Enum):
         EXTEND = "extend"
 
     @classmethod
-    def default(cls):
+    def default(cls) -> "Actions":
         return cls.STORE
 
 
@@ -109,11 +111,11 @@ class Nargs(Enum):
     ZERO_OR_MORE = "*"
 
     @classmethod
-    def default(cls):
+    def default(cls) -> "Nargs":
         return cls.ANY
 
 
-def deep_getattr(name, attrs: Dict[str, Any], *bases: Type) -> Any:
+def deep_getattr(name: str, attrs: Dict[str, Any], *bases: Type) -> Any:
     if name in attrs:
         return attrs[name]
     for base in bases:
@@ -134,7 +136,8 @@ def merge_annotations(
 
 
 class StoreMeta(type):
-    def __new__(mcs, name, bases, attrs: Dict[str, Any]):
+    def __new__(mcs, name: str, bases: Tuple[Type["StoreMeta"], ...],
+                attrs: Dict[str, Any]) -> "StoreMeta":
         annotations = merge_annotations(
             attrs.get("__annotations__", {}), *bases
         )
@@ -152,7 +155,7 @@ class Store(metaclass=StoreMeta):
     _default_value = object()
     _fields: Tuple[str, ...]
 
-    def __new__(cls, **kwargs) -> "Store":
+    def __new__(cls, **kwargs: Any) -> "Store":
         obj = super().__new__(cls)
 
         type_map: Dict[str, Tuple[Type, Any]] = {}
@@ -168,7 +171,7 @@ class Store(metaclass=StoreMeta):
             setattr(obj, key, value)
         return obj
 
-    def copy(self, **overrides):
+    def copy(self, **overrides: Any) -> Any:
         kwargs = self.as_dict()
         for key, value in overrides.items():
             kwargs[key] = value
@@ -188,14 +191,14 @@ class Store(metaclass=StoreMeta):
 
 
 class ArgumentBase(Store):
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any):
         self._values = collections.OrderedDict()
 
         # noinspection PyUnresolvedReferences
         for key in self._fields:
             self._values[key] = kwargs.get(key, getattr(self.__class__, key))
 
-    def __getattr__(self, item):
+    def __getattr__(self, item: str) -> Any:
         try:
             return self._values[item]
         except KeyError as e:
@@ -208,7 +211,7 @@ class ArgumentBase(Store):
                 return False
         return True
 
-    def get_kwargs(self):
+    def get_kwargs(self) -> Dict[str, Any]:
         nargs = self.nargs
         if isinstance(nargs, Nargs):
             nargs = nargs.value
@@ -294,7 +297,7 @@ def unwrap_optional(typespec: Any) -> Optional[Any]:
 
 
 def _make_action_true_argument(
-    kind: typing.Type, default: Any = None,
+    kind: Type, default: Any = None,
 ) -> _Argument:
     kw: Dict[str, Any] = {"type": kind}
     if kind is bool:
@@ -304,19 +307,20 @@ def _make_action_true_argument(
             kw["action"] = Actions.STORE_FALSE
         else:
             raise TypeError(f"Can not set default {default!r} for bool")
-    elif kind == typing.Optional[bool]:
+    elif kind == Optional[bool]:
         kw["action"] = Actions.STORE
         kw["type"] = parse_bool
         kw["default"] = None
     return _Argument(**kw)
 
 
-def _type_is_bool(kind: typing.Type) -> bool:
-    return kind is bool or kind == typing.Optional[bool]
+def _type_is_bool(kind: Type) -> bool:
+    return kind is bool or kind == Optional[bool]
 
 
 class Meta(ABCMeta):
-    def __new__(mcs, name, bases, attrs: Dict[str, Any]):
+    def __new__(mcs, name: str, bases: Tuple[Type["Meta"], ...],
+                attrs: Dict[str, Any]) -> "Meta":
         annotations = merge_annotations(
             attrs.get("__annotations__", {}), *bases
         )
@@ -434,21 +438,21 @@ ParserType = TypeVar("ParserType", bound="Parser")
 
 # noinspection PyProtectedMember
 class Parser(AbstractParser, Base):
-    HELP_APPENDIX_PREAMBLE: str = (
+    HELP_APPENDIX_PREAMBLE = (
         " Default values will based on following "
         "configuration files {configs}. "
     )
-    HELP_APPENDIX_CURRENT: str = (
+    HELP_APPENDIX_CURRENT = (
         "Now {num_existent} files has been applied {existent}. "
     )
-    HELP_APPENDIX_END: str = (
+    HELP_APPENDIX_END = (
         "The configuration files is INI-formatted files "
         "where configuration groups is INI sections."
         "See more https://pypi.org/project/argclass/#configs"
     )
 
     def _add_argument(
-        self, parser: Any, argument: _Argument, dest: str, *aliases,
+        self, parser: Any, argument: _Argument, dest: str, *aliases: str,
     ) -> Tuple[str, Action]:
         kwargs = argument.get_kwargs()
 
@@ -498,7 +502,7 @@ class Parser(AbstractParser, Base):
     def __init__(
         self, config_files: Iterable[Union[str, Path]] = (),
         auto_env_var_prefix: Optional[str] = None,
-        **kwargs,
+        **kwargs: Any,
     ):
         super().__init__()
         self.current_subparser = None
