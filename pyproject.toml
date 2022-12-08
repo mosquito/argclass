@@ -1,0 +1,70 @@
+[tool.poetry]
+name = "argclass"
+version = "0.9.0"
+description = """
+A wrapper around the standard argparse module that allows \
+you to describe argument parsers declaratively.
+"""
+authors = ["Dmitry Orlov <me@mosquito.su>"]
+readme = "README.rst"
+license = "Apache 2"
+homepage = "https://github.com/mosquito/argclass"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: MacOS :: MacOS X",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: POSIX",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python",
+]
+packages = [
+    { include = "argclass.py" },
+]
+
+[tool.poetry.urls]
+"Source" = "https://github.com/mosquito/argclass"
+"Tracker" = "https://github.com/mosquito/argclass/issues"
+"Documentation" = "https://github.com/mosquito/argclass/blob/master/README.rst"
+
+[tool.poetry.dependencies]
+python = "^3.7"
+
+[tool.poetry.group.dev.dependencies]
+coveralls = "^3.3.1"
+pytest = "^7.2.0"
+pytest-cov = "^4.0.0"
+pytest-rst = ">=0.0.7"
+pylama = "^8.4.1"
+
+[tool.poetry.group.mypy.dependencies]
+mypy = "0.991"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.mypy]
+check_untyped_defs = true
+disallow_any_generics = false
+disallow_incomplete_defs = true
+disallow_subclassing_any = true
+disallow_untyped_calls = true
+disallow_untyped_decorators = true
+disallow_untyped_defs = true
+follow_imports = "silent"
+no_implicit_reexport = true
+strict_optional = true
+warn_redundant_casts = true
+warn_unused_configs = true
+warn_unused_ignores = false
+files = "argclass.py"
