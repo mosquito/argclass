@@ -152,7 +152,7 @@ class Store(metaclass=StoreMeta):
     _default_value = object()
     _fields: Tuple[str, ...]
 
-    def __new__(cls, **kwargs):
+    def __new__(cls, **kwargs) -> "Store":
         obj = super().__new__(cls)
 
         type_map: Dict[str, Tuple[Type, Any]] = {}
@@ -223,8 +223,9 @@ class ArgumentBase(Store):
             action = action.value
 
         kwargs.pop("aliases", None)
-        kwargs.pop("env_var", None)
         kwargs.pop("converter", None)
+        kwargs.pop("env_var", None)
+        kwargs.pop("secret", None)
         kwargs.update(action=action, nargs=nargs)
 
         return {k: v for k, v in kwargs.items() if v is not None}
@@ -237,6 +238,7 @@ class _Argument(ArgumentBase):
     const: Optional[Any] = None
     converter: Optional[ConverterType] = None
     default: Optional[Any] = None
+    secret: bool = False
     env_var: Optional[str] = None
     help: Optional[str] = None
     metavar: Optional[str] = None
@@ -417,7 +419,7 @@ DestinationsType = MutableMapping[str, Set[Destination]]
 
 class Group(AbstractGroup, Base):
     def __init__(
-        self, title: str = None, description: Optional[str] = None,
+        self, title: Optional[str] = None, description: Optional[str] = None,
         prefix: Optional[str] = None,
         defaults: Optional[Dict[str, Any]] = None,
     ):
@@ -432,14 +434,14 @@ ParserType = TypeVar("ParserType", bound="Parser")
 
 # noinspection PyProtectedMember
 class Parser(AbstractParser, Base):
-    HELP_APPENDIX_PREAMBLE = (
+    HELP_APPENDIX_PREAMBLE: str = (
         " Default values will based on following "
         "configuration files {configs}. "
     )
-    HELP_APPENDIX_CURRENT = (
+    HELP_APPENDIX_CURRENT: str = (
         "Now {num_existent} files has been applied {existent}. "
     )
-    HELP_APPENDIX_END = (
+    HELP_APPENDIX_END: str = (
         "The configuration files is INI-formatted files "
         "where configuration groups is INI sections."
         "See more https://pypi.org/project/argclass/#configs"
@@ -453,7 +455,7 @@ class Parser(AbstractParser, Base):
         if not argument.is_positional:
             kwargs["dest"] = dest
 
-        if argument.default is not None:
+        if argument.default is not None and not argument.secret:
             kwargs["help"] = (
                 f"{kwargs.get('help', '')} (default: {argument.default})"
             ).strip()
@@ -685,6 +687,7 @@ def Argument(
     const: Optional[Any] = None,
     converter: Optional[ConverterType] = None,
     default: Optional[Any] = None,
+    secret: bool = False,
     env_var: Optional[str] = None,
     help: Optional[str] = None,
     metavar: Optional[str] = None,
@@ -699,6 +702,39 @@ def Argument(
         const=const,
         converter=converter,
         default=default,
+        secret=secret,
+        env_var=env_var,
+        help=help,
+        metavar=metavar,
+        nargs=nargs,
+        required=required,
+        type=type,
+    )    # type: ignore
+
+
+# noinspection PyPep8Naming
+def Secret(
+    *aliases: str,
+    action: Union[Actions, Type[Action]] = Actions.default(),
+    choices: Optional[Iterable[str]] = None,
+    const: Optional[Any] = None,
+    converter: Optional[ConverterType] = None,
+    default: Optional[Any] = None,
+    env_var: Optional[str] = None,
+    help: Optional[str] = None,
+    metavar: Optional[str] = None,
+    nargs: Optional[Union[int, str, Nargs]] = Nargs.default(),
+    required: Optional[bool] = None,
+    type: Any = None
+) -> Any:
+    return _Argument(
+        action=action,
+        aliases=aliases,
+        choices=choices,
+        const=const,
+        converter=converter,
+        default=default,
+        secret=True,
         env_var=env_var,
         help=help,
         metavar=metavar,
