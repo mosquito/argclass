@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "argclass"
-version = "0.9.1"
+version = "0.9.2"
 description = "A wrapper around the standard argparse module that allows you to describe argument parsers declaratively"
 authors = ["Dmitry Orlov <me@mosquito.su>"]
 readme = "README.rst"

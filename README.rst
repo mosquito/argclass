@@ -4,8 +4,8 @@ argclass
 .. image:: https://coveralls.io/repos/github/mosquito/argclass/badge.svg?branch=master
    :target: https://coveralls.io/github/mosquito/argclass?branch=master
 
-.. image:: https://github.com/mosquito/argclass/workflows/tox/badge.svg
-   :target: https://github.com/mosquito/argclass/actions?query=workflow%3Atox
+.. image:: https://github.com/mosquito/argclass/workflows/tests/badge.svg
+   :target: https://github.com/mosquito/argclass/actions?query=workflow%3Atests
    :alt: Actions
 
 .. image:: https://img.shields.io/pypi/v/argclass.svg
