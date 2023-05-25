@@ -269,7 +269,12 @@ class AbstractGroup:
 
 
 class AbstractParser:
-    pass
+    __parent__: Optional["AbstractParser"] = None
+
+    def _get_chain(self) -> Tuple["AbstractParser", ...]:
+        if self.__parent__ is None:
+            return (self,)
+        return (self,) + self.__parent__._get_chain()
 
 
 TEXT_TRUE_VALUES = frozenset((
@@ -505,7 +510,7 @@ class Parser(AbstractParser, Base):
         **kwargs: Any,
     ):
         super().__init__()
-        self.current_subparser = None
+        self.current_subparsers = ()
         self._config_files = config_files
         self._config, filenames = read_config(*config_files)
 
@@ -523,6 +528,12 @@ class Parser(AbstractParser, Base):
         self._auto_env_var_prefix = auto_env_var_prefix
         self._parser_kwargs = kwargs
         self._used_env_vars: Set[str] = set()
+
+    @property
+    def current_subparser(self) -> Optional["AbstractParser"]:
+        if not self.current_subparsers:
+            return None
+        return self.current_subparsers[0]
 
     def _make_parser(
         self, parser: Optional[ArgumentParser] = None,
@@ -611,11 +622,11 @@ class Parser(AbstractParser, Base):
         self, destinations: DestinationsType, parser: ArgumentParser,
     ) -> None:
         subparsers = parser.add_subparsers()
-        subparser: Parser
-        destinations["current_subparser"].add(
+        subparser: AbstractParser
+        destinations["current_subparsers"].add(
             Destination(
                 target=self,
-                attribute="current_subparser",
+                attribute="current_subparsers",
                 argument=None,
                 action=None,
             ),
@@ -629,17 +640,25 @@ class Parser(AbstractParser, Base):
                     ),
                 )
             )
-            current_parser.set_defaults(current_subparser=subparser)
+            subparser.__parent__ = self
+            current_parser.set_defaults(
+                current_subparsers=subparser._get_chain(),
+            )
             for dest, values in subparser_dests.items():
                 for target, name, argument, action in values:
-                    destinations[dest].add(
-                        Destination(
-                            target=subparser,
-                            attribute=name,
-                            argument=argument,
-                            action=action,
-                        ),
-                    )
+                    for target_destination in subparser_dests.get(dest, [None]):
+                        if target_destination is not None:
+                            current_target = target_destination.target
+                        else:
+                            current_target = subparser
+                        destinations[dest].add(
+                            Destination(
+                                target=current_target,
+                                attribute=name,
+                                argument=argument,
+                                action=action,
+                            ),
+                        )
 
     def parse_args(
         self: ParserType, args: Optional[Sequence[str]] = None,
@@ -649,7 +668,7 @@ class Parser(AbstractParser, Base):
         parsed_ns = parser.parse_args(args)
 
         parsed_value: Any
-        current_subparser = getattr(parsed_ns, "current_subparser", None)
+        current_subparsers = getattr(parsed_ns, "current_subparsers", ())
 
         for key, values in destinations.items():
             parsed_value = getattr(parsed_ns, key, None)
@@ -657,7 +676,7 @@ class Parser(AbstractParser, Base):
                 if (
                     target is not self and
                     isinstance(target, Parser) and
-                    current_subparser is not target
+                    target not in current_subparsers
                 ):
                     continue
 

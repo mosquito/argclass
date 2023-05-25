@@ -107,3 +107,35 @@ def test_current_subparsers():
     parser.parse_args(["push"])
     handle_subparser(parser.current_subparser)
     assert "push" in state
+
+
+def test_nested_subparsers() -> None:
+    class Group(argclass.Group):
+        value: int = argclass.Argument()
+
+    class SubSubParser(argclass.Parser):
+        str_value: str = argclass.Argument()
+        group: Group = Group()
+
+    class SubParser(argclass.Parser):
+        subsub: Optional[SubSubParser] = SubSubParser()
+        val: str = argclass.Argument()
+
+    class Parser(argclass.Parser):
+        sub: Optional[SubParser] = SubParser()
+        sub2: Optional[SubParser] = SubParser()
+
+    parser = Parser()
+    args = parser.parse_args([
+        "sub",
+        "--val=lol",
+        "subsub",
+        "--group-value=2",
+        "--str-value=kek",
+    ])
+
+    assert args.sub.val == "lol"
+    assert args.sub.subsub.str_value == "kek"
+    assert args.sub.subsub.group.value == 2
+    with pytest.raises(AttributeError):
+        print(args.sub2.val)
