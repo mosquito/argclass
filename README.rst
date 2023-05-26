@@ -176,20 +176,16 @@ from a `str`, and all attempts to cast this type to a `str`
 (using `__str__` method) should be fine, and returning the original
 value, unless the `__str__` method call is from a `logging` module.
 
-```python
->>> import logging
->>> from argclass import SecretString
->>> logging.basicConfig(level=logging.INFO)
->>> s = SecretString("my-secret-password")
->>> logging.info(s)          # __str__ will be called from logging
-INFO:root:'******'
->>> logging.info(f"s=%s", s) # __str__ will be called from logging too
-INFO:root:s='******'
->>> logging.info(f"{s!r}")   # repr is safe
-INFO:root:'******'
->>> logging.info(f"{s}")     # the password will be compromised
-INFO:root:my-secret-password
-```
+.. code-block:: python
+
+    >>> import logging
+    >>> from argclass import SecretString
+    >>> logging.basicConfig(level=logging.INFO)
+    >>> s = SecretString("my-secret-password")
+    >>> logging.info(s)          # __str__ will be called from logging
+    >>> logging.info(f"s=%s", s) # __str__ will be called from logging too
+    >>> logging.info(f"{s!r}")   # repr is safe
+    >>> logging.info(f"{s}")     # the password will be compromised
 
 Of course this is not a absolute sensitive data protection,
 but I hope it helps against accidental logging of this kind of values.
