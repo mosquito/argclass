@@ -5,14 +5,15 @@ import configparser
 import logging
 import os
 import sys
+import traceback
 from abc import ABCMeta
 from argparse import Action, ArgumentParser
 from enum import Enum
 from pathlib import Path
 from types import MappingProxyType
 from typing import (
-    Any, Callable, Dict, Iterable, Mapping, MutableMapping, NamedTuple,
-    Optional, Sequence, Set, Tuple, Type, TypeVar, Union, List,
+    Any, Callable, Dict, Iterable, List, Mapping, MutableMapping, NamedTuple,
+    Optional, Sequence, Set, Tuple, Type, TypeVar, Union,
 )
 
 
@@ -51,6 +52,52 @@ def read_config(
     return result, tuple(map(Path, config_paths))
 
 
+class SecretString(str):
+    """
+    The class mimics the string, with one important difference.
+    Attempting to call __str__ of this instance will result in
+    the output of placeholer (the default is "******") if the
+    call stack contains of logging module. In other words, this
+    is an attempt to keep secrets out of the log.
+
+    However, if you try to do an f-string or str() at the moment
+    the parameter is passed to the log, the value will be received,
+    because there is nothing about logging in the stack.
+
+    The repr will always give placeholder, so it is better to always
+    add ``!r`` for any f-string, for example `f'{value!r}'`.
+
+    Examples:
+
+    >>> import logging
+    >>> from argclass import SecretString
+    >>> logging.basicConfig(level=logging.INFO)
+    >>> s = SecretString("my-secret-password")
+    >>> logging.info(s)          # __str__ will be called from logging
+    INFO:root:'******'
+    >>> logging.info(f"s=%s", s) # __str__ will be called from logging too
+    INFO:root:s='******'
+    >>> logging.info(f"{s!r}")   # repr is safe
+    INFO:root:'******'
+    >>> logging.info(f"{s}")     # the password will be compromised
+    INFO:root:my-secret-password
+
+    """
+
+    PLACEHOLDER = "******"
+
+    def __str__(self) -> str:
+        for frame in traceback.extract_stack(None):
+            if "logging" in frame.filename:
+                return self.PLACEHOLDER
+            elif "log.py" in frame.filename:
+                return self.PLACEHOLDER
+        return super().__str__()
+
+    def __repr__(self) -> str:
+        return repr(self.PLACEHOLDER)
+
+
 class ConfigAction(Action):
     def __init__(
         self, option_strings: Sequence[str], dest: str,
@@ -69,7 +116,7 @@ class ConfigAction(Action):
 
     def __call__(
         self, parser: argparse.ArgumentParser, namespace: argparse.Namespace,
-        values: Optional[Union[str, Any]], option_string: Optional[str] = None
+        values: Optional[Union[str, Any]], option_string: Optional[str] = None,
     ) -> None:
         if not self._result:
             filenames: Sequence[Path] = list(self.search_paths)
@@ -136,8 +183,10 @@ def merge_annotations(
 
 
 class StoreMeta(type):
-    def __new__(mcs, name: str, bases: Tuple[Type["StoreMeta"], ...],
-                attrs: Dict[str, Any]) -> "StoreMeta":
+    def __new__(
+        mcs, name: str, bases: Tuple[Type["StoreMeta"], ...],
+        attrs: Dict[str, Any],
+    ) -> "StoreMeta":
         annotations = merge_annotations(
             attrs.get("__annotations__", {}), *bases
         )
@@ -295,7 +344,7 @@ def unwrap_optional(typespec: Any) -> Optional[Any]:
     if len(union_args) != 1:
         raise TypeError(
             "Complex types mustn't be used in short form. You have to "
-            "specify argclass.Argument with converter or type function."
+            "specify argclass.Argument with converter or type function.",
         )
 
     return union_args[0]
@@ -324,8 +373,10 @@ def _type_is_bool(kind: Type) -> bool:
 
 
 class Meta(ABCMeta):
-    def __new__(mcs, name: str, bases: Tuple[Type["Meta"], ...],
-                attrs: Dict[str, Any]) -> "Meta":
+    def __new__(
+        mcs, name: str, bases: Tuple[Type["Meta"], ...],
+        attrs: Dict[str, Any],
+    ) -> "Meta":
         annotations = merge_annotations(
             attrs.get("__annotations__", {}), *bases
         )
@@ -478,7 +529,7 @@ class Parser(AbstractParser, Base):
                     map(
                         argument.type or str,
                         ast.literal_eval(kwargs["default"]),
-                    )
+                    ),
                 )
 
             kwargs["help"] = (
@@ -489,7 +540,7 @@ class Parser(AbstractParser, Base):
                 self._used_env_vars.add(argument.env_var)
 
         if kwargs.get("default"):
-            kwargs['required'] = False
+            kwargs["required"] = False
 
         return dest, parser.add_argument(*aliases, **kwargs)
 
@@ -684,10 +735,13 @@ class Parser(AbstractParser, Base):
                     action(parser, parsed_ns, parsed_value, None)
                     parsed_value = getattr(parsed_ns, key)
 
-                if argument is not None and argument.converter is not None:
-                    if argument.nargs and parsed_value is None:
-                        parsed_value = []
-                    parsed_value = argument.converter(parsed_value)
+                if argument is not None:
+                    if argument.secret:
+                        parsed_value = SecretString(parsed_value)
+                    if argument.converter is not None:
+                        if argument.nargs and parsed_value is None:
+                            parsed_value = []
+                        parsed_value = argument.converter(parsed_value)
                 setattr(target, name, parsed_value)
 
         return self
@@ -807,7 +861,8 @@ __all__ = (
     "Actions",
     "Argument",
     "Group",
+    "LogLevel",
     "Nargs",
     "Parser",
-    "LogLevel",
+    "SecretString",
 )

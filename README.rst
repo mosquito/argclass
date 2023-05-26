@@ -139,9 +139,10 @@ Example of ``--help`` output:
 Secrets
 +++++++
 
-Arguments reflecting some sensitive data, tokens or encryption keys, when
-passed through environment variables or a configuration file, can be printed
-in the output of `--help`. To hide defaults, add the `secret=True` parameter,
+Arguments reflecting some sensitive data, tokens or encryption keys,
+urls with passwords, when passed through environment variables or a
+configuration file, can be printed in the output of `--help`.
+To hide defaults, add the `secret=True` parameter,
 or use the special default constructor `argclass.Secret` instead of
 `argclass.Argument`.
 
@@ -166,6 +167,35 @@ or use the special default constructor `argclass.Secret` instead of
 
     parser = Parser()
     parser.print_help()
+
+Trying to protect data from being written to the log
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A secret is not actually a string, but a special class inherited
+from a `str`, and all attempts to cast this type to a `str`
+(using `__str__` method) should be fine, and returning the original
+value, unless the `__str__` method call is from a `logging` module.
+
+```python
+>>> import logging
+>>> from argclass import SecretString
+>>> logging.basicConfig(level=logging.INFO)
+>>> s = SecretString("my-secret-password")
+>>> logging.info(s)          # __str__ will be called from logging
+INFO:root:'******'
+>>> logging.info(f"s=%s", s) # __str__ will be called from logging too
+INFO:root:s='******'
+>>> logging.info(f"{s!r}")   # repr is safe
+INFO:root:'******'
+>>> logging.info(f"{s}")     # the password will be compromised
+INFO:root:my-secret-password
+```
+
+Of course this is not a absolute sensitive data protection,
+but I hope it helps against accidental logging of this kind of values.
+
+The repr for this will always give placeholder, so it is better to always
+add `!r` for any f-string, for example `f'{value!r}'`.
 
 Configs
 +++++++
