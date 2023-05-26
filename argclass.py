@@ -85,13 +85,13 @@ class SecretString(str):
     """
 
     PLACEHOLDER = "******"
+    MODULES_SKIPLIST = ("logging", "log.py")
 
     def __str__(self) -> str:
         for frame in traceback.extract_stack(None):
-            if "logging" in frame.filename:
-                return self.PLACEHOLDER
-            elif "log.py" in frame.filename:
-                return self.PLACEHOLDER
+            for skip in self.MODULES_SKIPLIST:
+                if skip in frame.filename:
+                    return self.PLACEHOLDER
         return super().__str__()
 
     def __repr__(self) -> str:
@@ -698,10 +698,11 @@ class Parser(AbstractParser, Base):
             for dest, values in subparser_dests.items():
                 for target, name, argument, action in values:
                     for target_destination in subparser_dests.get(dest, [None]):
+                        current_target = subparser
+
                         if target_destination is not None:
                             current_target = target_destination.target
-                        else:
-                            current_target = subparser
+
                         destinations[dest].add(
                             Destination(
                                 target=current_target,
