@@ -12,8 +12,8 @@ from enum import Enum
 from pathlib import Path
 from types import MappingProxyType
 from typing import (
-    Any, Callable, Dict, Iterable, List, Mapping, MutableMapping, NamedTuple,
-    Optional, Sequence, Set, Tuple, Type, TypeVar, Union,
+    Any, Callable, Dict, Iterable, Iterator, List, Mapping, MutableMapping,
+    NamedTuple, Optional, Sequence, Set, Tuple, Type, TypeVar, Union,
 )
 
 
@@ -320,10 +320,11 @@ class AbstractGroup:
 class AbstractParser:
     __parent__: Optional["AbstractParser"] = None
 
-    def _get_chain(self) -> Tuple["AbstractParser", ...]:
+    def _get_chain(self) -> Iterator["AbstractParser"]:
+        yield self
         if self.__parent__ is None:
-            return (self,)
-        return (self,) + self.__parent__._get_chain()
+            return
+        yield from self.__parent__._get_chain()
 
 
 TEXT_TRUE_VALUES = frozenset((
@@ -693,7 +694,7 @@ class Parser(AbstractParser, Base):
             )
             subparser.__parent__ = self
             current_parser.set_defaults(
-                current_subparsers=subparser._get_chain(),
+                current_subparsers=tuple(subparser._get_chain()),
             )
             current_target: Base
             for dest, values in subparser_dests.items():
