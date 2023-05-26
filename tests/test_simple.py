@@ -3,6 +3,7 @@ import os
 import re
 import uuid
 from typing import List, Optional, FrozenSet
+from unittest.mock import patch
 
 import pytest
 
@@ -20,6 +21,7 @@ class TestBasics:
             "--sum", action=argclass.Actions.STORE_CONST, const=sum,
             default=max, help="sum the integers (default: find the max)",
         )
+        secret = argclass.Secret()
 
     def test_simple(self):
         parser = self.Parser()
@@ -487,3 +489,20 @@ def test_secret_argument(tmp_path, capsys):
     assert "TOP_SECRET" not in captured.out
     assert "NO_SECRET" in captured.out
     assert "FORBIDDEN" not in captured.out
+
+
+def test_sanitize_env():
+    class Parser(argclass.Parser):
+        secret: str = argclass.Secret(default="SECRET")
+
+    parser = Parser(auto_env_var_prefix="TEST_")
+
+    with patch("os.environ", new={}):
+        os.environ["TEST_SECRET"] = "foo"
+
+        assert os.environ["TEST_SECRET"] == "foo"
+
+        parser.parse_args([])
+        parser.sanitize_env()
+
+        assert "TEST_SECRET" not in dict(os.environ)
