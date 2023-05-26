@@ -695,6 +695,7 @@ class Parser(AbstractParser, Base):
             current_parser.set_defaults(
                 current_subparsers=subparser._get_chain(),
             )
+            current_target: Base
             for dest, values in subparser_dests.items():
                 for target, name, argument, action in values:
                     for target_destination in subparser_dests.get(dest, [None]):
