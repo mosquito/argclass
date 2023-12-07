@@ -1,5 +1,7 @@
+========
 argclass
 ========
+
 
 .. image:: https://coveralls.io/repos/github/mosquito/argclass/badge.svg?branch=master
    :target: https://coveralls.io/github/mosquito/argclass?branch=master
@@ -136,8 +138,9 @@ Example of ``--help`` output:
     configuration groups is INI sections.
     See more https://pypi.org/project/argclass/#configs
 
+
 Secrets
-+++++++
+=======
 
 Arguments reflecting some sensitive data, tokens or encryption keys,
 urls with passwords, when passed through environment variables or a
@@ -168,8 +171,9 @@ or use the special default constructor `argclass.Secret` instead of
     parser = Parser()
     parser.print_help()
 
+
 Trying to protect data from being written to the log
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 A secret is not actually a string, but a special class inherited
 from a `str`, and all attempts to cast this type to a `str`
@@ -193,8 +197,9 @@ but I hope it helps against accidental logging of this kind of values.
 The repr for this will always give placeholder, so it is better to always
 add `!r` for any f-string, for example `f'{value!r}'`.
 
+
 Configs
-+++++++
+=======
 
 The parser objects might be get default values from environment variables or
 one of passed configuration files.
@@ -250,8 +255,106 @@ So the full example of config file for above example is:
     port=9090
 
 
+Enum argument
+=============
+
+.. code-block:: python
+    :name: test_enum_argument
+
+    import enum
+    import logging
+    import argclass
+
+    class LogLevelEnum(enum.IntEnum):
+        debug = logging.DEBUG
+        info = logging.INFO
+        warning = logging.WARNING
+        error = logging.ERROR
+        critical = logging.CRITICAL
+
+
+    class Parser(argclass.Parser):
+        """Log level with default"""
+        log_level = argclass.EnumArgument(LogLevelEnum, default="info")
+
+
+    class ParserLogLevelIsRequired(argclass.Parser):
+        log_level: LogLevelEnum
+
+    parser = Parser()
+    parser.parse_args([])
+    assert parser.log_level == logging.INFO
+
+    parser = Parser()
+    parser.parse_args(["--log-level=error"])
+    assert parser.log_level == logging.ERROR
+
+    parser = ParserLogLevelIsRequired()
+    parser.parse_args(["--log-level=warning"])
+    assert parser.log_level == logging.WARNING
+
+
+Config Action
+=============
+
+This library provides base class for writing custom configuration parsers.
+
+
+YAML parser
++++++++++++
+
+.. code-block:: python
+
+    import yaml
+
+    import argclass
+
+
+    class YAMLConfigAction(argclass.ConfigAction):
+        def parse_file(self, file: Path) -> Mapping[str, Any]:
+            with file.open("r") as fp:
+                return yaml.load_all(fp)
+
+
+    class YAMLConfigArgument(argclass.ConfigArgument):
+        action = YAMLConfigAction
+
+
+    class Parser(argclass.Parser):
+        config = argclass.Config(
+            required=True,
+            config_class=YAMLConfigArgument,
+        )
+
+
+TOML parser
++++++++++++
+
+.. code-block:: python
+
+    import tomli
+
+    import argclass
+
+
+    class TOMLConfigAction(argclass.ConfigAction):
+        def parse_file(self, file: Path) -> Mapping[str, Any]:
+            with file.open("r") as fp:
+                return tomli.load(fp)
+
+    class TOMLConfigArgument(argclass.ConfigArgument):
+        action = TOMLConfigAction
+
+
+    class Parser(argclass.Parser):
+        config = argclass.Config(
+            required=True,
+            config_class=TOMLConfigArgument,
+        )
+
+
 Subparsers
-++++++++++
+==========
 
 Complex example with subparsers:
 
@@ -318,8 +421,9 @@ Complex example with subparsers:
     parser.parse_args()
     handle_subparser(parser.current_subparser)
 
+
 Value conversion
-++++++++++++++++
+================
 
 If the argument has a generic or composite type, then you must explicitly
 describe it using ``argclass.Argument``, while specifying the converter

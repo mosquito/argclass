@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "argclass"
-version = "0.11.0"
+version = "1.0.0"
 description = "A wrapper around the standard argparse module that allows you to describe argument parsers declaratively"
 authors = ["Dmitry Orlov <me@mosquito.su>"]
 readme = "README.rst"
@@ -34,7 +34,7 @@ packages = [
 "Documentation" = "https://github.com/mosquito/argclass/blob/master/README.rst"
 
 [tool.poetry.dependencies]
-python = "^3.7"
+python = "^3.8"
 
 [tool.poetry.group.dev.dependencies]
 coveralls = "^3.3.1"

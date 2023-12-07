@@ -2,30 +2,40 @@ import argparse
 import ast
 import collections
 import configparser
+import json
 import logging
 import os
 import sys
 import traceback
 from abc import ABCMeta
 from argparse import Action, ArgumentParser
-from enum import Enum
+from enum import Enum, IntEnum
+from functools import partial
 from pathlib import Path
 from types import MappingProxyType
 from typing import (
-    Any, Callable, Dict, Iterable, Iterator, List, Mapping, MutableMapping,
-    NamedTuple, Optional, Sequence, Set, Tuple, Type, TypeVar, Union,
+    Any, Callable, Dict, Iterable, Iterator, List, Literal, Mapping,
+    MutableMapping, NamedTuple, Optional, Sequence, Set, Tuple, Type, TypeVar,
+    Union,
 )
 
 
-T = TypeVar("T")
+try:
+    from enum import EnumType
+except ImportError:
+    from enum import EnumMeta as EnumType
+
+
+T = TypeVar("T", bound=Any)
+E = TypeVar("E", bound=Enum)
 ConverterType = Callable[[str], Any]
 NoneType = type(None)
 UnionClass = Union[None, int].__class__
 
 
-def read_config(
+def read_configs(
     *paths: Union[str, Path], **kwargs: Any
-) -> Tuple[Dict[str, Any], Tuple[Path, ...]]:
+) -> Tuple[Mapping[str, Any], Tuple[Path, ...]]:
     kwargs.setdefault("allow_no_value", True)
     kwargs.setdefault("strict", False)
     parser = configparser.ConfigParser(**kwargs)
@@ -102,17 +112,31 @@ class ConfigAction(Action):
     def __init__(
         self, option_strings: Sequence[str], dest: str,
         search_paths: Iterable[Union[str, Path]] = (),
-        type: MappingProxyType = MappingProxyType({}), help: str = "",
-        required: bool = False, default: Any = None,
+        type: MappingProxyType = MappingProxyType({}),
+        help: str = "", required: bool = False,
+        default: Any = None,
     ):
         if not isinstance(type, MappingProxyType):
             raise ValueError("type must be MappingProxyType")
+
         super().__init__(
             option_strings, dest, type=Path, help=help, default=default,
             required=required,
         )
         self.search_paths: List[Path] = list(map(Path, search_paths))
         self._result: Optional[Any] = None
+
+    def parse(self, *files: Path) -> Any:
+        result = {}
+        for file in files:
+            try:
+                result.update(self.parse_file(file))
+            except Exception as e:
+                logging.warning("Failed to parse config file %s: %s", file, e)
+        return result
+
+    def parse_file(self, file: Path) -> Any:
+        raise NotImplementedError()
 
     def __call__(
         self, parser: argparse.ArgumentParser, namespace: argparse.Namespace,
@@ -122,13 +146,28 @@ class ConfigAction(Action):
             filenames: Sequence[Path] = list(self.search_paths)
             if values:
                 filenames = [Path(values)] + list(filenames)
-            self._result, filenames = read_config(*filenames)
+            filenames = list(filter(lambda x: x.exists(), filenames))
+
             if self.required and not filenames:
                 raise argparse.ArgumentError(
                     argument=self,
                     message="is required but no one config loaded",
                 )
-        setattr(namespace, self.dest, MappingProxyType(self._result))
+            if filenames:
+                self._result = self.parse(*filenames)
+        setattr(namespace, self.dest, MappingProxyType(self._result or {}))
+
+
+class INIConfigAction(ConfigAction):
+    def parse(self, *files: Path) -> Mapping[str, Any]:
+        result, filenames = read_configs(*files)
+        return result
+
+
+class JSONConfigAction(ConfigAction):
+    def parse_file(self, file: Path) -> Any:
+        with file.open("r") as fp:
+            return json.load(fp)
 
 
 class Actions(str, Enum):
@@ -152,14 +191,9 @@ class Actions(str, Enum):
 
 
 class Nargs(Enum):
-    ANY = None
     ONE_OR_MORE = "+"
     OPTIONAL = "?"
     ZERO_OR_MORE = "*"
-
-    @classmethod
-    def default(cls) -> "Nargs":
-        return cls.ANY
 
 
 def deep_getattr(name: str, attrs: Dict[str, Any], *bases: Type) -> Any:
@@ -294,23 +328,32 @@ class _Argument(ArgumentBase):
     env_var: Optional[str] = None
     help: Optional[str] = None
     metavar: Optional[str] = None
-    nargs: Optional[Union[int, Nargs]] = Nargs.default()
+    nargs: Optional[Union[int, Nargs]] = None
     required: Optional[bool] = None
     type: Any = None
 
     @property
     def is_nargs(self) -> bool:
-        if self.nargs == Nargs.ANY:
+        if self.nargs is None:
             return False
         if isinstance(self.nargs, int):
             return self.nargs > 1
         return True
 
 
-class _Config(_Argument):
-    """ Parse INI file and set results as a value """
-    action: Type[ConfigAction] = ConfigAction
+class ConfigArgument(_Argument):
     search_paths: Optional[Iterable[Union[Path, str]]] = None
+    action: Type[ConfigAction]
+
+
+class INIConfig(ConfigArgument):
+    """ Parse INI file and set results as a value """
+    action: Type[ConfigAction] = INIConfigAction
+
+
+class JSONConfig(ConfigArgument):
+    """ Parse INI file and set results as a value """
+    action: Type[ConfigAction] = JSONConfigAction
 
 
 class AbstractGroup:
@@ -401,7 +444,7 @@ class Meta(ABCMeta):
             ):
                 attrs[key] = ...
 
-                is_required = argument is None
+                is_required = argument is None or argument is Ellipsis
 
                 if _type_is_bool(kind):
                     argument = _make_action_true_argument(kind, argument)
@@ -424,6 +467,9 @@ class Meta(ABCMeta):
                 arguments[key] = argument
             elif isinstance(argument, AbstractGroup):
                 argument_groups[key] = argument
+
+            if isinstance(kind, EnumType):
+                arguments[key] = EnumArgument(kind)
 
         for key, value in attrs.items():
             if key.startswith("_"):
@@ -564,7 +610,7 @@ class Parser(AbstractParser, Base):
         super().__init__()
         self.current_subparsers = ()
         self._config_files = config_files
-        self._config, filenames = read_config(*config_files)
+        self._config, filenames = read_configs(*config_files)
 
         self._epilog = kwargs.pop("epilog", "")
         self._epilog += self.HELP_APPENDIX_PREAMBLE.format(
@@ -759,6 +805,9 @@ class Parser(AbstractParser, Base):
         self._used_env_vars.clear()
 
 
+NargsType = Union[Nargs, Literal["*", "+", "?"], int, None]
+
+
 # noinspection PyPep8Naming
 def Argument(
     *aliases: str,
@@ -771,9 +820,9 @@ def Argument(
     env_var: Optional[str] = None,
     help: Optional[str] = None,
     metavar: Optional[str] = None,
-    nargs: Optional[Union[int, str, Nargs]] = Nargs.default(),
+    nargs: NargsType = None,
     required: Optional[bool] = None,
-    type: Any = None
+    type: Optional[Callable[[str], T]] = None
 ) -> Any:
     return _Argument(
         action=action,
@@ -793,35 +842,42 @@ def Argument(
 
 
 # noinspection PyPep8Naming
-def Secret(
+def EnumArgument(
+    enum: EnumType,
     *aliases: str,
     action: Union[Actions, Type[Action]] = Actions.default(),
-    choices: Optional[Iterable[str]] = None,
     const: Optional[Any] = None,
-    converter: Optional[ConverterType] = None,
     default: Optional[Any] = None,
+    secret: bool = False,
     env_var: Optional[str] = None,
     help: Optional[str] = None,
     metavar: Optional[str] = None,
-    nargs: Optional[Union[int, str, Nargs]] = Nargs.default(),
+    nargs: NargsType = None,
     required: Optional[bool] = None,
-    type: Any = None
 ) -> Any:
-    return _Argument(
-        action=action,
+
+    def converter(value: Any) -> E:
+        if isinstance(value, Enum):
+            return value    # type: ignore
+        return enum[value]
+
+    return _Argument(    # type: ignore
         aliases=aliases,
-        choices=choices,
+        action=action,
+        choices=sorted(enum.__members__),
         const=const,
         converter=converter,
         default=default,
-        secret=True,
+        secret=secret,
         env_var=env_var,
         help=help,
         metavar=metavar,
         nargs=nargs,
         required=required,
-        type=type,
-    )    # type: ignore
+    )
+
+
+Secret = partial(Argument, secret=True)
 
 
 # noinspection PyPep8Naming
@@ -835,10 +891,11 @@ def Config(
     env_var: Optional[str] = None,
     help: Optional[str] = None,
     metavar: Optional[str] = None,
-    nargs: Optional[Union[int, str, Nargs]] = Nargs.default(),
+    nargs: NargsType = None,
     required: Optional[bool] = None,
+    config_class: Type[ConfigArgument] = INIConfig
 ) -> Any:
-    return _Config(
+    return config_class(
         search_paths=search_paths,
         aliases=aliases,
         choices=choices,
@@ -853,19 +910,29 @@ def Config(
     )    # type: ignore
 
 
-LogLevel: Any = Argument(
-    choices=("debug", "info", "warning", "error", "critical"),
-    converter=lambda v: getattr(logging, v.upper(), logging.INFO),
-    default="info",
-)
+
+class LogLevelEnum(IntEnum):
+    debug = logging.DEBUG
+    info = logging.INFO
+    warning = logging.WARNING
+    error = logging.ERROR
+    critical = logging.CRITICAL
+
+
+LogLevel: LogLevelEnum = EnumArgument(LogLevelEnum, default="info")
 
 
 __all__ = (
     "Actions",
     "Argument",
+    "ConfigArgument",
+    "EnumArgument",
     "Group",
     "LogLevel",
+    "LogLevelEnum",
     "Nargs",
     "Parser",
     "SecretString",
+    "JSONConfig",
+    "INIConfig",
 )
