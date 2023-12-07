@@ -26,7 +26,6 @@ except ImportError:
     from enum import EnumMeta as EnumType
 
 
-T = TypeVar("T", bound=Any)
 ConverterType = Callable[[str], Any]
 NoneType = type(None)
 UnionClass = Union[None, int].__class__
@@ -821,7 +820,7 @@ def Argument(
     metavar: Optional[str] = None,
     nargs: NargsType = None,
     required: Optional[bool] = None,
-    type: Optional[Callable[[str], T]] = None
+    type: Optional[Callable[[str], Any]] = None
 ) -> Any:
     return _Argument(
         action=action,
@@ -856,8 +855,8 @@ def EnumArgument(
 ) -> Any:
 
     def converter(value: Any) -> EnumType:
-        if isinstance(value, EnumType):
-            return value
+        if isinstance(value, Enum):
+            return value        # type: ignore
         return enum[value]
 
     return _Argument(    # type: ignore
