@@ -27,7 +27,6 @@ except ImportError:
 
 
 T = TypeVar("T", bound=Any)
-E = TypeVar("E", bound=Enum)
 ConverterType = Callable[[str], Any]
 NoneType = type(None)
 UnionClass = Union[None, int].__class__
@@ -856,9 +855,9 @@ def EnumArgument(
     required: Optional[bool] = None,
 ) -> Any:
 
-    def converter(value: Any) -> E:
-        if isinstance(value, Enum):
-            return value    # type: ignore
+    def converter(value: Any) -> EnumType:
+        if isinstance(value, EnumType):
+            return value
         return enum[value]
 
     return _Argument(    # type: ignore
