@@ -910,7 +910,6 @@ def Config(
     )    # type: ignore
 
 
-
 class LogLevelEnum(IntEnum):
     debug = logging.DEBUG
     info = logging.INFO
