@@ -1,8 +1,10 @@
+import json
 import logging
 import os
 import re
 import uuid
-from typing import List, Optional, FrozenSet
+from enum import IntEnum
+from typing import FrozenSet, List, Optional
 from unittest.mock import patch
 
 import pytest
@@ -312,7 +314,7 @@ def test_log_group():
     class LogGroup(argclass.Group):
         level: int = argclass.LogLevel
         format = argclass.Argument(
-            choices=("json", "stream"), default="stream"
+            choices=("json", "stream"), default="stream",
         )
 
     class Parser(argclass.Parser):
@@ -334,7 +336,7 @@ def test_log_group_defaults():
     class LogGroup(argclass.Group):
         level: int = argclass.LogLevel
         format: str = argclass.Argument(
-            choices=("json", "stream")
+            choices=("json", "stream"),
         )
 
     class Parser(argclass.Parser):
@@ -353,12 +355,12 @@ def test_environment_required():
 
     parser = Parser(auto_env_var_prefix="TEST_")
 
-    os.environ['TEST_REQUIRED'] = "100"
+    os.environ["TEST_REQUIRED"] = "100"
 
     parser.parse_args([])
     assert parser.required == 100
 
-    os.environ.pop('TEST_REQUIRED')
+    os.environ.pop("TEST_REQUIRED")
 
     with pytest.raises(SystemExit):
         parser.parse_args([])
@@ -367,7 +369,7 @@ def test_environment_required():
 def test_nargs_and_converter():
     class Parser(argclass.Parser):
         args_set: FrozenSet[int] = argclass.Argument(
-            type=int, nargs="+", converter=frozenset
+            type=int, nargs="+", converter=frozenset,
         )
 
     parser = Parser()
@@ -379,7 +381,7 @@ def test_nargs_and_converter():
 def test_nargs_and_converter_not_required():
     class Parser(argclass.Parser):
         args_set: FrozenSet[int] = argclass.Argument(
-            type=int, nargs="*", converter=frozenset
+            type=int, nargs="*", converter=frozenset,
         )
 
     parser = Parser()
@@ -395,7 +397,7 @@ def test_nargs_and_converter_not_required():
 def test_nargs_1():
     class Parser(argclass.Parser):
         args_set: FrozenSet[int] = argclass.Argument(
-            type=int, nargs=1, converter=frozenset
+            type=int, nargs=1, converter=frozenset,
         )
 
     parser = Parser()
@@ -411,15 +413,15 @@ def test_nargs_1():
 def test_nargs_env_var():
     class Parser(argclass.Parser):
         nargs: FrozenSet[int] = argclass.Argument(
-            type=int, nargs="*", converter=frozenset, env_var="NARGS"
+            type=int, nargs="*", converter=frozenset, env_var="NARGS",
         )
 
-    os.environ['NARGS'] = "[1, 2, 3]"
+    os.environ["NARGS"] = "[1, 2, 3]"
     try:
         parser = Parser()
         parser.parse_args([])
     finally:
-        del os.environ['NARGS']
+        del os.environ["NARGS"]
 
     assert parser.nargs == frozenset({1, 2, 3})
 
@@ -427,15 +429,15 @@ def test_nargs_env_var():
 def test_nargs_env_var_str():
     class Parser(argclass.Parser):
         nargs: FrozenSet[int] = argclass.Argument(
-            type=str, nargs="*", converter=frozenset, env_var="NARGS"
+            type=str, nargs="*", converter=frozenset, env_var="NARGS",
         )
 
-    os.environ['NARGS'] = '["a", "b", "c"]'
+    os.environ["NARGS"] = '["a", "b", "c"]'
     try:
         parser = Parser()
         parser.parse_args([])
     finally:
-        del os.environ['NARGS']
+        del os.environ["NARGS"]
 
     assert parser.nargs == frozenset({"a", "b", "c"})
 
@@ -443,7 +445,7 @@ def test_nargs_env_var_str():
 def test_nargs_config_list(tmp_path):
     class Parser(argclass.Parser):
         nargs: FrozenSet[int] = argclass.Argument(
-            type=int, nargs="*", converter=frozenset, env_var="NARGS"
+            type=int, nargs="*", converter=frozenset, env_var="NARGS",
         )
 
     conf_file = tmp_path / "config.ini"
@@ -461,7 +463,7 @@ def test_nargs_config_list(tmp_path):
 def test_nargs_config_set(tmp_path):
     class Parser(argclass.Parser):
         nargs: FrozenSet[int] = argclass.Argument(
-            type=int, nargs="*", converter=frozenset, env_var="NARGS"
+            type=int, nargs="*", converter=frozenset, env_var="NARGS",
         )
 
     conf_file = tmp_path / "config.ini"
@@ -506,3 +508,87 @@ def test_sanitize_env():
         parser.sanitize_env()
 
         assert "TEST_SECRET" not in dict(os.environ)
+
+
+def test_enum():
+    class Options(IntEnum):
+        ONE = 1
+        TWO = 2
+        THREE = 3
+        ZERO = 0
+
+    class Parser(argclass.Parser):
+        option: Options = argclass.EnumArgument(Options, default=Options.ZERO)
+
+    parser = Parser()
+
+    parser.parse_args([])
+    assert parser.option is Options.ZERO
+
+    parser.parse_args(["--option=ONE"])
+    assert parser.option is Options.ONE
+
+    parser.parse_args(["--option=TWO"])
+    assert parser.option is Options.TWO
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--option=3"])
+
+    class Parser(argclass.Parser):
+        option: Options
+
+    parser = Parser()
+
+    parser.parse_args(["--option=ONE"])
+    assert parser.option is Options.ONE
+
+    parser.parse_args(["--option=TWO"])
+    assert parser.option is Options.TWO
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--option=3"])
+
+
+def test_group_required_inheritance():
+    class BaseGroup(argclass.Group):
+        bar: str = argclass.Argument(required=True)
+
+    class SubGroup(BaseGroup):
+        pass
+
+    class Parser(argclass.Parser):
+        group = SubGroup()
+
+    parser = Parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args([])
+
+    class ImplicitBaseGroup(argclass.Group):
+        bar: str
+        foo: int
+
+    class ImplicitSubGroup(ImplicitBaseGroup):
+        zoo: str
+
+    class Parser2(argclass.Parser):
+        group = ImplicitSubGroup()
+
+    parser = Parser2()
+    with pytest.raises(SystemExit):
+        parser.parse_args([])
+
+
+def test_json_action(tmp_path):
+    class Parser(argclass.Parser):
+        config = argclass.Config(
+            required=True,
+            config_class=argclass.JSONConfig,
+        )
+
+    with open(tmp_path / "config.json", "w") as fp:
+        json.dump({"foo": "bar"}, fp)
+
+    parser = Parser()
+    parser.parse_args(["--config", str(tmp_path / "config.json")])
+
+    assert parser.config["foo"] == "bar"
