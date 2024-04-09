@@ -43,7 +43,7 @@ jobs:
           python-version: "3.11"
       - run: python -m pip install poetry
       - run: poetry install
-      - run: poetry run pytest -svv README.rst
+      - run: poetry run pytest -svv README.md
         env:
           FORCE_COLOR: 1
 
