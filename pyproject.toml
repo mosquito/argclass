@@ -1,9 +1,9 @@
 [tool.poetry]
 name = "argclass"
-version = "1.0.0"
+version = "1.0.1"
 description = "A wrapper around the standard argparse module that allows you to describe argument parsers declaratively"
 authors = ["Dmitry Orlov <me@mosquito.su>"]
-readme = "README.rst"
+readme = "README.md"
 license = "Apache 2"
 homepage = "https://github.com/mosquito/argclass"
 classifiers = [
@@ -31,18 +31,18 @@ packages = [
 [tool.poetry.urls]
 "Source" = "https://github.com/mosquito/argclass"
 "Tracker" = "https://github.com/mosquito/argclass/issues"
-"Documentation" = "https://github.com/mosquito/argclass/blob/master/README.rst"
+"Documentation" = "https://github.com/mosquito/argclass/blob/master/README.md"
 
 [tool.poetry.dependencies]
 python = "^3.8"
 
 [tool.poetry.group.dev.dependencies]
-coveralls = "^3.3.1"
-pytest = "^7.2.0"
-pytest-cov = "^4.0.0"
-pytest-rst = ">=0.0.7"
-pylama = "^8.4.1"
-setuptools = "^69.0.2"
+coveralls = ">=3.3.1"
+pytest = ">=7.2"
+pytest-cov = ">=4.0.0"
+pylama = ">=8.4.1"
+setuptools = ">=69.0.2"
+markdown-pytest = ">=0.3.1"
 
 [tool.poetry.group.mypy.dependencies]
 mypy = "0.991"
