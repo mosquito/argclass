@@ -169,6 +169,8 @@ The parser objects might be get default values from environment variables or
 one of passed configuration files.
 
 ```python
+import argclass
+
 class AddressPortGroup(argclass.Group):
     address: str = argclass.Argument(default="127.0.0.1")
     port: int
@@ -195,7 +197,7 @@ parser.parse_args()
 
 In this case each passed and existent configuration file will be opened.
 
-The root level arguments might described in the ``[DEFAULT]`` section.
+The root level arguments might describe in the ``[DEFAULT]`` section.
 
 Other arguments might be described in group specific sections.
 
@@ -263,8 +265,11 @@ This library provides base class for writing custom configuration parsers.
 ### YAML parser
 
 ```python
-import yaml
+from typing import Mapping, Any
+from pathlib import Path
+
 import argclass
+import yaml
 
 
 class YAMLConfigAction(argclass.ConfigAction):
@@ -288,8 +293,9 @@ class Parser(argclass.Parser):
 
 ```python
 import tomli
-
 import argclass
+from pathlib import Path
+from typing import Mapping, Any
 
 
 class TOMLConfigAction(argclass.ConfigAction):
@@ -308,15 +314,74 @@ class Parser(argclass.Parser):
     )
 ```
 
-Subparsers
-==========
+## Subparsers
+
+There are two ways to work with subparsers: either by calling the parser as a regular function, and in this case, 
+the subparser must implement the `__call__` method, otherwise help will be printed and the program will exit with
+an error. Or you can directly look at the `.current_subparser` attribute in the parser. The second method seems 
+more complicated, but it becomes less difficult if you use singledispatch from the standard library.
+
+### Using `__call__`
+
+Just implement `__call__` method for subparsers and call
+
+```python
+from typing import Optional
+
+import argclass
+
+
+class AddressPortGroup(argclass.Group):
+    address: str = "127.0.0.1"
+    port: int = 8080
+
+
+class CommitCommand(argclass.Parser):
+    comment: str = argclass.Argument()
+
+    def __call__(self):
+        endpoint: AddressPortGroup = self.__parent__.endpoint
+        print(
+            "Commit command called", self, 
+            "endpoint", endpoint.address, "port", endpoint.port
+        )
+
+
+class PushCommand(argclass.Parser):
+    comment: str = argclass.Argument()
+
+    def __call__(self):
+        endpoint: AddressPortGroup = self.__parent__.endpoint
+        print(
+            "Push command called", self, 
+            "endpoint", endpoint.address, "port", endpoint.port
+        )
+
+
+class Parser(argclass.Parser):
+    log_level: int = argclass.LogLevel
+    endpoint = AddressPortGroup(title="Endpoint options")
+    commit: Optional[CommitCommand] = CommitCommand()
+    push: Optional[PushCommand] = PushCommand()
+
+    def __call__(self):
+        super().__call__()
+
+
+parser = Parser(
+    config_files=["example.ini", "~/.example.ini", "/etc/example.ini"],
+    auto_env_var_prefix="EXAMPLE_"
+)
+parser.parse_args()
+parser()
+```
+
+### Using singledispatch
 
 Complex example with subparsers:
 
 ```python
-import logging
 from functools import singledispatch
-from pathlib import Path
 from typing import Optional, Any
 
 import argclass

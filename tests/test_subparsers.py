@@ -139,3 +139,27 @@ def test_nested_subparsers() -> None:
     assert args.sub.subsub.group.value == 2
     with pytest.raises(AttributeError):
         print(args.sub2.val)
+
+
+def test_call() -> None:
+    class SubParser(argclass.Parser):
+        _flag = False
+
+        def __call__(self):
+            self.__class__._flag = not self.__class__._flag
+
+    class Parser(argclass.Parser):
+        subparser1 = SubParser()
+        subparser2 = SubParser()
+        flag: bool = True
+
+    parser = Parser()
+
+    parser.parse_args(["subparser1"])
+    parser()
+    assert parser.subparser1._flag
+
+    parser.parse_args(["subparser2"])
+    parser()
+    assert not parser.subparser2._flag
+

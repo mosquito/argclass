@@ -2,6 +2,7 @@ import argparse
 import ast
 import collections
 import configparser
+import errno
 import json
 import logging
 import os
@@ -21,7 +22,7 @@ from typing import (
 
 
 try:
-    from enum import EnumType
+    from enum import EnumType       # type: ignore
 except ImportError:
     from enum import EnumMeta as EnumType
 
@@ -359,13 +360,16 @@ class AbstractGroup:
 
 
 class AbstractParser:
-    __parent__: Optional["AbstractParser"] = None
+    __parent__: Union["Parser", None] = None
 
     def _get_chain(self) -> Iterator["AbstractParser"]:
         yield self
         if self.__parent__ is None:
             return
         yield from self.__parent__._get_chain()
+
+    def __call__(self) -> None:
+        raise NotImplementedError()
 
 
 TEXT_TRUE_VALUES = frozenset((
@@ -801,6 +805,30 @@ class Parser(AbstractParser, Base):
         for name in self._used_env_vars:
             os.environ.pop(name, None)
         self._used_env_vars.clear()
+
+    def __call__(self) -> None:
+        """
+        Override this function if you want to equip your parser with an action.
+        It will be like replacing the main function in a classical case.
+
+        >>> import argclass
+        >>> class MyParser(argclass.Parser):
+        ...    dry_run: bool = False
+        ...    def __call__(self):
+        ...        print("Dry run mode is:", self.dry_run)
+        ...
+        >>> parser = MyParser()
+        >>> parser.parse_args([])
+        >>> parser()
+        Dry run mode is: False
+        >>> parser.parse_args(['--dry-run'])
+        >>> parser()
+        Dry run mode is: True
+        """
+        if self.current_subparser is not None:
+            return self.current_subparser()
+        self.print_help()
+        exit(errno.EINVAL)
 
 
 NargsType = Union[Nargs, Literal["*", "+", "?"], int, None]
