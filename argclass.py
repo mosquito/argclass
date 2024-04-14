@@ -10,14 +10,14 @@ import sys
 import traceback
 from abc import ABCMeta
 from argparse import Action, ArgumentParser
-from enum import Enum, IntEnum, EnumMeta
+from enum import Enum, EnumMeta, IntEnum
 from functools import partial
 from pathlib import Path
 from types import MappingProxyType
 from typing import (
     Any, Callable, Dict, Iterable, Iterator, List, Literal, Mapping,
     MutableMapping, NamedTuple, Optional, Sequence, Set, Tuple, Type, TypeVar,
-    Union
+    Union,
 )
 
 
@@ -28,7 +28,7 @@ EnumType = EnumMeta
 
 
 def read_configs(
-    *paths: Union[str, Path], **kwargs: Any
+    *paths: Union[str, Path], **kwargs: Any,
 ) -> Tuple[Mapping[str, Any], Tuple[Path, ...]]:
     kwargs.setdefault("allow_no_value", True)
     kwargs.setdefault("strict", False)
@@ -200,7 +200,7 @@ def deep_getattr(name: str, attrs: Dict[str, Any], *bases: Type) -> Any:
 
 
 def merge_annotations(
-    annotations: Dict[str, Any], *bases: Type
+    annotations: Dict[str, Any], *bases: Type,
 ) -> Dict[str, Any]:
     result: Dict[str, Any] = {}
 
@@ -216,7 +216,7 @@ class StoreMeta(type):
         attrs: Dict[str, Any],
     ) -> "StoreMeta":
         annotations = merge_annotations(
-            attrs.get("__annotations__", {}), *bases
+            attrs.get("__annotations__", {}), *bases,
         )
         attrs["__annotations__"] = annotations
         attrs["_fields"] = tuple(
@@ -419,7 +419,7 @@ class Meta(ABCMeta):
         attrs: Dict[str, Any],
     ) -> "Meta":
         annotations = merge_annotations(
-            attrs.get("__annotations__", {}), *bases
+            attrs.get("__annotations__", {}), *bases,
         )
 
         arguments = {}
@@ -635,7 +635,7 @@ class Parser(AbstractParser, Base):
     ) -> Tuple[ArgumentParser, DestinationsType]:
         if parser is None:
             parser = ArgumentParser(
-                epilog=self._epilog, **self._parser_kwargs
+                epilog=self._epilog, **self._parser_kwargs,
             )
 
         destinations: DestinationsType = collections.defaultdict(set)
@@ -702,7 +702,7 @@ class Parser(AbstractParser, Base):
                     env_var=self.get_env_var(dest, argument),
                 )
                 dest, action = self._add_argument(
-                    group_parser, argument, dest, *aliases
+                    group_parser, argument, dest, *aliases,
                 )
                 destinations[dest].add(
                     Destination(
@@ -731,7 +731,7 @@ class Parser(AbstractParser, Base):
             current_parser, subparser_dests = (
                 subparser._make_parser(
                     subparsers.add_parser(
-                        subparser_name, **subparser._parser_kwargs
+                        subparser_name, **subparser._parser_kwargs,
                     ),
                 )
             )
@@ -843,7 +843,7 @@ def Argument(
     metavar: Optional[str] = None,
     nargs: NargsType = None,
     required: Optional[bool] = None,
-    type: Optional[Callable[[str], Any]] = None
+    type: Optional[Callable[[str], Any]] = None,
 ) -> Any:
     return _Argument(
         action=action,
@@ -914,7 +914,7 @@ def Config(
     metavar: Optional[str] = None,
     nargs: NargsType = None,
     required: Optional[bool] = None,
-    config_class: Type[ConfigArgument] = INIConfig
+    config_class: Type[ConfigArgument] = INIConfig,
 ) -> Any:
     return config_class(
         search_paths=search_paths,
