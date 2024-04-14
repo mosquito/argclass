@@ -364,9 +364,6 @@ class Parser(argclass.Parser):
     commit: Optional[CommitCommand] = CommitCommand()
     push: Optional[PushCommand] = PushCommand()
 
-    def __call__(self):
-        super().__call__()
-
 
 parser = Parser(
     config_files=["example.ini", "~/.example.ini", "/etc/example.ini"],
