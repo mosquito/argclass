@@ -162,4 +162,3 @@ def test_call() -> None:
     parser.parse_args(["subparser2"])
     parser()
     assert not parser.subparser2._flag
-
