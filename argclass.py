@@ -10,26 +10,21 @@ import sys
 import traceback
 from abc import ABCMeta
 from argparse import Action, ArgumentParser
-from enum import Enum, IntEnum
+from enum import Enum, IntEnum, EnumMeta
 from functools import partial
 from pathlib import Path
 from types import MappingProxyType
 from typing import (
     Any, Callable, Dict, Iterable, Iterator, List, Literal, Mapping,
     MutableMapping, NamedTuple, Optional, Sequence, Set, Tuple, Type, TypeVar,
-    Union,
+    Union
 )
-
-
-try:
-    from enum import EnumType       # type: ignore
-except ImportError:
-    from enum import EnumMeta as EnumType
 
 
 ConverterType = Callable[[str], Any]
 NoneType = type(None)
 UnionClass = Union[None, int].__class__
+EnumType = EnumMeta
 
 
 def read_configs(
@@ -470,7 +465,7 @@ class Meta(ABCMeta):
             elif isinstance(argument, AbstractGroup):
                 argument_groups[key] = argument
 
-            if isinstance(kind, EnumType):
+            if isinstance(kind, EnumMeta):
                 arguments[key] = EnumArgument(kind)
 
         for key, value in attrs.items():
@@ -869,7 +864,7 @@ def Argument(
 
 # noinspection PyPep8Naming
 def EnumArgument(
-    enum: EnumType,
+    enum: EnumMeta,
     *aliases: str,
     action: Union[Actions, Type[Action]] = Actions.default(),
     const: Optional[Any] = None,
@@ -882,7 +877,7 @@ def EnumArgument(
     required: Optional[bool] = None,
 ) -> Any:
 
-    def converter(value: Any) -> EnumType:
+    def converter(value: Any) -> EnumMeta:
         if isinstance(value, Enum):
             return value        # type: ignore
         return enum[value]
