@@ -197,7 +197,7 @@ parser.parse_args()
 
 In this case each passed and existent configuration file will be opened.
 
-The root level arguments might describe in the ``[DEFAULT]`` section.
+The root level arguments might be described in the ``[DEFAULT]`` section.
 
 Other arguments might be described in group specific sections.
 
