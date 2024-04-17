@@ -2,6 +2,7 @@ import argparse
 import ast
 import collections
 import configparser
+import errno
 import json
 import logging
 import os
@@ -9,7 +10,7 @@ import sys
 import traceback
 from abc import ABCMeta
 from argparse import Action, ArgumentParser
-from enum import Enum, IntEnum
+from enum import Enum, EnumMeta, IntEnum
 from functools import partial
 from pathlib import Path
 from types import MappingProxyType
@@ -20,19 +21,14 @@ from typing import (
 )
 
 
-try:
-    from enum import EnumType
-except ImportError:
-    from enum import EnumMeta as EnumType
-
-
 ConverterType = Callable[[str], Any]
 NoneType = type(None)
 UnionClass = Union[None, int].__class__
+EnumType = EnumMeta
 
 
 def read_configs(
-    *paths: Union[str, Path], **kwargs: Any
+    *paths: Union[str, Path], **kwargs: Any,
 ) -> Tuple[Mapping[str, Any], Tuple[Path, ...]]:
     kwargs.setdefault("allow_no_value", True)
     kwargs.setdefault("strict", False)
@@ -204,7 +200,7 @@ def deep_getattr(name: str, attrs: Dict[str, Any], *bases: Type) -> Any:
 
 
 def merge_annotations(
-    annotations: Dict[str, Any], *bases: Type
+    annotations: Dict[str, Any], *bases: Type,
 ) -> Dict[str, Any]:
     result: Dict[str, Any] = {}
 
@@ -220,7 +216,7 @@ class StoreMeta(type):
         attrs: Dict[str, Any],
     ) -> "StoreMeta":
         annotations = merge_annotations(
-            attrs.get("__annotations__", {}), *bases
+            attrs.get("__annotations__", {}), *bases,
         )
         attrs["__annotations__"] = annotations
         attrs["_fields"] = tuple(
@@ -359,13 +355,16 @@ class AbstractGroup:
 
 
 class AbstractParser:
-    __parent__: Optional["AbstractParser"] = None
+    __parent__: Union["Parser", None] = None
 
     def _get_chain(self) -> Iterator["AbstractParser"]:
         yield self
         if self.__parent__ is None:
             return
         yield from self.__parent__._get_chain()
+
+    def __call__(self) -> None:
+        raise NotImplementedError()
 
 
 TEXT_TRUE_VALUES = frozenset((
@@ -420,7 +419,7 @@ class Meta(ABCMeta):
         attrs: Dict[str, Any],
     ) -> "Meta":
         annotations = merge_annotations(
-            attrs.get("__annotations__", {}), *bases
+            attrs.get("__annotations__", {}), *bases,
         )
 
         arguments = {}
@@ -466,7 +465,7 @@ class Meta(ABCMeta):
             elif isinstance(argument, AbstractGroup):
                 argument_groups[key] = argument
 
-            if isinstance(kind, EnumType):
+            if isinstance(kind, EnumMeta):
                 arguments[key] = EnumArgument(kind)
 
         for key, value in attrs.items():
@@ -636,7 +635,7 @@ class Parser(AbstractParser, Base):
     ) -> Tuple[ArgumentParser, DestinationsType]:
         if parser is None:
             parser = ArgumentParser(
-                epilog=self._epilog, **self._parser_kwargs
+                epilog=self._epilog, **self._parser_kwargs,
             )
 
         destinations: DestinationsType = collections.defaultdict(set)
@@ -703,7 +702,7 @@ class Parser(AbstractParser, Base):
                     env_var=self.get_env_var(dest, argument),
                 )
                 dest, action = self._add_argument(
-                    group_parser, argument, dest, *aliases
+                    group_parser, argument, dest, *aliases,
                 )
                 destinations[dest].add(
                     Destination(
@@ -732,7 +731,7 @@ class Parser(AbstractParser, Base):
             current_parser, subparser_dests = (
                 subparser._make_parser(
                     subparsers.add_parser(
-                        subparser_name, **subparser._parser_kwargs
+                        subparser_name, **subparser._parser_kwargs,
                     ),
                 )
             )
@@ -802,6 +801,30 @@ class Parser(AbstractParser, Base):
             os.environ.pop(name, None)
         self._used_env_vars.clear()
 
+    def __call__(self) -> None:
+        """
+        Override this function if you want to equip your parser with an action.
+        It will be like replacing the main function in a classical case.
+
+        >>> import argclass
+        >>> class MyParser(argclass.Parser):
+        ...    dry_run: bool = False
+        ...    def __call__(self):
+        ...        print("Dry run mode is:", self.dry_run)
+        ...
+        >>> parser = MyParser()
+        >>> parser.parse_args([])
+        >>> parser()
+        Dry run mode is: False
+        >>> parser.parse_args(['--dry-run'])
+        >>> parser()
+        Dry run mode is: True
+        """
+        if self.current_subparser is not None:
+            return self.current_subparser()
+        self.print_help()
+        exit(errno.EINVAL)
+
 
 NargsType = Union[Nargs, Literal["*", "+", "?"], int, None]
 
@@ -820,7 +843,7 @@ def Argument(
     metavar: Optional[str] = None,
     nargs: NargsType = None,
     required: Optional[bool] = None,
-    type: Optional[Callable[[str], Any]] = None
+    type: Optional[Callable[[str], Any]] = None,
 ) -> Any:
     return _Argument(
         action=action,
@@ -841,7 +864,7 @@ def Argument(
 
 # noinspection PyPep8Naming
 def EnumArgument(
-    enum: EnumType,
+    enum: EnumMeta,
     *aliases: str,
     action: Union[Actions, Type[Action]] = Actions.default(),
     const: Optional[Any] = None,
@@ -854,7 +877,7 @@ def EnumArgument(
     required: Optional[bool] = None,
 ) -> Any:
 
-    def converter(value: Any) -> EnumType:
+    def converter(value: Any) -> EnumMeta:
         if isinstance(value, Enum):
             return value        # type: ignore
         return enum[value]
@@ -891,7 +914,7 @@ def Config(
     metavar: Optional[str] = None,
     nargs: NargsType = None,
     required: Optional[bool] = None,
-    config_class: Type[ConfigArgument] = INIConfig
+    config_class: Type[ConfigArgument] = INIConfig,
 ) -> Any:
     return config_class(
         search_paths=search_paths,
