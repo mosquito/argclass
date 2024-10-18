@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "argclass"
-version = "1.0.2"
+version = "1.0.3"
 description = "A wrapper around the standard argparse module that allows you to describe argument parsers declaratively"
 authors = ["Dmitry Orlov <me@mosquito.su>"]
 readme = "README.md"
@@ -18,15 +18,17 @@ classifiers = [
     "Operating System :: POSIX",
     "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python",
+    "Typing :: Typed",
 ]
 packages = [
     { include = "argclass.py" },
+    { include = "argclass.pyi" },
 ]
 
 [tool.poetry.urls]
