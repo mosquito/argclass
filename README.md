@@ -12,11 +12,10 @@ applicable in this case.
 
 This module allows you to declare command-line parsers with classes.
 
-Simple example:
+## Simple example
 
 <!--- name: test_simple_example --->
 ```python
-import logging
 import argclass
 
 class CopyParser(argclass.Parser):
@@ -221,6 +220,10 @@ port=9090
 
 ## Enum argument
 
+The library provides a special argument type for working with enumerations. 
+For enum argument `choices=` parameter will be generated automatically from the enum names.
+After parsing the argument, the value will be converted to the enum member.
+
 <!-- name: test_enum_argument -->
 ```python
 
@@ -264,6 +267,8 @@ This library provides base class for writing custom configuration parsers.
 
 ### YAML parser
 
+For parsing YAML files, you have to install the `PyYAML` package.
+
 ```python
 from typing import Mapping, Any
 from pathlib import Path
@@ -291,6 +296,8 @@ class Parser(argclass.Parser):
 
 ### TOML parser
 
+For parsing TOML files, you have to install the `tomli` package.
+
 ```python
 import tomli
 import argclass
@@ -314,7 +321,7 @@ class Parser(argclass.Parser):
     )
 ```
 
-## Subparsers
+## Subparsers advanced usage
 
 There are two ways to work with subparsers: either by calling the parser as a regular function, and in this case, 
 the subparser must implement the `__call__` method, otherwise help will be printed and the program will exit with
@@ -339,23 +346,25 @@ class AddressPortGroup(argclass.Group):
 class CommitCommand(argclass.Parser):
     comment: str = argclass.Argument()
 
-    def __call__(self):
+    def __call__(self) -> int:
         endpoint: AddressPortGroup = self.__parent__.endpoint
         print(
-            "Commit command called", self, 
+            "Commit command called", self,
             "endpoint", endpoint.address, "port", endpoint.port
         )
+        return 0
 
 
 class PushCommand(argclass.Parser):
     comment: str = argclass.Argument()
 
-    def __call__(self):
+    def __call__(self) -> int:
         endpoint: AddressPortGroup = self.__parent__.endpoint
         print(
-            "Push command called", self, 
+            "Push command called", self,
             "endpoint", endpoint.address, "port", endpoint.port
         )
+        return 0
 
 
 class Parser(argclass.Parser):
@@ -370,12 +379,13 @@ parser = Parser(
     auto_env_var_prefix="EXAMPLE_"
 )
 parser.parse_args()
-parser()
+exit(parser())
 ```
 
-### Using singledispatch
+### Using `singledispatch`
 
-Complex example with subparsers:
+You can use `current_subparser` attribute to get the current subparser and then call it.
+This do not require to implement `__call__` method.
 
 ```python
 from functools import singledispatch
