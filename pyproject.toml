@@ -45,6 +45,7 @@ pytest-cov = ">=4.0.0"
 pylama = ">=8.4.1"
 setuptools = ">=69.0.2"
 markdown-pytest = ">=0.3.1"
+pyyaml = "^6.0.2"
 
 [tool.poetry.group.mypy.dependencies]
 mypy = "0.991"
