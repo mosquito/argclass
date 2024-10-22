@@ -147,6 +147,12 @@ with TemporaryDirectory() as tmpdir:
     assert parser.port == 8080
 ```
 
+When using configuration files, argclass uses Python's `ast.literal_eval` for parsing arguments with `nargs` and 
+complex types. This means that in your INI configuration files, you should write values in a syntax that `literal_eval`
+can parse for these specific arguments. 
+
+For regular arguments (simple types like strings, integers, booleans), you can write the values as-is.
+
 ## Argument Groups
 
 The following example uses `argclass.Argument` and argument groups:
