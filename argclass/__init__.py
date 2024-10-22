@@ -311,7 +311,7 @@ class ArgumentBase(Store):
         return {k: v for k, v in kwargs.items() if v is not None}
 
 
-class _Argument(ArgumentBase):
+class TypedArgument(ArgumentBase):
     action: Union[Actions, Type[Action]] = Actions.default()
     aliases: Iterable[str] = frozenset()
     choices: Optional[Iterable[str]] = None
@@ -335,7 +335,7 @@ class _Argument(ArgumentBase):
         return True
 
 
-class ConfigArgument(_Argument):
+class ConfigArgument(TypedArgument):
     search_paths: Optional[Iterable[Union[Path, str]]] = None
     action: Type[ConfigAction]
 
@@ -363,7 +363,7 @@ class AbstractParser:
             return
         yield from self.__parent__._get_chain()
 
-    def __call__(self) -> None:
+    def __call__(self) -> Any:
         raise NotImplementedError()
 
 
@@ -393,7 +393,7 @@ def unwrap_optional(typespec: Any) -> Optional[Any]:
 
 def _make_action_true_argument(
     kind: Type, default: Any = None,
-) -> _Argument:
+) -> TypedArgument:
     kw: Dict[str, Any] = {"type": kind}
     if kind is bool:
         if default is False:
@@ -406,7 +406,7 @@ def _make_action_true_argument(
         kw["action"] = Actions.STORE
         kw["type"] = parse_bool
         kw["default"] = None
-    return _Argument(**kw)
+    return TypedArgument(**kw)
 
 
 def _type_is_bool(kind: Type) -> bool:
@@ -437,7 +437,7 @@ class Meta(ABCMeta):
                     argument = False
 
             if not isinstance(
-                argument, (_Argument, AbstractGroup, AbstractParser),
+                argument, (TypedArgument, AbstractGroup, AbstractParser),
             ):
                 attrs[key] = ...
 
@@ -451,11 +451,11 @@ class Meta(ABCMeta):
                         is_required = False
                         kind = optional_type
 
-                    argument = _Argument(
+                    argument = TypedArgument(
                         type=kind, default=argument, required=is_required,
                     )
 
-            if isinstance(argument, _Argument):
+            if isinstance(argument, TypedArgument):
                 if argument.type is None and argument.converter is None:
                     if kind.__class__.__module__ == "typing":
                         kind = unwrap_optional(kind)
@@ -472,7 +472,7 @@ class Meta(ABCMeta):
             if key.startswith("_"):
                 continue
 
-            if isinstance(value, _Argument):
+            if isinstance(value, TypedArgument):
                 arguments[key] = value
             elif isinstance(value, AbstractGroup):
                 argument_groups[key] = value
@@ -487,7 +487,7 @@ class Meta(ABCMeta):
 
 
 class Base(metaclass=Meta):
-    __arguments__: Mapping[str, _Argument]
+    __arguments__: Mapping[str, TypedArgument]
     __argument_groups__: Mapping[str, "Group"]
     __subparsers__: Mapping[str, "Parser"]
 
@@ -514,7 +514,7 @@ class Base(metaclass=Meta):
 class Destination(NamedTuple):
     target: Base
     attribute: str
-    argument: Optional[_Argument]
+    argument: Optional[TypedArgument]
     action: Optional[Action]
 
 
@@ -552,7 +552,7 @@ class Parser(AbstractParser, Base):
     )
 
     def _add_argument(
-        self, parser: Any, argument: _Argument, dest: str, *aliases: str,
+        self, parser: Any, argument: TypedArgument, dest: str, *aliases: str,
     ) -> Tuple[str, Action]:
         kwargs = argument.get_kwargs()
 
@@ -592,7 +592,7 @@ class Parser(AbstractParser, Base):
     def get_cli_name(name: str) -> str:
         return name.replace("_", "-")
 
-    def get_env_var(self, name: str, argument: _Argument) -> Optional[str]:
+    def get_env_var(self, name: str, argument: TypedArgument) -> Optional[str]:
         if argument.env_var is not None:
             return argument.env_var
         if self._auto_env_var_prefix is not None:
@@ -801,7 +801,7 @@ class Parser(AbstractParser, Base):
             os.environ.pop(name, None)
         self._used_env_vars.clear()
 
-    def __call__(self) -> None:
+    def __call__(self) -> Any:
         """
         Override this function if you want to equip your parser with an action.
         It will be like replacing the main function in a classical case.
@@ -845,7 +845,7 @@ def Argument(
     required: Optional[bool] = None,
     type: Optional[Callable[[str], Any]] = None,
 ) -> Any:
-    return _Argument(
+    return TypedArgument(
         action=action,
         aliases=aliases,
         choices=choices,
@@ -882,7 +882,7 @@ def EnumArgument(
             return value        # type: ignore
         return enum[value]
 
-    return _Argument(    # type: ignore
+    return TypedArgument(    # type: ignore
         aliases=aliases,
         action=action,
         choices=sorted(enum.__members__),
@@ -948,11 +948,12 @@ __all__ = (
     "ConfigArgument",
     "EnumArgument",
     "Group",
+    "INIConfig",
+    "JSONConfig",
     "LogLevel",
     "LogLevelEnum",
     "Nargs",
     "Parser",
     "SecretString",
-    "JSONConfig",
-    "INIConfig",
+    "TypedArgument",
 )

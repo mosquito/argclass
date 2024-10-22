@@ -68,4 +68,4 @@ strict_optional = true
 warn_redundant_casts = true
 warn_unused_configs = true
 warn_unused_ignores = false
-files = "argclass.py"
+files = "argclass"

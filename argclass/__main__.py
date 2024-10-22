@@ -8,7 +8,7 @@ import argclass
 class GreetCommand(argclass.Parser):
     user: str = argclass.Argument("user", help="User to greet")
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self) -> int:
         print(f"Hello, {self.user}!")
         return 0
 
@@ -19,7 +19,7 @@ class Parser(argclass.Parser):
     greet = GreetCommand()
 
 
-def main():
+def main() -> None:
     parser = Parser(
         prog=f"{Path(sys.executable).name} -m argclass",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -29,5 +29,5 @@ def main():
     parser.sanitize_env()
     exit(parser())
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
