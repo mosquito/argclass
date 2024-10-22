@@ -2,17 +2,13 @@
 
 ![Coverage](https://coveralls.io/repos/github/mosquito/argclass/badge.svg?branch=master) [![Actions](https://github.com/mosquito/argclass/workflows/tests/badge.svg)](https://github.com/mosquito/argclass/actions?query=workflow%3Atests) [![Latest Version](https://img.shields.io/pypi/v/argclass.svg)](https://pypi.python.org/pypi/argclass/) [![Python Versions](https://img.shields.io/pypi/pyversions/argclass.svg)](https://pypi.python.org/pypi/argclass/) [![License](https://img.shields.io/pypi/l/argclass.svg)](https://pypi.python.org/pypi/argclass/)
 
-A wrapper around the standard ``argparse`` module that allows you to describe
-argument parsers declaratively.
+A wrapper around the standard `argparse` module that allows you to describe argument parsers declaratively.
 
-By default, the ``argparse`` module suggests creating parsers imperative,
-which is not convenient from the point of view of type checking and
-access to attributes, of course, IDE autocompletion and type hints not
-applicable in this case.
+By default, the `argparse` module suggests creating parsers imperatively, which is not convenient for type checking and attribute access. Additionally, IDE autocompletion and type hints are not applicable in this case.
 
-This module allows you to declare command-line parsers with classes.
+This module allows you to declare command-line parsers using classes.
 
-## Quick start
+## Quick Start
 
 <!--- name: test_simple_example --->
 ```python
@@ -27,16 +23,15 @@ parser.parse_args(["--recursive", "--preserve-attributes"])
 assert parser.recursive
 assert parser.preserve_attributes
 ```
-As you can see this example shown a basic module usage, when you want specify
-argument default and other options you have to use ``argclass.Argument``.
+
+As you can see, this example shows basic module usage. When you want to specify argument defaults and other options, you have to use `argclass.Argument`.
 
 ## Subparsers
 
-Following example shows how to use subparsers:
+The following example shows how to use subparsers:
 
 ```python
 import argclass
-
 
 class SubCommand(argclass.Parser):
     comment: str
@@ -46,11 +41,9 @@ class SubCommand(argclass.Parser):
         print("Subcommand called", self, "endpoint", endpoint)
         return 0
 
-
 class Parser(argclass.Parser):
     endpoint: str
     subcommand = SubCommand()
-
 
 if __name__ == '__main__':
     parser = Parser()
@@ -58,25 +51,21 @@ if __name__ == '__main__':
     exit(parser())
 ```
 
-Method `__call__` will be called when subparser is used. Otherwise help will be printed.
+The `__call__` method will be called when the subparser is used. Otherwise, help will be printed.
 
-## Value conversion
+## Value Conversion
 
-If the argument has a generic or composite type, then you must explicitly describe it using ``argclass.Argument``,
-while specifying the converter function with `type` or `converter` argument to transform the value after parsing the arguments.
+If an argument has a generic or composite type, you must explicitly describe it using `argclass.Argument`, specifying a converter function with the `type` or `converter` argument to transform the value after parsing.
 
-Main differences between `type` and `converter`:
+The main differences between `type` and `converter` are:
 
-* `type` will be directly passed to the `argparse.ArgumentParser.add_argument` method. 
-* Converter function will be called after parsing the argument.
+* `type` will be directly passed to the `argparse.ArgumentParser.add_argument` method.
+* The `converter` function will be called after parsing the argument.
 
-
-<!-- name: test_converter -->
-
+<!--- name: test_converter_example --->
 ```python
 import uuid
 import argclass
-
 
 def string_uid(value: str) -> uuid.UUID:
     return uuid.uuid5(uuid.NAMESPACE_OID, value)
@@ -85,20 +74,17 @@ class Parser(argclass.Parser):
     strid1: uuid.UUID = argclass.Argument(converter=string_uid)
     strid2: uuid.UUID = argclass.Argument(type=string_uid)
 
-
 parser = Parser()
 parser.parse_args(["--strid1=hello", "--strid2=world"])
 assert parser.strid1 == uuid.uuid5(uuid.NAMESPACE_OID, 'hello')
 assert parser.strid2 == uuid.uuid5(uuid.NAMESPACE_OID, 'world')
 ```
 
-As you can see, the `string_uid` function will be called has same effect as `type` and `converter` arguments.
-But `converter` is will be applied after parsing the argument.
+As you can see, the `string_uid` function is called in both cases, but `converter` is applied after parsing the argument.
 
-Following example shows how type applied to each item in list of nargs:
+The following example shows how `type` is applied to each item in a list when using `nargs`:
 
-<!-- name: test_converter_nargs -->
-
+<!--- name: test_list_converter_example --->
 ```python
 import argclass
 
@@ -110,13 +96,11 @@ parser.parse_args(["--numbers", "1", "2", "3"])
 assert parser.numbers == [1, 2, 3]
 ```
 
-`type` argument will be applied to each item in list of nargs.
+`type` will be applied to each item in the list of arguments.
 
-For example if you want to convert list of strings to list of integers, and convert it to 
-`frozenset`, you can use following example:
+If you want to convert a list of strings to a list of integers and then to a `frozenset`, you can use the following example:
 
-<!-- name: test_converter_nargs_frozenset -->
-
+<!--- name: test_list_converter_frozenset_example --->
 ```python
 import argclass
 
@@ -130,25 +114,21 @@ parser.parse_args(["--numbers", "1", "2", "3"])
 assert parser.numbers == frozenset([1, 2, 3])
 ```
 
-## Configration files
+## Configuration Files
 
-The parser objects might be get default values from environment variables or one of passed configuration files.
+Parser objects can get default values from environment variables or from specified configuration files.
 
-<!-- name: test_config_files -->
-
+<!--- name: test_config_example --->
 ```python
 import logging
 from pathlib import Path
 from tempfile import TemporaryDirectory
-
 import argclass
-
 
 class Parser(argclass.Parser):
     log_level: int = argclass.LogLevel
     address: str
     port: int
-
 
 with TemporaryDirectory() as tmpdir:
     tmp = Path(tmpdir)
@@ -167,13 +147,12 @@ with TemporaryDirectory() as tmpdir:
     assert parser.port == 8080
 ```
 
-## Argument groups
+## Argument Groups
 
-Following example use ``argclass.Argument`` and argument groups:
+The following example uses `argclass.Argument` and argument groups:
 
-<!-- name: test_example -->
+<!-- name: test_argument_groups_example -->
 ```python
-
 from typing import FrozenSet
 import logging
 import argclass
@@ -201,7 +180,7 @@ parser.sanitize_env()
 
 logging.basicConfig(level=parser.log_level)
 logging.info('Listening http://%s:%d', parser.http.address, parser.http.port)
-logging.info(f'Listening rpc://%s:%d', parser.rpc.address, parser.rpc.port)
+logging.info('Listening rpc://%s:%d', parser.rpc.address, parser.rpc.port)
 
 assert parser.http.address == '127.0.0.1'
 assert parser.rpc.address == '127.0.0.1'
@@ -210,7 +189,7 @@ assert parser.http.port == 8080
 assert parser.rpc.port == 9090
 ```
 
-Argument groups is a sections in parser configuration. For example, in this case, the configuration file might be:
+Argument groups are sections in the parser configuration. For example, in this case, the configuration file might be:
 
 ```ini
 [DEFAULT]
@@ -232,13 +211,13 @@ INFO:root:Listening http://127.0.0.1:8080
 INFO:root:Listening rpc://127.0.0.1:9090
 ```
 
-Example of ``--help`` output:
+Example of `--help` output:
 
 ```shell
 $ python example.py --help
 usage: example.py [-h] [--log-level {debug,info,warning,error,critical}]
-                 [--http-address HTTP_ADDRESS] [--http-port HTTP_PORT]
-                 [--rpc-address RPC_ADDRESS] [--rpc-port RPC_PORT]
+                  [--http-address HTTP_ADDRESS] [--http-port HTTP_PORT]
+                  [--rpc-address RPC_ADDRESS] [--rpc-port RPC_PORT]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -256,21 +235,16 @@ RPC options:
                         (default: 127.0.0.1) [ENV: EXAMPLE_RPC_ADDRESS]
   --rpc-port RPC_PORT   (default: 9090) [ENV: EXAMPLE_RPC_PORT]
 
-Default values will based on following configuration files ['example.ini',
-'~/.example.ini', '/etc/example.ini']. Now 1 files has been applied
-['example.ini']. The configuration files is INI-formatted files where
-configuration groups is INI sections.
+Default values will be based on the following configuration files ['example.ini',
+'~/.example.ini', '/etc/example.ini']. Now 1 file has been applied
+['example.ini']. The configuration files are INI-formatted files where
+configuration groups are INI sections.
 See more https://pypi.org/project/argclass/#configs
 ```
 
 ## Secrets
 
-Arguments reflecting some sensitive data, tokens or encryption keys,
-urls with passwords, when passed through environment variables or a
-configuration file, can be printed in the output of `--help`.
-To hide defaults, add the `secret=True` parameter,
-or use the special default constructor `argclass.Secret` instead of
-`argclass.Argument`.
+Arguments that contain sensitive data, such as tokens, encryption keys, or URLs with passwords, when passed through environment variables or a configuration file, can be printed in the output of `--help`. To hide defaults, add the `secret=True` parameter, or use the special default constructor `argclass.Secret` instead of `argclass.Argument`.
 
 ```python
 import argclass
@@ -290,12 +264,9 @@ parser = Parser()
 parser.print_help()
 ```
 
-### Trying to protect data from being written to the log
+### Preventing Secrets from Being Logged
 
-A secret is not actually a string, but a special class inherited
-from a `str`, and all attempts to cast this type to a `str`
-(using `__str__` method) should be fine, and returning the original
-value, unless the `__str__` method call is from a `logging` module.
+A secret is not actually a string, but a special class inherited from `str`. All attempts to cast this type to a `str` (using the `__str__` method) will return the original value, unless the `__str__` method is called from the `logging` module.
 
 ```python
 import logging
@@ -309,79 +280,16 @@ logging.info(f"{s!r}")   # repr is safe
 logging.info(f"{s}")     # the password will be compromised
 ```
 
-Of course this is not a absolute sensitive data protection,
-but I hope it helps against accidental logging of this kind of values.
+Of course, this is not absolute sensitive data protection, but it helps prevent accidental logging of these values.
 
-The repr for this will always give placeholder, so it is better to always
-add `!r` for any f-string, for example `f'{value!r}'`.
+The `repr` for this will always give a placeholder, so it is better to always add `!r` to any f-string, for example `f'{value!r}'`.
 
+## Enum Argument
 
-## Configs
+The library provides a special argument type for working with enumerations. For enum arguments, the `choices` parameter will be generated automatically from the enum names. After parsing the argument, the value will be converted to the enum member.
 
-The parser objects might be get default values from environment variables or
-one of passed configuration files.
-
+<!--- name: test_enum_example --->
 ```python
-import argclass
-
-class AddressPortGroup(argclass.Group):
-    address: str = argclass.Argument(default="127.0.0.1")
-    port: int
-
-
-class Parser(argclass.Parser):
-    spam: str
-    quantity: int
-    log_level: int = argclass.LogLevel
-    http = AddressPortGroup(title="HTTP options")
-    rpc = AddressPortGroup(title="RPC options")
-    user_ids = argclass.Argument(
-        type=int, converter=frozenset, nargs=argclass.Nargs.ONE_OR_MORE
-    )
-
-
-if __name__ == '__main__':
-    # Trying to parse all passed configuration files
-    # and break after first success.
-    parser = Parser(
-        config_files=[".example.ini", "~/.example.ini", "/etc/example.ini"],
-    )
-    parser.parse_args()
-```
-
-In this case each passed and existent configuration file will be opened.
-
-The root level arguments might be described in the ``[DEFAULT]`` section.
-
-Other arguments might be described in group specific sections.
-
-So the full example of config file for above example is:
-
-```ini
-[DEFAULT]
-log_level=info
-spam=egg
-quantity=100
-user_ids=[1, 2, 3]
-
-[http]
-address=127.0.0.1
-port=8080
-
-[rpc]
-address=127.0.0.1
-port=9090
-```
-
-## Enum argument
-
-The library provides a special argument type for working with enumerations. 
-For enum argument `choices=` parameter will be generated automatically from the enum names.
-After parsing the argument, the value will be converted to the enum member.
-
-<!-- name: test_enum_argument -->
-```python
-
 import enum
 import logging
 import argclass
@@ -393,11 +301,9 @@ class LogLevelEnum(enum.IntEnum):
     error = logging.ERROR
     critical = logging.CRITICAL
 
-
 class Parser(argclass.Parser):
     """Log level with default"""
     log_level = argclass.EnumArgument(LogLevelEnum, default="info")
-
 
 class ParserLogLevelIsRequired(argclass.Parser):
     log_level: LogLevelEnum
@@ -417,33 +323,27 @@ assert parser.log_level == logging.WARNING
 
 ## Config Action
 
-This library provides base class for writing custom configuration parsers.
+This library provides a base class for writing custom configuration parsers.
 
-`argclass.Config` is a special argument type for parsing configuration files. Optional parameter `config_class` 
-is used to specify the custom configuration parser. By default, it is INI parser.
+`argclass.Config` is a special argument type for parsing configuration files. The optional parameter `config_class` is used to specify the custom configuration parser. By default, it is an INI parser.
 
+### YAML Parser
 
-### YAML parser
-
-For parsing YAML files, you have to install the `PyYAML` package.
+To parse YAML files, you need to install the `PyYAML` package. Follow code is an implementation of a YAML config parser.
 
 ```python
 from typing import Mapping, Any
 from pathlib import Path
-
 import argclass
 import yaml
-
 
 class YAMLConfigAction(argclass.ConfigAction):
     def parse_file(self, file: Path) -> Mapping[str, Any]:
         with file.open("r") as fp:
-            return yaml.load_all(fp)
-
+            return yaml.load(fp, Loader=yaml.FullLoader)
 
 class YAMLConfigArgument(argclass.ConfigArgument):
     action = YAMLConfigAction
-
 
 class Parser(argclass.Parser):
     config = argclass.Config(
@@ -452,9 +352,9 @@ class Parser(argclass.Parser):
     )
 ```
 
-### TOML parser
+### TOML Parser
 
-For parsing TOML files, you have to install the `tomli` package.
+To parse TOML files, you need to install the `tomli` package. Follow code is an implementation of a TOML config parser.
 
 ```python
 import tomli
@@ -462,15 +362,13 @@ import argclass
 from pathlib import Path
 from typing import Mapping, Any
 
-
 class TOMLConfigAction(argclass.ConfigAction):
     def parse_file(self, file: Path) -> Mapping[str, Any]:
-        with file.open("r") as fp:
+        with file.open("rb") as fp:
             return tomli.load(fp)
 
 class TOMLConfigArgument(argclass.ConfigArgument):
     action = TOMLConfigAction
-
 
 class Parser(argclass.Parser):
     config = argclass.Config(
@@ -479,27 +377,24 @@ class Parser(argclass.Parser):
     )
 ```
 
-## Subparsers advanced usage
+## Subparsers Advanced Usage
 
-There are two ways to work with subparsers: either by calling the parser as a regular function, and in this case, 
-the subparser must implement the `__call__` method, otherwise help will be printed and the program will exit with
-an error. Or you can directly look at the `.current_subparser` attribute in the parser. The second method seems 
-more complicated, but it becomes less difficult if you use singledispatch from the standard library.
+There are two ways to work with subparsers: either by calling the parser as a regular function, in which case the
+subparser must implement the `__call__` method (otherwise help will be printed and the program will exit with an
+error), or by directly inspecting the `.current_subparser` attribute in the parser. The second method can be 
+simplified using `functools.singledispatch`.
 
 ### Using `__call__`
 
-Just implement `__call__` method for subparsers and call
+Just implement the `__call__` method for subparsers and call the main parser.
 
 ```python
 from typing import Optional
-
 import argclass
-
 
 class AddressPortGroup(argclass.Group):
     address: str = "127.0.0.1"
     port: int = 8080
-
 
 class CommitCommand(argclass.Parser):
     comment: str = argclass.Argument()
@@ -512,7 +407,6 @@ class CommitCommand(argclass.Parser):
         )
         return 0
 
-
 class PushCommand(argclass.Parser):
     comment: str = argclass.Argument()
 
@@ -524,13 +418,11 @@ class PushCommand(argclass.Parser):
         )
         return 0
 
-
 class Parser(argclass.Parser):
     log_level: int = argclass.LogLevel
     endpoint = AddressPortGroup(title="Endpoint options")
     commit: Optional[CommitCommand] = CommitCommand()
     push: Optional[PushCommand] = PushCommand()
-
 
 if __name__ == '__main__':
     parser = Parser(
@@ -543,28 +435,22 @@ if __name__ == '__main__':
 
 ### Using `singledispatch`
 
-You can use `current_subparser` attribute to get the current subparser and then call it.
-This do not require to implement `__call__` method.
+You can use the `current_subparser` attribute to get the current subparser and then call it. This does not require implementing the `__call__` method.
 
 ```python
 from functools import singledispatch
 from typing import Optional, Any
-
 import argclass
-
 
 class AddressPortGroup(argclass.Group):
     address: str = argclass.Argument(default="127.0.0.1")
     port: int
 
-
 class CommitCommand(argclass.Parser):
     comment: str = argclass.Argument()
 
-
 class PushCommand(argclass.Parser):
     comment: str = argclass.Argument()
-
 
 class Parser(argclass.Parser):
     log_level: int = argclass.LogLevel
@@ -575,29 +461,24 @@ class Parser(argclass.Parser):
     commit: Optional[CommitCommand] = CommitCommand()
     push: Optional[PushCommand] = PushCommand()
 
-
 @singledispatch
 def handle_subparser(subparser: Any) -> None:
     raise NotImplementedError(
         f"Unexpected subparser type {subparser.__class__!r}"
     )
 
-
 @handle_subparser.register(type(None))
 def handle_none(_: None) -> None:
     Parser().print_help()
     exit(2)
 
-
 @handle_subparser.register(CommitCommand)
 def handle_commit(subparser: CommitCommand) -> None:
     print("Commit command called", subparser)
 
-
 @handle_subparser.register(PushCommand)
 def handle_push(subparser: PushCommand) -> None:
     print("Push command called", subparser)
-
 
 if __name__ == '__main__':
     parser = Parser(
@@ -608,18 +489,14 @@ if __name__ == '__main__':
     handle_subparser(parser.current_subparser)
 ```
 
-## Value conversion
+## Value Conversion with Optional and Union Types
 
-If the argument has a generic or composite type, then you must explicitly
-describe it using ``argclass.Argument``, while specifying the converter
-function with ``type`` or ``converter`` argument to transform the value
-after parsing the arguments.
+If an argument has a generic or composite type, you must explicitly describe it using `argclass.Argument`, specifying 
+the converter function with `type` or `converter` to transform the value after parsing. The exception to this rule 
+is `Optional` with a single type. In this case, an argument without a default value will not be required, and 
+its value can be `None`.
 
-The exception to this rule is `Optional` with a single type. In this case,
-an argument without a default value will not be required,
-and its value can be None.
-
-<!-- name: test_converter -->
+<!--- name: test_optional_union_example --->
 ```python
 import argclass
 from typing import Optional, Union
@@ -633,13 +510,11 @@ def converter(value: str) -> Optional[Union[int, str, bool]]:
         return True
     return False
 
-
 class Parser(argclass.Parser):
     gizmo: Optional[Union[int, str, bool]] = argclass.Argument(
         converter=converter
     )
     optional: Optional[int]
-
 
 parser = Parser()
 
