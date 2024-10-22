@@ -30,6 +30,38 @@ assert parser.preserve_attributes
 As you can see this example shown a basic module usage, when you want specify
 argument default and other options you have to use ``argclass.Argument``.
 
+## Subparsers
+
+Following example shows how to use subparsers:
+
+```python
+import argclass
+
+
+class SubCommand(argclass.Parser):
+    comment: str
+
+    def __call__(self) -> int:
+        endpoint: str = self.__parent__.endpoint
+        print("Subcommand called", self, "endpoint", endpoint)
+        return 0
+
+
+class Parser(argclass.Parser):
+    endpoint: str
+    subcommand = SubCommand()
+
+
+parser = Parser()
+parser.parse_args()
+exit(parser())
+```
+
+Method `__call__` will be called when subparser is used. Otherwise help will be printed.
+
+
+## Argument groups
+
 Following example use ``argclass.Argument`` and argument groups:
 
 <!-- name: test_example -->
