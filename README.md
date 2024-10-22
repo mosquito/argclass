@@ -12,7 +12,7 @@ applicable in this case.
 
 This module allows you to declare command-line parsers with classes.
 
-## Simple example
+## Quick start
 
 <!--- name: test_simple_example --->
 ```python
@@ -60,7 +60,6 @@ if __name__ == '__main__':
 
 Method `__call__` will be called when subparser is used. Otherwise help will be printed.
 
-
 ## Value conversion
 
 If the argument has a generic or composite type, then you must explicitly describe it using ``argclass.Argument``,
@@ -70,6 +69,7 @@ Main differences between `type` and `converter`:
 
 * `type` will be directly passed to the `argparse.ArgumentParser.add_argument` method. 
 * Converter function will be called after parsing the argument.
+
 
 <!-- name: test_converter -->
 
@@ -82,15 +82,20 @@ def string_uid(value: str) -> uuid.UUID:
     return uuid.uuid5(uuid.NAMESPACE_OID, value)
 
 class Parser(argclass.Parser):
-    strid: uuid.UUID = argclass.Argument(converter=string_uid)
+    strid1: uuid.UUID = argclass.Argument(converter=string_uid)
+    strid2: uuid.UUID = argclass.Argument(type=string_uid)
 
 
 parser = Parser()
-parser.parse_args(["--strid=hello"])
-assert parser.strid == uuid.uuid5(uuid.NAMESPACE_OID, 'hello')
+parser.parse_args(["--strid1=hello", "--strid2=world"])
+assert parser.strid1 == uuid.uuid5(uuid.NAMESPACE_OID, 'hello')
+assert parser.strid2 == uuid.uuid5(uuid.NAMESPACE_OID, 'world')
 ```
 
-Another example is converting nargs to list of integers:
+As you can see, the `string_uid` function will be called has same effect as `type` and `converter` arguments.
+But `converter` is will be applied after parsing the argument.
+
+Following example shows how type applied to each item in list of nargs:
 
 <!-- name: test_converter_nargs -->
 
@@ -105,8 +110,10 @@ parser.parse_args(["--numbers", "1", "2", "3"])
 assert parser.numbers == [1, 2, 3]
 ```
 
+`type` argument will be applied to each item in list of nargs.
 
-If you want to convert list of strings to list of integers, and convert it to frozenset, you can use following example:
+For example if you want to convert list of strings to list of integers, and convert it to 
+`frozenset`, you can use following example:
 
 <!-- name: test_converter_nargs_frozenset -->
 
@@ -121,6 +128,43 @@ class Parser(argclass.Parser):
 parser = Parser()
 parser.parse_args(["--numbers", "1", "2", "3"])
 assert parser.numbers == frozenset([1, 2, 3])
+```
+
+## Configration files
+
+The parser objects might be get default values from environment variables or one of passed configuration files.
+
+<!-- name: test_config_files -->
+
+```python
+import logging
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+import argclass
+
+
+class Parser(argclass.Parser):
+    log_level: int = argclass.LogLevel
+    address: str
+    port: int
+
+
+with TemporaryDirectory() as tmpdir:
+    tmp = Path(tmpdir)
+    with open(tmp / "config.ini", "w") as fp:
+        fp.write(
+            "[DEFAULT]\n"
+            "log_level=info\n"
+            "address=localhost\n"
+            "port=8080\n"
+        )
+
+    parser = Parser(config_files=[tmp / "config.ini"])
+    parser.parse_args([])
+    assert parser.log_level == logging.INFO
+    assert parser.address == "localhost"
+    assert parser.port == 8080
 ```
 
 ## Argument groups
@@ -164,6 +208,20 @@ assert parser.rpc.address == '127.0.0.1'
 
 assert parser.http.port == 8080
 assert parser.rpc.port == 9090
+```
+
+Argument groups is a sections in parser configuration. For example, in this case, the configuration file might be:
+
+```ini
+[DEFAULT]
+log_level=info
+user_id=[1, 2, 3]
+
+[http]
+port=9001
+
+[rpc]
+port=9002
 ```
 
 Run this script:
@@ -360,6 +418,9 @@ assert parser.log_level == logging.WARNING
 ## Config Action
 
 This library provides base class for writing custom configuration parsers.
+
+`argclass.Config` is a special argument type for parsing configuration files. Optional parameter `config_class` 
+is used to specify the custom configuration parser. By default, it is INI parser.
 
 
 ### YAML parser
