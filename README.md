@@ -52,9 +52,10 @@ class Parser(argclass.Parser):
     subcommand = SubCommand()
 
 
-parser = Parser()
-parser.parse_args()
-exit(parser())
+if __name__ == '__main__':
+    parser = Parser()
+    parser.parse_args()
+    exit(parser())
 ```
 
 Method `__call__` will be called when subparser is used. Otherwise help will be printed.
@@ -177,14 +178,15 @@ from a `str`, and all attempts to cast this type to a `str`
 value, unless the `__str__` method call is from a `logging` module.
 
 ```python
->>> import logging
->>> from argclass import SecretString
->>> logging.basicConfig(level=logging.INFO)
->>> s = SecretString("my-secret-password")
->>> logging.info(s)          # __str__ will be called from logging
->>> logging.info(f"s=%s", s) # __str__ will be called from logging too
->>> logging.info(f"{s!r}")   # repr is safe
->>> logging.info(f"{s}")     # the password will be compromised
+import logging
+from argclass import SecretString
+
+logging.basicConfig(level=logging.INFO)
+s = SecretString("my-secret-password")
+logging.info(s)          # __str__ will be called from logging
+logging.info(f"s=%s", s) # __str__ will be called from logging too
+logging.info(f"{s!r}")   # repr is safe
+logging.info(f"{s}")     # the password will be compromised
 ```
 
 Of course this is not a absolute sensitive data protection,
@@ -218,12 +220,13 @@ class Parser(argclass.Parser):
     )
 
 
-# Trying to parse all passed configuration files
-# and break after first success.
-parser = Parser(
-    config_files=[".example.ini", "~/.example.ini", "/etc/example.ini"],
-)
-parser.parse_args()
+if __name__ == '__main__':
+    # Trying to parse all passed configuration files
+    # and break after first success.
+    parser = Parser(
+        config_files=[".example.ini", "~/.example.ini", "/etc/example.ini"],
+    )
+    parser.parse_args()
 ```
 
 In this case each passed and existent configuration file will be opened.
@@ -406,12 +409,13 @@ class Parser(argclass.Parser):
     push: Optional[PushCommand] = PushCommand()
 
 
-parser = Parser(
-    config_files=["example.ini", "~/.example.ini", "/etc/example.ini"],
-    auto_env_var_prefix="EXAMPLE_"
-)
-parser.parse_args()
-exit(parser())
+if __name__ == '__main__':
+    parser = Parser(
+        config_files=["example.ini", "~/.example.ini", "/etc/example.ini"],
+        auto_env_var_prefix="EXAMPLE_"
+    )
+    parser.parse_args()
+    exit(parser())
 ```
 
 ### Using `singledispatch`
@@ -472,12 +476,13 @@ def handle_push(subparser: PushCommand) -> None:
     print("Push command called", subparser)
 
 
-parser = Parser(
-    config_files=["example.ini", "~/.example.ini", "/etc/example.ini"],
-    auto_env_var_prefix="EXAMPLE_"
-)
-parser.parse_args()
-handle_subparser(parser.current_subparser)
+if __name__ == '__main__':
+    parser = Parser(
+        config_files=["example.ini", "~/.example.ini", "/etc/example.ini"],
+        auto_env_var_prefix="EXAMPLE_"
+    )
+    parser.parse_args()
+    handle_subparser(parser.current_subparser)
 ```
 
 ## Value conversion
