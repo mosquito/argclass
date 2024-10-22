@@ -1,13 +1,13 @@
 [tool.poetry]
 name = "argclass"
-version = "1.0.3"
+version = "1.1.0"
 description = "A wrapper around the standard argparse module that allows you to describe argument parsers declaratively"
 authors = ["Dmitry Orlov <me@mosquito.su>"]
 readme = "README.md"
 license = "Apache 2"
 homepage = "https://github.com/mosquito/argclass"
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
     "Intended Audience :: Developers",
     "Intended Audience :: System Administrators",
@@ -27,8 +27,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 packages = [
-    { include = "argclass.py" },
-    { include = "argclass.pyi" },
+    { include = "argclass" },
 ]
 
 [tool.poetry.urls]
@@ -46,6 +45,7 @@ pytest-cov = ">=4.0.0"
 pylama = ">=8.4.1"
 setuptools = ">=69.0.2"
 markdown-pytest = ">=0.3.1"
+pyyaml = "^6.0.2"
 
 [tool.poetry.group.mypy.dependencies]
 mypy = "0.991"
@@ -68,4 +68,4 @@ strict_optional = true
 warn_redundant_casts = true
 warn_unused_configs = true
 warn_unused_ignores = false
-files = "argclass.py"
+files = "argclass"
