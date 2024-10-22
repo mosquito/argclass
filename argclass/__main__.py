@@ -23,11 +23,15 @@ def main() -> None:
     parser = Parser(
         prog=f"{Path(sys.executable).name} -m argclass",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        description=f"This code produces this help:\n\n```python\n{open(__file__).read().strip()}\n```",
+        description=(
+            "This code produces this help:\n\n```"
+            f"python\n{open(__file__).read().strip()}\n```"
+        ),
     )
     parser.parse_args()
     parser.sanitize_env()
     exit(parser())
+
 
 if __name__ == "__main__":
     main()
