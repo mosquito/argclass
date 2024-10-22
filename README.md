@@ -61,6 +61,68 @@ if __name__ == '__main__':
 Method `__call__` will be called when subparser is used. Otherwise help will be printed.
 
 
+## Value conversion
+
+If the argument has a generic or composite type, then you must explicitly describe it using ``argclass.Argument``,
+while specifying the converter function with `type` or `converter` argument to transform the value after parsing the arguments.
+
+Main differences between `type` and `converter`:
+
+* `type` will be directly passed to the `argparse.ArgumentParser.add_argument` method. 
+* Converter function will be called after parsing the argument.
+
+<!-- name: test_converter -->
+
+```python
+import uuid
+import argclass
+
+
+def string_uid(value: str) -> uuid.UUID:
+    return uuid.uuid5(uuid.NAMESPACE_OID, value)
+
+class Parser(argclass.Parser):
+    strid: uuid.UUID = argclass.Argument(converter=string_uid)
+
+
+parser = Parser()
+parser.parse_args(["--strid=hello"])
+assert parser.strid == uuid.uuid5(uuid.NAMESPACE_OID, 'hello')
+```
+
+Another example is converting nargs to list of integers:
+
+<!-- name: test_converter_nargs -->
+
+```python
+import argclass
+
+class Parser(argclass.Parser):
+    numbers = argclass.Argument(nargs=argclass.Nargs.ONE_OR_MORE, type=int)
+
+parser = Parser()
+parser.parse_args(["--numbers", "1", "2", "3"])
+assert parser.numbers == [1, 2, 3]
+```
+
+
+If you want to convert list of strings to list of integers, and convert it to frozenset, you can use following example:
+
+<!-- name: test_converter_nargs_frozenset -->
+
+```python
+import argclass
+
+class Parser(argclass.Parser):
+    numbers = argclass.Argument(
+        nargs=argclass.Nargs.ONE_OR_MORE, type=int, converter=frozenset
+    )
+
+parser = Parser()
+parser.parse_args(["--numbers", "1", "2", "3"])
+assert parser.numbers == frozenset([1, 2, 3])
+```
+
 ## Argument groups
 
 Following example use ``argclass.Argument`` and argument groups:

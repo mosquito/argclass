@@ -9,7 +9,7 @@ import os
 import sys
 import traceback
 from abc import ABCMeta
-from argparse import Action, ArgumentParser
+from argparse import Action as BaseAction, ArgumentParser
 from enum import Enum, EnumMeta, IntEnum
 from functools import partial
 from pathlib import Path
@@ -102,6 +102,25 @@ class SecretString(str):
         return repr(self.PLACEHOLDER)
 
 
+
+class Action(BaseAction):
+    def __init__(
+        self, option_strings: Sequence[str], dest: str,
+        type: Optional[Type] = None, help: str = "", required: bool = False,
+        default: Optional[Any] = None, **kwargs: Any,
+    ):
+        super().__init__(
+            option_strings, dest, type=type, help=help, required=required,
+            default=default, **kwargs,
+        )
+
+    def __call__(
+        self, parser: argparse.ArgumentParser, namespace: argparse.Namespace,
+        values: Optional[Union[str, Any]], option_string: Optional[str] = None,
+    ) -> None:
+        setattr(namespace, self.dest, values)
+
+
 class ConfigAction(Action):
     def __init__(
         self, option_strings: Sequence[str], dest: str,
@@ -149,7 +168,7 @@ class ConfigAction(Action):
                 )
             if filenames:
                 self._result = self.parse(*filenames)
-        setattr(namespace, self.dest, MappingProxyType(self._result or {}))
+        super().__call__(parser, namespace, MappingProxyType(self._result or {}), option_string)
 
 
 class INIConfigAction(ConfigAction):
@@ -547,7 +566,7 @@ class Parser(AbstractParser, Base):
     )
     HELP_APPENDIX_END = (
         "The configuration files is INI-formatted files "
-        "where configuration groups is INI sections."
+        "where configuration groups is INI sections. "
         "See more https://pypi.org/project/argclass/#configs"
     )
 
