@@ -610,16 +610,20 @@ class Parser(AbstractParser, Base):
         self._config, filenames = read_configs(*config_files)
 
         self._epilog = kwargs.pop("epilog", "")
-        self._epilog += self.HELP_APPENDIX_PREAMBLE.format(
-            configs=repr(config_files),
-        )
 
-        if filenames:
-            self._epilog += self.HELP_APPENDIX_CURRENT.format(
-                num_existent=len(filenames),
-                existent=repr(list(map(str, filenames))),
+        if config_files:
+            # If not config files, we don't need to add any to the epilog
+            self._epilog += self.HELP_APPENDIX_PREAMBLE.format(
+                configs=repr(config_files),
             )
-        self._epilog += self.HELP_APPENDIX_END
+
+            if filenames:
+                self._epilog += self.HELP_APPENDIX_CURRENT.format(
+                    num_existent=len(filenames),
+                    existent=repr(list(map(str, filenames))),
+                )
+            self._epilog += self.HELP_APPENDIX_END
+
         self._auto_env_var_prefix = auto_env_var_prefix
         self._parser_kwargs = kwargs
         self._used_env_vars: Set[str] = set()
