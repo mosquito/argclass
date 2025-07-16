@@ -114,6 +114,35 @@ parser.parse_args(["--numbers", "1", "2", "3"])
 assert parser.numbers == frozenset([1, 2, 3])
 ```
 
+## Boolean arguments
+
+Boolean arguments can be specified using like this:
+
+<!--- name: test_bools --->
+```python
+import argclass
+
+
+class ArgumentParser(argclass.Parser):
+    # Complete form you have to set default and action
+    stored_true: bool = argclass.Argument(
+        action=argclass.Actions.STORE_TRUE,
+        default=False
+    )
+    # Short form with default value
+    # This is the alias for: argclass.Argument(action=argclass.Actions.STORE_TRUE, default=False)
+    stored_true_short: bool = False
+    # This is the alias for: argclass.Argument(action=argclass.Actions.STORE_FALSE, default=True)
+    stored_false: bool = True
+
+
+parser = ArgumentParser(auto_env_var_prefix='APP_')
+arguments = parser.parse_args(["--stored-true-short"])
+assert arguments.stored_true is False
+assert arguments.stored_true_short is True
+assert arguments.stored_false is True
+```
+
 ## Configuration Files
 
 Parser objects can get default values from environment variables or from specified configuration files.
@@ -538,3 +567,72 @@ parser.parse_args(["--gizmo=off", "--optional=10"])
 assert parser.gizmo is False
 assert parser.optional == 10
 ```
+
+# 3rd Party Libraries integration
+
+`argclass` is able to integrate with some 3rd party libraries to provide additional features.
+
+## `Rich` and `rich_argparse` integration examples
+
+`rich_argparse` is a library that provides an ability to use `rich` for formatting help messages in `argparse`.
+So this library can be used with `argclass` to provide a rich help output.
+
+```python
+from argparse import Action
+
+import argclass
+from rich.console import ConsoleRenderable, Group
+from rich.markdown import Markdown
+from rich.panel import Panel
+from rich.syntax import Syntax
+from rich.text import Text
+from rich_argparse import RawTextRichHelpFormatter
+
+
+class HelpFormatter(RawTextRichHelpFormatter):
+    def _rich_expand_help(self, action: Action) -> Text:
+        try:
+            if "%" in str(action.default):
+                action.default = ""
+            if "%" in str(action.help):
+                action.help = ""
+            return super()._rich_expand_help(action)
+        except ValueError:
+            return Text("FAILED")
+
+
+class RichParser(argclass.Parser):
+    def __init__(self, *args, **kwargs) -> None:
+        help = kwargs.pop("help", None)
+        description = kwargs.pop("description", help) or ""
+
+        if isinstance(description, ConsoleRenderable):
+            kwargs["description"] = description
+        else:
+            kwargs["description"] = Markdown(description)
+
+        if help is not None:
+            kwargs["help"] = help
+
+        kwargs["formatter_class"] = HelpFormatter
+        super().__init__(*args, **kwargs)
+
+
+class Parser(RichParser):
+    log_level = argclass.LogLevel
+
+
+if __name__ == "__main__":
+    parser = Parser(
+        formatter_class=RawTextRichHelpFormatter,
+        description=Group(
+            Text("This code produces this help:\n\n"),
+            Panel(Syntax(open(__file__).read().strip(), "python")),
+        ),
+    )
+    parser.parse_args()
+    parser.sanitize_env()
+    exit(parser())
+```
+
+[![Help Output](https://raw.githubusercontent.com/mosquito/argclass/master/docs/images/rich_help_output.png)](https://raw.githubusercontent.com/mosquito/argclass/master/.github/rich_example.png)
