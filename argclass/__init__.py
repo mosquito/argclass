@@ -37,7 +37,8 @@ def read_configs(
     filenames = []
     for path in paths:
         path_obj = Path(path).expanduser().resolve()
-        if not path_obj.exists() or not os.access(path_obj, os.R_OK):
+        # check the access first, because the parent directory may not be readable
+        if not os.access(path_obj, os.R_OK) or not path_obj.exists():
             continue
         filenames.append(path_obj)
 
