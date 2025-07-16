@@ -635,4 +635,4 @@ if __name__ == "__main__":
     exit(parser())
 ```
 
-[![Help Output](https://raw.githubusercontent.com/mosquito/argclass/master/docs/images/rich_help_output.png)](https://raw.githubusercontent.com/mosquito/argclass/master/.github/rich_example.png)
+![Help Output](https://raw.githubusercontent.com/mosquito/argclass/master/.github/rich_example.png)
