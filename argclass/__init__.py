@@ -397,8 +397,10 @@ def _make_action_true_argument(
     if kind is bool:
         if default is False:
             kw["action"] = Actions.STORE_TRUE
+            kw["default"] = False
         elif default is True:
             kw["action"] = Actions.STORE_FALSE
+            kw["default"] = True
         else:
             raise TypeError(f"Can not set default {default!r} for bool")
     elif kind == Optional[bool]:

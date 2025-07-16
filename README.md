@@ -114,6 +114,35 @@ parser.parse_args(["--numbers", "1", "2", "3"])
 assert parser.numbers == frozenset([1, 2, 3])
 ```
 
+## Boolean arguments
+
+Boolean arguments can be specified using like this:
+
+<!--- name: test_bools --->
+```python
+import argclass
+
+
+class ArgumentParser(argclass.Parser):
+    # Complete form you have to set default and action
+    stored_true: bool = argclass.Argument(
+        action=argclass.Actions.STORE_TRUE,
+        default=False
+    )
+    # Short form with default value
+    # This is the alias for: argclass.Argument(action=argclass.Actions.STORE_TRUE, default=False)
+    stored_true_short: bool = False
+    # This is the alias for: argclass.Argument(action=argclass.Actions.STORE_FALSE, default=True)
+    stored_false: bool = True
+
+
+parser = ArgumentParser(auto_env_var_prefix='APP_')
+arguments = parser.parse_args(["--stored-true-short"])
+assert arguments.stored_true is False
+assert arguments.stored_true_short is True
+assert arguments.stored_false is True
+```
+
 ## Configuration Files
 
 Parser objects can get default values from environment variables or from specified configuration files.
