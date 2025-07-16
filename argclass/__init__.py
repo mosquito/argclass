@@ -34,15 +34,13 @@ def read_configs(
     kwargs.setdefault("strict", False)
     parser = configparser.ConfigParser(**kwargs)
 
-    filenames = list(
-        map(
-            lambda p: p.resolve(),
-            filter(
-                lambda p: p.is_file(),
-                map(lambda x: Path(x).expanduser(), paths),
-            ),
-        ),
-    )
+    filenames = []
+    for path in paths:
+        path_obj = Path(path).expanduser().resolve()
+        if not path_obj.exists() or not os.access(path_obj, os.R_OK):
+            continue
+        filenames.append(path_obj)
+
     config_paths = parser.read(filenames)
 
     result: Dict[str, Union[str, Dict[str, str]]] = dict(
@@ -602,12 +600,13 @@ class Parser(AbstractParser, Base):
     def __init__(
         self, config_files: Iterable[Union[str, Path]] = (),
         auto_env_var_prefix: Optional[str] = None,
+        strict_config: bool = False,
         **kwargs: Any,
     ):
         super().__init__()
         self.current_subparsers = ()
         self._config_files = config_files
-        self._config, filenames = read_configs(*config_files)
+        self._config, filenames = read_configs(*config_files, strict=strict_config)
 
         self._epilog = kwargs.pop("epilog", "")
 

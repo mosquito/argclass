@@ -63,3 +63,18 @@ def test_config_defaults(tmp_path: Path):
     parser = Parser(config_files=[config_file])
     parser.parse_args([])
     assert parser.foo == "bar"
+
+
+def test_unreadable_config(tmp_path: Path):
+    config_file = tmp_path / "config.ini"
+    with open(config_file, "w") as fp:
+        fp.write("TOP SECRET")
+
+    # Make the config file not read just writeable
+    config_file.chmod(0o200)
+
+    class Parser(argclass.Parser):
+        pass
+
+    parser = Parser(config_files=[config_file])
+    parser.parse_args([])
