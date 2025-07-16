@@ -606,7 +606,9 @@ class Parser(AbstractParser, Base):
         super().__init__()
         self.current_subparsers = ()
         self._config_files = config_files
-        self._config, filenames = read_configs(*config_files, strict=strict_config)
+        self._config, filenames = read_configs(
+            *config_files, strict=strict_config
+        )
 
         self._epilog = kwargs.pop("epilog", "")
 
