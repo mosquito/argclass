@@ -154,6 +154,60 @@ def test_group_aliases():
     assert parser.group.foo == "egg"
 
 
+def test_group_empty_prefix():
+    """Test that prefix='' allows arguments without group prefix (issue #26)."""
+    class AddressPort(argclass.Group):
+        address: str
+        port: int
+
+    class Parser(argclass.Parser):
+        api: AddressPort = AddressPort(
+            prefix="",
+            defaults=dict(address="localhost", port=80),
+        )
+        telemetry: AddressPort = AddressPort(
+            defaults=dict(address="0.0.0.0", port=8082),
+        )
+
+    parser = Parser()
+
+    # With prefix='', we get --address and --port (no prefix)
+    # telemetry uses default prefix, so --telemetry-address and --telemetry-port
+    parser.parse_args([
+        "--address", "192.168.1.1",
+        "--port", "9000",
+        "--telemetry-address", "10.0.0.1",
+        "--telemetry-port", "9999",
+    ])
+    assert parser.api.address == "192.168.1.1"
+    assert parser.api.port == 9000
+    assert parser.telemetry.address == "10.0.0.1"
+    assert parser.telemetry.port == 9999
+
+
+def test_group_empty_prefix_with_defaults():
+    """Test empty prefix with default values (issue #27)."""
+    class LearningOptions(argclass.Group):
+        batch_size: int = 256
+        learning_rate: float = 1e-1
+
+    class Parser(argclass.Parser):
+        learning_opts = LearningOptions(title="learning options", prefix="")
+
+    parser = Parser()
+
+    # Should use --batch-size, not --learning-opts-batch-size
+    parser.parse_args(["--batch-size", "512", "--learning-rate", "0.01"])
+    assert parser.learning_opts.batch_size == 512
+    assert parser.learning_opts.learning_rate == 0.01
+
+    # Test defaults work
+    parser2 = Parser()
+    parser2.parse_args([])
+    assert parser2.learning_opts.batch_size == 256
+    assert parser2.learning_opts.learning_rate == 0.1
+
+
 def test_short_parser_definition():
     class Parser(argclass.Parser):
         foo: str

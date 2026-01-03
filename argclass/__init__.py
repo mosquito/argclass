@@ -725,7 +725,8 @@ class Parser(AbstractParser, Base):
 
             for name, argument in group.__arguments__.items():
                 aliases = set(argument.aliases)
-                dest = "_".join((group._prefix or group_name, name))
+                prefix = group._prefix if group._prefix is not None else group_name
+                dest = f"{prefix}_{name}" if prefix else name
 
                 if not aliases:
                     aliases.add(f"--{self.get_cli_name(dest)}")
