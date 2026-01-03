@@ -50,14 +50,29 @@ def Argument(
     Returns:
         TypedArgument instance.
 
-    Example - type vs converter:
+    Example - type vs converter with nargs:
         # type: converts each CLI value individually
         numbers = Argument(nargs="+", type=int)
         # Parsing ["1", "2"] -> calls int("1"), int("2") -> [1, 2]
 
-        # converter: transforms the final result
+        # converter: transforms the final result after type conversion
         unique = Argument(nargs="+", type=int, converter=set)
         # Parsing ["1", "2", "1"] -> [1, 2, 1] -> set([1, 2, 1]) -> {1, 2}
+
+        # Combining type and converter for set[int]:
+        class Parser(argclass.Parser):
+            numbers: set[int] = Argument(
+                type=int,       # Convert each "1", "2" to int
+                converter=set,  # Convert [1, 2, 1] to {1, 2}
+                nargs="+",
+            )
+
+        # Alternative: single converter function for set[int]:
+        class Parser(argclass.Parser):
+            numbers: set[int] = Argument(
+                converter=lambda vals: set(map(int, vals)),
+                nargs="+",
+            )
     """
     return TypedArgument(
         action=action,

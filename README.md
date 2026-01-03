@@ -565,10 +565,10 @@ Use `parser.sanitize_env()` to remove used environment variables after parsing.
 
 For complex types, use `type` or `converter` arguments. Understanding the difference is important:
 
-| Parameter | When Called | Called With | Use Case |
-|-----------|-------------|-------------|----------|
-| `type` | **During** parsing | Each individual string value | Basic type conversion (str→int, str→Path) |
-| `converter` | **After** parsing | Final parsed value (may be a list) | Post-processing (list→set, JSON→dict) |
+| Parameter   | When Called         | Called With                        | Use Case                                   |
+|-------------|---------------------|------------------------------------|--------------------------------------------|
+| `type`      | **During** parsing  | Each individual string value       | Basic type conversion (str→int, str→Path)  |
+| `converter` | **After** parsing   | Final parsed value (may be a list) | Post-processing (list→set, JSON→dict)      |
 
 ### Basic Example
 

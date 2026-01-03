@@ -1065,3 +1065,69 @@ def test_set_in_group():
     parser = Parser()
     parser.parse_args(["--tags-values", "a", "b", "a"])
     assert parser.tags.values == {"a", "b"}
+
+
+def test_set_int_with_explicit_type_and_converter():
+    """Test set[int] using explicit type=int and converter=set.
+
+    This demonstrates using Argument() with:
+    - type=int: converts each CLI string to int
+    - converter=set: converts the resulting list to a set
+    - nargs="+": accepts one or more values
+    """
+
+    class Parser(argclass.Parser):
+        numbers: set[int] = argclass.Argument(
+            type=int,
+            converter=set,
+            nargs="+",
+        )
+
+    parser = Parser()
+    parser.parse_args(["--numbers", "1", "2", "3", "2", "1"])
+
+    assert isinstance(parser.numbers, set)
+    assert parser.numbers == {1, 2, 3}
+    # Verify duplicates are removed
+    assert len(parser.numbers) == 3
+
+
+def test_set_int_optional_with_explicit_type_and_converter():
+    """Test Optional[set[int]] using explicit type and converter."""
+
+    class Parser(argclass.Parser):
+        numbers: Optional[set[int]] = argclass.Argument(
+            type=int,
+            converter=set,
+            nargs="*",
+        )
+
+    parser = Parser()
+
+    # Without argument - should get empty set
+    parser.parse_args([])
+    assert parser.numbers == set()
+
+    # With argument - should get set of ints
+    parser.parse_args(["--numbers", "10", "20", "10"])
+    assert parser.numbers == {10, 20}
+
+
+def test_set_int_with_single_converter_function():
+    """Test set[int] using a single converter function.
+
+    Alternative approach: use one converter that does both
+    int conversion and set creation.
+    """
+
+    class Parser(argclass.Parser):
+        numbers: set[int] = argclass.Argument(
+            converter=lambda vals: set(map(int, vals)),
+            nargs="+",
+        )
+
+    parser = Parser()
+    parser.parse_args(["--numbers", "1", "2", "3", "2", "1"])
+
+    assert isinstance(parser.numbers, set)
+    assert parser.numbers == {1, 2, 3}
