@@ -8,7 +8,15 @@ argument parsers declaratively using classes with type annotations.
 from enum import EnumMeta
 
 from ._actions import ConfigAction, INIConfigAction, JSONConfigAction
-from ._factory import Argument, Config, EnumArgument, LogLevel, Secret
+from ._factory import (
+    Argument,
+    ArgumentSequence,
+    ArgumentSingle,
+    Config,
+    EnumArgument,
+    LogLevel,
+    Secret,
+)
 from ._parser import Base, Destination, Group, Meta, Parser
 from ._secret import SecretString
 from ._store import (
@@ -57,6 +65,8 @@ __all__ = [
     "JSONConfigAction",
     # Factory functions
     "Argument",
+    "ArgumentSingle",
+    "ArgumentSequence",
     "EnumArgument",
     "Secret",
     "Config",

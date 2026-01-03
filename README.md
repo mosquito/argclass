@@ -37,9 +37,10 @@ $ python server.py --host 0.0.0.0 --port 9000 --debug
 | Environment variables    | ✅ Built-in | ❌          | ❌ Plugin    |
 | Secret masking           | ✅ Built-in | ❌          | ❌           |
 | Argument groups          | ✅ Reusable | ⚠️ Limited | ❌           |
-| Dependencies             | **None**   | stdlib     | many        |
+| Dependencies             | stdlib     | stdlib     | many        |
 
-**argclass** is ideal for applications that need configuration from multiple sources (CLI + config files + environment) with full type safety.
+**argclass** is ideal for applications that need configuration from multiple sources 
+(CLI + config files + environment) with full type safety.
 
 ## Table of Contents
 

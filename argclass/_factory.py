@@ -1,13 +1,204 @@
 """Factory functions for creating arguments."""
 
-from functools import partial
 from pathlib import Path
-from typing import Any, Iterable, Optional, Type, Union
+from typing import (
+    Any,
+    Callable,
+    Iterable,
+    List,
+    Literal,
+    Optional,
+    Type,
+    TypeVar,
+    Union,
+    cast,
+    overload,
+)
 
 from argparse import Action
 
 from ._store import ConfigArgument, INIConfig, TypedArgument
-from ._types import Actions, ConverterType, LogLevelEnum, NargsType
+from ._types import Actions, ConverterType, LogLevelEnum, Nargs, NargsType
+
+T = TypeVar("T")
+
+# Nargs literals that produce sequences
+_NargsSequence = Union[Literal["+", "*"], Nargs, int]
+
+
+# noinspection PyShadowingBuiltins
+def ArgumentSingle(
+    *aliases: str,
+    type: Type[T],
+    action: Union[Actions, Type[Action]] = Actions.default(),
+    choices: Optional[Iterable[str]] = None,
+    const: Optional[Any] = None,
+    converter: Optional[Callable[[T], T]] = None,
+    default: Optional[T] = None,
+    env_var: Optional[str] = None,
+    help: Optional[str] = None,
+    metavar: Optional[str] = None,
+    required: Optional[bool] = None,
+    secret: bool = False,
+) -> T:
+    """
+    Create a single-value argument with precise typing.
+
+    Use this when you need exact type inference for a single value.
+    The `type` parameter is required and determines the return type.
+
+    Example:
+        class Parser(argclass.Parser):
+            count: int = argclass.ArgumentSingle(type=int, default=10)
+            name: str = argclass.ArgumentSingle(type=str)
+    """
+    return cast(
+        T,
+        TypedArgument(
+            action=action,
+            aliases=aliases,
+            choices=choices,
+            const=const,
+            converter=converter,
+            default=default,
+            secret=secret,
+            env_var=env_var,
+            help=help,
+            metavar=metavar,
+            nargs=None,
+            required=required,
+            type=type,
+        ),
+    )
+
+
+# noinspection PyShadowingBuiltins
+def ArgumentSequence(
+    *aliases: str,
+    type: Type[T],
+    nargs: _NargsSequence = "+",
+    action: Union[Actions, Type[Action]] = Actions.default(),
+    choices: Optional[Iterable[str]] = None,
+    const: Optional[Any] = None,
+    converter: Optional[Callable[[List[T]], Any]] = None,
+    default: Optional[List[T]] = None,
+    env_var: Optional[str] = None,
+    help: Optional[str] = None,
+    metavar: Optional[str] = None,
+    required: Optional[bool] = None,
+    secret: bool = False,
+) -> List[T]:
+    """
+    Create a multi-value argument with precise typing.
+
+    Use this when you need exact type inference for a list of values.
+    The `type` parameter is required and determines the element type.
+
+    Args:
+        nargs: Number of values. Defaults to "+" (one or more).
+            Use "*" for zero or more, or an int for exact count.
+
+    Example:
+        class Parser(argclass.Parser):
+            files: list[str] = argclass.ArgumentSequence(type=str)
+            numbers: list[int] = argclass.ArgumentSequence(
+                type=int, nargs="*", default=[]
+            )
+    """
+    return cast(
+        List[T],
+        TypedArgument(
+            action=action,
+            aliases=aliases,
+            choices=choices,
+            const=const,
+            converter=converter,
+            default=default,
+            secret=secret,
+            env_var=env_var,
+            help=help,
+            metavar=metavar,
+            nargs=nargs,
+            required=required,
+            type=type,
+        ),
+    )
+
+
+# Overload: type + nargs (sequence) → List[T]
+@overload
+def Argument(
+    *aliases: str,
+    type: Type[T],
+    nargs: _NargsSequence,
+    action: Union[Actions, Type[Action]] = ...,
+    choices: Optional[Iterable[str]] = ...,
+    const: Optional[Any] = ...,
+    converter: Optional[ConverterType] = ...,
+    default: Optional[Any] = ...,
+    env_var: Optional[str] = ...,
+    help: Optional[str] = ...,
+    metavar: Optional[str] = ...,
+    required: Optional[bool] = ...,
+    secret: bool = ...,
+) -> List[T]: ...
+
+
+# Overload: type without nargs (single) → T
+@overload
+def Argument(
+    *aliases: str,
+    type: Type[T],
+    action: Union[Actions, Type[Action]] = ...,
+    choices: Optional[Iterable[str]] = ...,
+    const: Optional[Any] = ...,
+    converter: Optional[ConverterType] = ...,
+    default: Optional[T] = ...,
+    env_var: Optional[str] = ...,
+    help: Optional[str] = ...,
+    metavar: Optional[str] = ...,
+    nargs: None = ...,
+    required: Optional[bool] = ...,
+    secret: bool = ...,
+) -> T: ...
+
+
+# Overload: converter determines return type
+@overload
+def Argument(
+    *aliases: str,
+    converter: Callable[..., T],
+    action: Union[Actions, Type[Action]] = ...,
+    choices: Optional[Iterable[str]] = ...,
+    const: Optional[Any] = ...,
+    default: Optional[Any] = ...,
+    env_var: Optional[str] = ...,
+    help: Optional[str] = ...,
+    metavar: Optional[str] = ...,
+    nargs: NargsType = ...,
+    required: Optional[bool] = ...,
+    secret: bool = ...,
+    type: Optional[ConverterType] = ...,
+) -> T: ...
+
+
+# Overload: fallback
+@overload
+def Argument(
+    *aliases: str,
+    action: Union[Actions, Type[Action]] = ...,
+    choices: Optional[Iterable[str]] = ...,
+    const: Optional[Any] = ...,
+    converter: Optional[ConverterType] = ...,
+    default: Optional[Any] = ...,
+    env_var: Optional[str] = ...,
+    help: Optional[str] = ...,
+    metavar: Optional[str] = ...,
+    nargs: NargsType = ...,
+    required: Optional[bool] = ...,
+    secret: bool = ...,
+    type: None = ...,
+) -> Any: ...
 
 
 # noinspection PyShadowingBuiltins
@@ -28,6 +219,8 @@ def Argument(
 ) -> Any:
     """
     Create a typed argument for a Parser or Group class.
+
+    Dispatches to ArgumentSingle or ArgumentSequence based on nargs.
 
     Args:
         *aliases: Command-line aliases (e.g., "-n", "--name").
@@ -74,6 +267,41 @@ def Argument(
                 nargs="+",
             )
     """
+    # Dispatch to typed functions when type is provided
+    if type is not None:
+        if nargs in ("+", "*") or isinstance(nargs, (int, Nargs)):
+            return ArgumentSequence(
+                *aliases,
+                type=type,  # type: ignore[arg-type]
+                nargs=nargs,  # type: ignore[arg-type]
+                action=action,
+                choices=choices,
+                const=const,
+                converter=converter,  # type: ignore[arg-type]
+                default=default,
+                env_var=env_var,
+                help=help,
+                metavar=metavar,
+                required=required,
+                secret=secret,
+            )
+        else:
+            return ArgumentSingle(
+                *aliases,
+                type=type,  # type: ignore[arg-type]
+                action=action,
+                choices=choices,
+                const=const,
+                converter=converter,  # type: ignore[arg-type]
+                default=default,
+                env_var=env_var,
+                help=help,
+                metavar=metavar,
+                required=required,
+                secret=secret,
+            )
+
+    # Fallback for untyped arguments
     return TypedArgument(
         action=action,
         aliases=aliases,
@@ -151,7 +379,37 @@ def EnumArgument(
     )
 
 
-Secret = partial(Argument, secret=True)
+# noinspection PyShadowingBuiltins
+def Secret(
+    *aliases: str,
+    action: Union[Actions, Type[Action]] = Actions.default(),
+    choices: Optional[Iterable[str]] = None,
+    const: Optional[Any] = None,
+    converter: Optional[ConverterType] = None,
+    default: Optional[Any] = None,
+    env_var: Optional[str] = None,
+    help: Optional[str] = None,
+    metavar: Optional[str] = None,
+    nargs: NargsType = None,
+    required: Optional[bool] = None,
+    type: Optional[ConverterType] = None,
+) -> Any:
+    """Create a secret argument (hidden from help output)."""
+    return Argument(  # type: ignore[misc,call-overload]
+        *aliases,
+        action=action,
+        choices=choices,
+        const=const,
+        converter=converter,  # type: ignore[arg-type]
+        default=default,
+        env_var=env_var,
+        help=help,
+        metavar=metavar,
+        nargs=nargs,
+        required=required,
+        secret=True,
+        type=type,
+    )
 
 
 # noinspection PyShadowingBuiltins
