@@ -38,12 +38,19 @@ dev = [
     "coveralls>=3.3.1",
     "pytest>=7.2",
     "pytest-cov>=4.0.0",
-    "pylama>=8.4.1",
+    "ruff>=0.8",
     "setuptools>=69.0.2",
     "markdown-pytest>=0.3.1",
     "pyyaml>=6.0.2,<7",
 ]
 mypy = ["mypy>=1.13"]
+
+[tool.ruff]
+line-length = 80
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "C90"]
+ignore = ["C901"]
 
 [tool.uv]
 default-groups = [

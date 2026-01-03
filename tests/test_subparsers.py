@@ -126,13 +126,15 @@ def test_nested_subparsers() -> None:
         sub2: Optional[SubParser] = SubParser()
 
     parser = Parser()
-    args = parser.parse_args([
-        "sub",
-        "--val=lol",
-        "subsub",
-        "--group-value=2",
-        "--str-value=kek",
-    ])
+    args = parser.parse_args(
+        [
+            "sub",
+            "--val=lol",
+            "subsub",
+            "--group-value=2",
+            "--str-value=kek",
+        ]
+    )
 
     assert args.sub.val == "lol"
     assert args.sub.subsub.str_value == "kek"

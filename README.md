@@ -6,7 +6,34 @@ A wrapper around the standard `argparse` module that allows you to describe argu
 
 By default, the `argparse` module suggests creating parsers imperatively, which is not convenient for type checking and attribute access. Additionally, IDE autocompletion and type hints are not applicable in this case.
 
-This module allows you to declare command-line parsers using classes.
+This module allows you to declare command-line parsers using classes with full type safety and IDE support.
+
+## Table of Contents
+
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Type Annotations](#type-annotations)
+  - [Optional Types](#optional-types)
+  - [PEP 604 Union Types](#pep-604-union-types)
+  - [List and Collection Types](#list-and-collection-types)
+- [Boolean Arguments](#boolean-arguments)
+- [Argument Groups](#argument-groups)
+  - [Empty Prefix for Groups](#empty-prefix-for-groups)
+- [Parser Inheritance](#parser-inheritance)
+- [Subparsers](#subparsers)
+- [Configuration Files](#configuration-files)
+- [Environment Variables](#environment-variables)
+- [Value Conversion](#value-conversion)
+- [Enum Arguments](#enum-arguments)
+- [Secrets](#secrets)
+- [Custom Config Parsers](#custom-config-parsers)
+- [Third Party Integration](#third-party-integration)
+
+## Installation
+
+```bash
+pip install argclass
+```
 
 ## Quick Start
 
@@ -24,99 +51,267 @@ assert parser.recursive
 assert parser.preserve_attributes
 ```
 
-As you can see, this example shows basic module usage. When you want to specify argument defaults and other options, you have to use `argclass.Argument`.
+Arguments are automatically derived from class annotations.
 
-## Subparsers
+## When to Use `argclass.Argument`
 
-The following example shows how to use subparsers:
+Most arguments can be defined with just type annotations. Use `argclass.Argument()` only when you need extra configuration:
 
+| You need...              | Just annotation       | Use `argclass.Argument()`      |
+|--------------------------|-----------------------|--------------------------------|
+| Required string          | `name: str`           | -                              |
+| Optional with default    | `count: int = 10`     | -                              |
+| Boolean flag             | `debug: bool = False` | -                              |
+| Optional (None default)  | `name: str \| None`   | -                              |
+| Path argument            | `config: Path`        | -                              |
+| **Help text**            | -                     | `Argument(help="...")`         |
+| **Short alias**          | -                     | `Argument("-n", "--name")`     |
+| **Environment variable** | -                     | `Argument(env_var="APP_NAME")` |
+| **Multiple values**      | -                     | `Argument(nargs="+")`          |
+| **Choices**              | -                     | `Argument(choices=["a", "b"])` |
+| **Custom conversion**    | -                     | `Argument(converter=func)`     |
+| **Hide from help**       | -                     | `Argument(secret=True)`        |
+
+**Simple example - no `Argument()` needed:**
+
+<!--- name: test_simple_no_argument --->
 ```python
 import argclass
-
-class SubCommand(argclass.Parser):
-    comment: str
-
-    def __call__(self) -> int:
-        endpoint: str = self.__parent__.endpoint
-        print("Subcommand called", self, "endpoint", endpoint)
-        return 0
+from pathlib import Path
 
 class Parser(argclass.Parser):
-    endpoint: str
-    subcommand = SubCommand()
-
-if __name__ == '__main__':
-    parser = Parser()
-    parser.parse_args()
-    exit(parser())
-```
-
-The `__call__` method will be called when the subparser is used. Otherwise, help will be printed.
-
-## Value Conversion
-
-If an argument has a generic or composite type, you must explicitly describe it using `argclass.Argument`, specifying a converter function with the `type` or `converter` argument to transform the value after parsing.
-
-The main differences between `type` and `converter` are:
-
-* `type` will be directly passed to the `argparse.ArgumentParser.add_argument` method.
-* The `converter` function will be called after parsing the argument.
-
-<!--- name: test_converter_example --->
-```python
-import uuid
-import argclass
-
-def string_uid(value: str) -> uuid.UUID:
-    return uuid.uuid5(uuid.NAMESPACE_OID, value)
-
-class Parser(argclass.Parser):
-    strid1: uuid.UUID = argclass.Argument(converter=string_uid)
-    strid2: uuid.UUID = argclass.Argument(type=string_uid)
+    name: str                      # required
+    count: int = 10                # optional with default
+    debug: bool = False            # flag
+    config: Path | None = None     # optional path
 
 parser = Parser()
-parser.parse_args(["--strid1=hello", "--strid2=world"])
-assert parser.strid1 == uuid.uuid5(uuid.NAMESPACE_OID, 'hello')
-assert parser.strid2 == uuid.uuid5(uuid.NAMESPACE_OID, 'world')
+parser.parse_args(["--name", "test", "--debug"])
+assert parser.name == "test"
+assert parser.count == 10
+assert parser.debug is True
+assert parser.config is None
 ```
 
-As you can see, the `string_uid` function is called in both cases, but `converter` is applied after parsing the argument.
+**When you need more control:**
 
-The following example shows how `type` is applied to each item in a list when using `nargs`:
-
-<!--- name: test_list_converter_example --->
+<!--- name: test_when_argument_needed --->
 ```python
 import argclass
+from typing import List
 
 class Parser(argclass.Parser):
-    numbers = argclass.Argument(nargs=argclass.Nargs.ONE_OR_MORE, type=int)
-
-parser = Parser()
-parser.parse_args(["--numbers", "1", "2", "3"])
-assert parser.numbers == [1, 2, 3]
-```
-
-`type` will be applied to each item in the list of arguments.
-
-If you want to convert a list of strings to a list of integers and then to a `frozenset`, you can use the following example:
-
-<!--- name: test_list_converter_frozenset_example --->
-```python
-import argclass
-
-class Parser(argclass.Parser):
-    numbers = argclass.Argument(
-        nargs=argclass.Nargs.ONE_OR_MORE, type=int, converter=frozenset
+    # Short alias and help text
+    name: str = argclass.Argument(
+        "-n", "--name",
+        help="Your name"
+    )
+    # Multiple values
+    files: List[str] = argclass.Argument(
+        nargs="+",
+        help="Files to process"
+    )
+    # Restricted choices
+    mode: str = argclass.Argument(
+        choices=["fast", "slow", "auto"],
+        default="auto"
     )
 
 parser = Parser()
-parser.parse_args(["--numbers", "1", "2", "3"])
-assert parser.numbers == frozenset([1, 2, 3])
+parser.parse_args(["-n", "Alice", "--files", "a.txt", "b.txt", "--mode", "fast"])
+assert parser.name == "Alice"
+assert parser.files == ["a.txt", "b.txt"]
+assert parser.mode == "fast"
 ```
 
-## Boolean arguments
+## Type Annotations
 
-Boolean arguments can be specified using like this:
+argclass uses type annotations to determine argument types. Simple types like `str`, `int`, `float` are supported out of the box.
+
+<!--- name: test_type_annotations --->
+```python
+import argclass
+
+class Parser(argclass.Parser):
+    name: str                    # required string argument
+    count: int = 10              # optional integer with default
+    threshold: float = 0.5       # optional float with default
+
+parser = Parser()
+parser.parse_args(["--name", "test", "--count", "5"])
+assert parser.name == "test"
+assert parser.count == 5
+assert parser.threshold == 0.5
+```
+
+### Optional Types
+
+Use `Optional[T]` to make an argument optional (not required) with `None` as default:
+
+<!--- name: test_optional_example --->
+```python
+import argclass
+from typing import Optional
+
+class Parser(argclass.Parser):
+    required_arg: str                  # required
+    optional_arg: Optional[str]        # optional, defaults to None
+    optional_with_default: Optional[int] = 42  # optional with default
+
+parser = Parser()
+parser.parse_args(["--required-arg", "value"])
+assert parser.required_arg == "value"
+assert parser.optional_arg is None
+assert parser.optional_with_default == 42
+```
+
+### PEP 604 Union Types
+
+Python 3.10+ union syntax (`X | None`) is fully supported:
+
+<!--- name: test_pep604_example --->
+```python
+import argclass
+
+class Parser(argclass.Parser):
+    name: str | None                   # optional string
+    count: int | None = 10             # optional with default
+
+parser = Parser()
+parser.parse_args([])
+assert parser.name is None
+assert parser.count == 10
+
+parser.parse_args(["--name", "test", "--count", "5"])
+assert parser.name == "test"
+assert parser.count == 5
+```
+
+### List and Collection Types
+
+Container types are automatically handled - just use the type annotation:
+
+<!--- name: test_list_types --->
+```python
+import argclass
+
+class Parser(argclass.Parser):
+    # list[str] and List[str] are equivalent (PEP 585)
+    names: list[str]                  # required list of strings
+    numbers: list[int]                # required list of integers
+
+    # set[T] automatically deduplicates values
+    unique_ids: set[int]              # required unique integers
+
+    # frozenset[T] for immutable collections
+    tags: frozenset[str]              # required immutable set
+
+    # Optional collections use Optional[] or | None
+    extras: list[str] | None          # optional list
+
+parser = Parser()
+parser.parse_args([
+    "--names", "alice", "bob",
+    "--numbers", "1", "2", "3",
+    "--unique-ids", "1", "2", "2", "3",
+    "--tags", "web", "api", "web"
+])
+assert parser.names == ["alice", "bob"]
+assert parser.numbers == [1, 2, 3]
+assert parser.unique_ids == {1, 2, 3}
+assert parser.tags == frozenset(["web", "api"])
+assert parser.extras is None
+```
+
+Both `list[str]` (PEP 585, Python 3.9+) and `List[str]` (typing module) are supported.
+
+### Path Arguments
+
+`Path` type is automatically recognized:
+
+<!--- name: test_path_types --->
+```python
+import argclass
+from pathlib import Path
+
+class Parser(argclass.Parser):
+    config: Path
+    output: Path = Path("./output")
+
+parser = Parser()
+parser.parse_args(["--config", "/etc/app/config.yaml"])
+assert parser.config == Path("/etc/app/config.yaml")
+assert parser.output == Path("./output")
+```
+
+### Complex Type Conversions
+
+For complex types, use `converter` to transform parsed values:
+
+<!--- name: test_complex_types --->
+```python
+import argclass
+from typing import Tuple
+import json
+
+def parse_json(value: str) -> dict:
+    return json.loads(value)
+
+def parse_endpoint(value: str) -> Tuple[str, int]:
+    host, port = value.rsplit(":", 1)
+    return (host, int(port))
+
+class Parser(argclass.Parser):
+    # JSON string to dict
+    metadata: dict = argclass.Argument(
+        converter=parse_json,
+        default="{}"
+    )
+    # "host:port" string to tuple
+    endpoint: Tuple[str, int] = argclass.Argument(
+        converter=parse_endpoint
+    )
+
+parser = Parser()
+parser.parse_args([
+    "--metadata", '{"env": "prod", "version": 2}',
+    "--endpoint", "localhost:8080"
+])
+assert parser.metadata == {"env": "prod", "version": 2}
+assert parser.endpoint == ("localhost", 8080)
+```
+
+### Multiple Values with Choices
+
+Restrict arguments to specific choices:
+
+<!--- name: test_choices_types --->
+```python
+import argclass
+from typing import List
+
+class Parser(argclass.Parser):
+    # Single choice
+    log_format: str = argclass.Argument(
+        choices=["json", "text", "structured"],
+        default="text"
+    )
+    # Multiple choices
+    features: List[str] = argclass.Argument(
+        nargs="*",
+        choices=["auth", "cache", "metrics", "tracing"],
+        default=[]
+    )
+
+parser = Parser()
+parser.parse_args(["--log-format", "json", "--features", "auth", "metrics"])
+assert parser.log_format == "json"
+assert parser.features == ["auth", "metrics"]
+```
+
+## Boolean Arguments
+
+Boolean arguments use `store_true`/`store_false` actions based on their default value:
 
 <!--- name: test_bools --->
 ```python
@@ -124,28 +319,186 @@ import argclass
 
 
 class ArgumentParser(argclass.Parser):
-    # Complete form you have to set default and action
-    stored_true: bool = argclass.Argument(
-        action=argclass.Actions.STORE_TRUE,
-        default=False
-    )
-    # Short form with default value
-    # This is the alias for: argclass.Argument(action=argclass.Actions.STORE_TRUE, default=False)
+    # Default False: --flag sets it to True
     stored_true_short: bool = False
-    # This is the alias for: argclass.Argument(action=argclass.Actions.STORE_FALSE, default=True)
+    # Default True: --no-cache sets it to False
     stored_false: bool = True
 
 
-parser = ArgumentParser(auto_env_var_prefix='APP_')
-arguments = parser.parse_args(["--stored-true-short"])
-assert arguments.stored_true is False
-assert arguments.stored_true_short is True
-assert arguments.stored_false is True
+parser = ArgumentParser()
+parser.parse_args(["--stored-true-short"])
+assert parser.stored_true_short is True
+assert parser.stored_false is True
 ```
+
+## Argument Groups
+
+Groups allow organizing related arguments together and **reusing the same definition** for multiple purposes. Each group instance gets its own prefix based on the attribute name:
+
+<!-- name: test_argument_groups_example -->
+```python
+import argclass
+
+class HostPortGroup(argclass.Group):
+    host: str = "localhost"
+    port: int
+
+class Parser(argclass.Parser):
+    api = HostPortGroup(title="API server", defaults={"port": 8080})
+    metrics = HostPortGroup(title="Metrics endpoint", defaults={"port": 9090})
+
+parser = Parser()
+parser.parse_args([
+    "--api-host", "0.0.0.0",
+    "--api-port", "8888",
+    "--metrics-port", "9999"
+])
+assert parser.api.host == "0.0.0.0"
+assert parser.api.port == 8888
+assert parser.metrics.host == "localhost"
+assert parser.metrics.port == 9999
+```
+
+This produces help output like:
+```
+API server:
+  --api-host API_HOST   (default: localhost)
+  --api-port API_PORT   (default: 8080)
+
+Metrics endpoint:
+  --metrics-host METRICS_HOST
+                        (default: localhost)
+  --metrics-port METRICS_PORT
+                        (default: 9090)
+```
+
+### Empty Prefix for Groups
+
+Use `prefix=""` to create arguments without a group prefix:
+
+<!--- name: test_empty_prefix --->
+```python
+import argclass
+
+class ConnectionGroup(argclass.Group):
+    host: str = "localhost"
+    port: int = 8080
+
+class Parser(argclass.Parser):
+    # No prefix: --host and --port
+    conn = ConnectionGroup(prefix="")
+
+parser = Parser()
+parser.parse_args(["--host", "example.com", "--port", "9000"])
+assert parser.conn.host == "example.com"
+assert parser.conn.port == 9000
+```
+
+You can also use custom prefixes:
+
+```python
+import argclass
+
+class ConnectionGroup(argclass.Group):
+    host: str = "localhost"
+    port: int = 8080
+
+class Parser(argclass.Parser):
+    # Custom prefix: --api-host and --api-port
+    conn = ConnectionGroup(prefix="api")
+
+parser = Parser()
+parser.parse_args(["--api-host", "example.com"])
+assert parser.conn.host == "example.com"
+```
+
+## Parser Inheritance
+
+Parsers can inherit from other parsers. All arguments from parent parsers are inherited and remain required if they were required in the parent:
+
+<!--- name: test_inheritance_example --->
+```python
+import argclass
+
+class BaseParser(argclass.Parser):
+    debug: bool = False
+    config: str                        # required in base
+
+class ExtendedParser(BaseParser):
+    output: str                        # required in extended
+
+parser = ExtendedParser()
+parser.parse_args(["--config", "app.ini", "--output", "result.txt", "--debug"])
+assert parser.debug is True
+assert parser.config == "app.ini"
+assert parser.output == "result.txt"
+```
+
+You can also inherit from groups to add their arguments directly to the parser:
+
+```python
+import argclass
+
+class AddressPort(argclass.Group):
+    address: str = "0.0.0.0"
+    port: int = 8080
+
+class Parser(argclass.Parser, AddressPort):
+    debug: bool = False
+
+parser = Parser()
+parser.parse_args(["--address", "127.0.0.1", "--port", "9000"])
+assert parser.address == "127.0.0.1"
+assert parser.port == 9000
+```
+
+## Subparsers
+
+Subparsers allow creating command-based CLIs:
+
+```python
+import argclass
+
+class CommitCommand(argclass.Parser):
+    message: str
+
+    def __call__(self) -> int:
+        print(f"Committing with message: {self.message}")
+        return 0
+
+class PushCommand(argclass.Parser):
+    remote: str = "origin"
+    branch: str = "main"
+
+    def __call__(self) -> int:
+        print(f"Pushing to {self.remote}/{self.branch}")
+        return 0
+
+class GitParser(argclass.Parser):
+    verbose: bool = False
+    commit = CommitCommand()
+    push = PushCommand()
+
+if __name__ == '__main__':
+    parser = GitParser()
+    parser.parse_args()
+    exit(parser())
+```
+
+Usage:
+```bash
+$ python git.py commit --message "Initial commit"
+Committing with message: Initial commit
+
+$ python git.py push --remote upstream --branch feature
+Pushing to upstream/feature
+```
+
+The `__parent__` attribute provides access to the parent parser from subcommands.
 
 ## Configuration Files
 
-Parser objects can get default values from environment variables or from specified configuration files.
+Parsers can read default values from INI configuration files:
 
 <!--- name: test_config_example --->
 ```python
@@ -176,152 +529,111 @@ with TemporaryDirectory() as tmpdir:
     assert parser.port == 8080
 ```
 
-When using configuration files, argclass uses Python's `ast.literal_eval` for parsing arguments with `nargs` and 
-complex types. This means that in your INI configuration files, you should write values in a syntax that `literal_eval`
-can parse for these specific arguments. 
-
-For regular arguments (simple types like strings, integers, booleans), you can write the values as-is.
-
-## Argument Groups
-
-The following example uses `argclass.Argument` and argument groups:
-
-<!-- name: test_argument_groups_example -->
-```python
-from typing import FrozenSet
-import logging
-import argclass
-
-class AddressPortGroup(argclass.Group):
-    address: str = argclass.Argument(default="127.0.0.1")
-    port: int
-
-class Parser(argclass.Parser):
-    log_level: int = argclass.LogLevel
-    http = AddressPortGroup(title="HTTP options", defaults=dict(port=8080))
-    rpc = AddressPortGroup(title="RPC options", defaults=dict(port=9090))
-    user_id: FrozenSet[int] = argclass.Argument(
-        nargs="*", type=int, converter=frozenset
-    )
-
-parser = Parser(
-    config_files=[".example.ini", "~/.example.ini", "/etc/example.ini"],
-    auto_env_var_prefix="EXAMPLE_"
-)
-parser.parse_args([])
-
-# Remove all used environment variables from os.environ
-parser.sanitize_env()
-
-logging.basicConfig(level=parser.log_level)
-logging.info('Listening http://%s:%d', parser.http.address, parser.http.port)
-logging.info('Listening rpc://%s:%d', parser.rpc.address, parser.rpc.port)
-
-assert parser.http.address == '127.0.0.1'
-assert parser.rpc.address == '127.0.0.1'
-
-assert parser.http.port == 8080
-assert parser.rpc.port == 9090
-```
-
-Argument groups are sections in the parser configuration. For example, in this case, the configuration file might be:
+Group arguments are read from INI sections:
 
 ```ini
 [DEFAULT]
 log_level=info
-user_id=[1, 2, 3]
 
-[http]
-port=9001
+[database]
+host=db.example.com
+port=5432
 
-[rpc]
-port=9002
+[cache]
+host=redis.example.com
+port=6379
 ```
 
-Run this script:
+## Environment Variables
 
-```shell
-$ python example.py
-INFO:root:Listening http://127.0.0.1:8080
-INFO:root:Listening rpc://127.0.0.1:9090
-```
-
-Example of `--help` output:
-
-```shell
-$ python example.py --help
-usage: example.py [-h] [--log-level {debug,info,warning,error,critical}]
-                  [--http-address HTTP_ADDRESS] [--http-port HTTP_PORT]
-                  [--rpc-address RPC_ADDRESS] [--rpc-port RPC_PORT]
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --log-level {debug,info,warning,error,critical}
-                        (default: info) [ENV: EXAMPLE_LOG_LEVEL]
-
-HTTP options:
-  --http-address HTTP_ADDRESS
-                        (default: 127.0.0.1) [ENV: EXAMPLE_HTTP_ADDRESS]
-  --http-port HTTP_PORT
-                        (default: 8080) [ENV: EXAMPLE_HTTP_PORT]
-
-RPC options:
-  --rpc-address RPC_ADDRESS
-                        (default: 127.0.0.1) [ENV: EXAMPLE_RPC_ADDRESS]
-  --rpc-port RPC_PORT   (default: 9090) [ENV: EXAMPLE_RPC_PORT]
-
-Default values will be based on the following configuration files ['example.ini',
-'~/.example.ini', '/etc/example.ini']. Now 1 file has been applied
-['example.ini']. The configuration files are INI-formatted files where
-configuration groups are INI sections.
-See more https://pypi.org/project/argclass/#configs
-```
-
-## Secrets
-
-Arguments that contain sensitive data, such as tokens, encryption keys, or URLs with passwords, when passed through environment variables or a configuration file, can be printed in the output of `--help`. To hide defaults, add the `secret=True` parameter, or use the special default constructor `argclass.Secret` instead of `argclass.Argument`.
+Use `auto_env_var_prefix` to automatically read defaults from environment variables:
 
 ```python
 import argclass
 
-class HttpAuthentication(argclass.Group):
-    username: str = argclass.Argument()
-    password: str = argclass.Secret()
+class Parser(argclass.Parser):
+    database_url: str
+    debug: bool = False
 
-class HttpBearerAuthentication(argclass.Group):
-    token: str = argclass.Argument(secret=True)
+parser = Parser(auto_env_var_prefix="APP_")
+# Reads from APP_DATABASE_URL and APP_DEBUG
+```
+
+Use `parser.sanitize_env()` to remove used environment variables after parsing.
+
+## Value Conversion
+
+For complex types, use `type` or `converter` arguments. Understanding the difference is important:
+
+| Parameter | When Called | Called With | Use Case |
+|-----------|-------------|-------------|----------|
+| `type` | **During** parsing | Each individual string value | Basic type conversion (str→int, str→Path) |
+| `converter` | **After** parsing | Final parsed value (may be a list) | Post-processing (list→set, JSON→dict) |
+
+### Basic Example
+
+<!--- name: test_converter_example --->
+```python
+import uuid
+import argclass
+
+def string_uid(value: str) -> uuid.UUID:
+    return uuid.uuid5(uuid.NAMESPACE_OID, value)
 
 class Parser(argclass.Parser):
-    http_basic = HttpAuthentication()
-    http_bearer = HttpBearerAuthentication()
+    strid1: uuid.UUID = argclass.Argument(converter=string_uid)
+    strid2: uuid.UUID = argclass.Argument(type=string_uid)
 
 parser = Parser()
-parser.print_help()
+parser.parse_args(["--strid1=hello", "--strid2=world"])
+assert parser.strid1 == uuid.uuid5(uuid.NAMESPACE_OID, 'hello')
+assert parser.strid2 == uuid.uuid5(uuid.NAMESPACE_OID, 'world')
 ```
 
-### Preventing Secrets from Being Logged
+For single values, both work similarly. The difference becomes clear with `nargs`.
 
-A secret is not actually a string, but a special class inherited from `str`. All attempts to cast this type to a `str` (using the `__str__` method) will return the original value, unless the `__str__` method is called from the `logging` module.
+### With nargs: type vs converter
 
+<!--- name: test_type_vs_converter --->
 ```python
-import logging
-from argclass import SecretString
+import argclass
 
-logging.basicConfig(level=logging.INFO)
-s = SecretString("my-secret-password")
-logging.info(s)          # __str__ will be called from logging
-logging.info(f"s=%s", s) # __str__ will be called from logging too
-logging.info(f"{s!r}")   # repr is safe
-logging.info(f"{s}")     # the password will be compromised
+class Parser(argclass.Parser):
+    # type=int is called for EACH value: "1" -> 1, "2" -> 2, "3" -> 3
+    # Result: [1, 2, 3]
+    numbers: list = argclass.Argument(nargs="+", type=int)
+
+    # type=int converts each value, THEN converter=set transforms the list
+    # "1", "2", "2", "3" -> [1, 2, 2, 3] -> {1, 2, 3}
+    unique: set = argclass.Argument(nargs="+", type=int, converter=set)
+
+parser = Parser()
+parser.parse_args(["--numbers", "1", "2", "3", "--unique", "1", "2", "2", "3"])
+assert parser.numbers == [1, 2, 3]
+assert parser.unique == {1, 2, 3}
 ```
 
-Of course, this is not absolute sensitive data protection, but it helps prevent accidental logging of these values.
+### Combining type and converter
 
-The `repr` for this will always give a placeholder, so it is better to always add `!r` to any f-string, for example `f'{value!r}'`.
+<!--- name: test_list_converter_frozenset_example --->
+```python
+import argclass
 
-## Enum Argument
+class Parser(argclass.Parser):
+    numbers = argclass.Argument(
+        nargs=argclass.Nargs.ONE_OR_MORE, type=int, converter=frozenset
+    )
 
-The library provides a special argument type for working with enumerations. For enum arguments, the `choices` parameter will be generated automatically from the enum names. After parsing the argument, the value will be converted to the enum member.
+parser = Parser()
+parser.parse_args(["--numbers", "1", "2", "3"])
+assert parser.numbers == frozenset([1, 2, 3])
+```
+
+Pipeline: `["1", "2", "3"]` → (type=int each) → `[1, 2, 3]` → (converter) → `frozenset({1, 2, 3})`
+
+## Enum Arguments
+
+Enum arguments automatically generate choices and convert values:
 
 <!--- name: test_enum_example --->
 ```python
@@ -356,283 +668,100 @@ parser.parse_args(["--log-level=warning"])
 assert parser.log_level == logging.WARNING
 ```
 
-## Config Action
+The built-in `argclass.LogLevel` provides a ready-to-use log level argument.
 
-This library provides a base class for writing custom configuration parsers.
+## Secrets
 
-`argclass.Config` is a special argument type for parsing configuration files. The optional parameter `config_class` is used to specify the custom configuration parser. By default, it is an INI parser.
+Use `secret=True` or `argclass.Secret` to hide sensitive defaults in help output:
+
+```python
+import argclass
+
+class Parser(argclass.Parser):
+    api_key: str = argclass.Secret()
+    password: str = argclass.Argument(secret=True)
+
+parser = Parser(auto_env_var_prefix="APP_")
+parser.print_help()
+# Defaults are hidden in help output
+```
+
+### SecretString
+
+`SecretString` prevents accidental logging of sensitive values:
+
+```python
+import logging
+from argclass import SecretString
+
+logging.basicConfig(level=logging.INFO)
+password = SecretString("super-secret")
+
+logging.info(password)           # Logs: '******'
+logging.info(f"{password!r}")    # Logs: '******'
+print(str(password))             # Prints: super-secret
+```
+
+## Custom Config Parsers
+
+Create custom configuration file parsers by extending `ConfigAction`:
 
 ### YAML Parser
 
-To parse YAML files, you need to install the `PyYAML` package. Follow code is an implementation of a YAML config parser.
-
 ```python
-from typing import Mapping, Any
 from pathlib import Path
+from typing import Mapping, Any
 import argclass
 import yaml
 
 class YAMLConfigAction(argclass.ConfigAction):
     def parse_file(self, file: Path) -> Mapping[str, Any]:
         with file.open("r") as fp:
-            return yaml.load(fp, Loader=yaml.FullLoader)
+            return yaml.safe_load(fp)
 
-class YAMLConfigArgument(argclass.ConfigArgument):
+class YAMLConfig(argclass.ConfigArgument):
     action = YAMLConfigAction
 
 class Parser(argclass.Parser):
-    config = argclass.Config(
-        required=True,
-        config_class=YAMLConfigArgument,
-    )
+    config = argclass.Config(config_class=YAMLConfig)
 ```
 
 ### TOML Parser
 
-To parse TOML files, you need to install the `tomli` package. Follow code is an implementation of a TOML config parser.
-
 ```python
-import tomli
-import argclass
 from pathlib import Path
 from typing import Mapping, Any
+import argclass
+import tomllib  # Python 3.11+ or use tomli
 
 class TOMLConfigAction(argclass.ConfigAction):
     def parse_file(self, file: Path) -> Mapping[str, Any]:
         with file.open("rb") as fp:
-            return tomli.load(fp)
+            return tomllib.load(fp)
 
-class TOMLConfigArgument(argclass.ConfigArgument):
+class TOMLConfig(argclass.ConfigArgument):
     action = TOMLConfigAction
 
 class Parser(argclass.Parser):
-    config = argclass.Config(
-        required=True,
-        config_class=TOMLConfigArgument,
-    )
+    config = argclass.Config(config_class=TOMLConfig)
 ```
 
-## Subparsers Advanced Usage
+## Third Party Integration
 
-There are two ways to work with subparsers: either by calling the parser as a regular function, in which case the
-subparser must implement the `__call__` method (otherwise help will be printed and the program will exit with an
-error), or by directly inspecting the `.current_subparser` attribute in the parser. The second method can be 
-simplified using `functools.singledispatch`.
+### Rich Help Output
 
-### Using `__call__`
-
-Just implement the `__call__` method for subparsers and call the main parser.
+Use `rich_argparse` for beautiful help formatting:
 
 ```python
-from typing import Optional
 import argclass
-
-class AddressPortGroup(argclass.Group):
-    address: str = "127.0.0.1"
-    port: int = 8080
-
-class CommitCommand(argclass.Parser):
-    comment: str = argclass.Argument()
-
-    def __call__(self) -> int:
-        endpoint: AddressPortGroup = self.__parent__.endpoint
-        print(
-            "Commit command called", self,
-            "endpoint", endpoint.address, "port", endpoint.port
-        )
-        return 0
-
-class PushCommand(argclass.Parser):
-    comment: str = argclass.Argument()
-
-    def __call__(self) -> int:
-        endpoint: AddressPortGroup = self.__parent__.endpoint
-        print(
-            "Push command called", self,
-            "endpoint", endpoint.address, "port", endpoint.port
-        )
-        return 0
-
-class Parser(argclass.Parser):
-    log_level: int = argclass.LogLevel
-    endpoint = AddressPortGroup(title="Endpoint options")
-    commit: Optional[CommitCommand] = CommitCommand()
-    push: Optional[PushCommand] = PushCommand()
-
-if __name__ == '__main__':
-    parser = Parser(
-        config_files=["example.ini", "~/.example.ini", "/etc/example.ini"],
-        auto_env_var_prefix="EXAMPLE_"
-    )
-    parser.parse_args()
-    exit(parser())
-```
-
-### Using `singledispatch`
-
-You can use the `current_subparser` attribute to get the current subparser and then call it. This does not require implementing the `__call__` method.
-
-```python
-from functools import singledispatch
-from typing import Optional, Any
-import argclass
-
-class AddressPortGroup(argclass.Group):
-    address: str = argclass.Argument(default="127.0.0.1")
-    port: int
-
-class CommitCommand(argclass.Parser):
-    comment: str = argclass.Argument()
-
-class PushCommand(argclass.Parser):
-    comment: str = argclass.Argument()
-
-class Parser(argclass.Parser):
-    log_level: int = argclass.LogLevel
-    endpoint = AddressPortGroup(
-        title="Endpoint options",
-        defaults=dict(port=8080)
-    )
-    commit: Optional[CommitCommand] = CommitCommand()
-    push: Optional[PushCommand] = PushCommand()
-
-@singledispatch
-def handle_subparser(subparser: Any) -> None:
-    raise NotImplementedError(
-        f"Unexpected subparser type {subparser.__class__!r}"
-    )
-
-@handle_subparser.register(type(None))
-def handle_none(_: None) -> None:
-    Parser().print_help()
-    exit(2)
-
-@handle_subparser.register(CommitCommand)
-def handle_commit(subparser: CommitCommand) -> None:
-    print("Commit command called", subparser)
-
-@handle_subparser.register(PushCommand)
-def handle_push(subparser: PushCommand) -> None:
-    print("Push command called", subparser)
-
-if __name__ == '__main__':
-    parser = Parser(
-        config_files=["example.ini", "~/.example.ini", "/etc/example.ini"],
-        auto_env_var_prefix="EXAMPLE_"
-    )
-    parser.parse_args()
-    handle_subparser(parser.current_subparser)
-```
-
-## Value Conversion with Optional and Union Types
-
-If an argument has a generic or composite type, you must explicitly describe it using `argclass.Argument`, specifying 
-the converter function with `type` or `converter` to transform the value after parsing. The exception to this rule 
-is `Optional` with a single type. In this case, an argument without a default value will not be required, and 
-its value can be `None`.
-
-<!--- name: test_optional_union_example --->
-```python
-import argclass
-from typing import Optional, Union
-
-def converter(value: str) -> Optional[Union[int, str, bool]]:
-    if value.lower() == "none":
-        return None
-    if value.isdigit():
-        return int(value)
-    if value.lower() in ("yes", "true", "enabled", "enable", "on"):
-        return True
-    return False
-
-class Parser(argclass.Parser):
-    gizmo: Optional[Union[int, str, bool]] = argclass.Argument(
-        converter=converter
-    )
-    optional: Optional[int]
-
-parser = Parser()
-
-parser.parse_args(["--gizmo=65535"])
-assert parser.gizmo == 65535
-
-parser.parse_args(["--gizmo=None"])
-assert parser.gizmo is None
-
-parser.parse_args(["--gizmo=on"])
-assert parser.gizmo is True
-assert parser.optional is None
-
-parser.parse_args(["--gizmo=off", "--optional=10"])
-assert parser.gizmo is False
-assert parser.optional == 10
-```
-
-# 3rd Party Libraries integration
-
-`argclass` is able to integrate with some 3rd party libraries to provide additional features.
-
-## `Rich` and `rich_argparse` integration examples
-
-`rich_argparse` is a library that provides an ability to use `rich` for formatting help messages in `argparse`.
-So this library can be used with `argclass` to provide a rich help output.
-
-```python
-from argparse import Action
-
-import argclass
-from rich.console import ConsoleRenderable, Group
-from rich.markdown import Markdown
-from rich.panel import Panel
-from rich.syntax import Syntax
-from rich.text import Text
 from rich_argparse import RawTextRichHelpFormatter
 
+class Parser(argclass.Parser):
+    verbose: bool = False
+    output: str = "result.txt"
 
-class HelpFormatter(RawTextRichHelpFormatter):
-    def _rich_expand_help(self, action: Action) -> Text:
-        try:
-            if "%" in str(action.default):
-                action.default = ""
-            if "%" in str(action.help):
-                action.help = ""
-            return super()._rich_expand_help(action)
-        except ValueError:
-            return Text("FAILED")
-
-
-class RichParser(argclass.Parser):
-    def __init__(self, *args, **kwargs) -> None:
-        help = kwargs.pop("help", None)
-        description = kwargs.pop("description", help) or ""
-
-        if isinstance(description, ConsoleRenderable):
-            kwargs["description"] = description
-        else:
-            kwargs["description"] = Markdown(description)
-
-        if help is not None:
-            kwargs["help"] = help
-
-        kwargs["formatter_class"] = HelpFormatter
-        super().__init__(*args, **kwargs)
-
-
-class Parser(RichParser):
-    log_level = argclass.LogLevel
-
-
-if __name__ == "__main__":
-    parser = Parser(
-        formatter_class=RawTextRichHelpFormatter,
-        description=Group(
-            Text("This code produces this help:\n\n"),
-            Panel(Syntax(open(__file__).read().strip(), "python")),
-        ),
-    )
-    parser.parse_args()
-    parser.sanitize_env()
-    exit(parser())
+parser = Parser(formatter_class=RawTextRichHelpFormatter)
+parser.print_help()
 ```
 
 ![Help Output](https://raw.githubusercontent.com/mosquito/argclass/master/.github/rich_example.png)

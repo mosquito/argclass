@@ -4,7 +4,7 @@ import os
 import re
 import uuid
 from enum import IntEnum
-from typing import FrozenSet, List, Optional
+from typing import FrozenSet, List, Optional, Set, Tuple
 from unittest.mock import patch
 
 import pytest
@@ -20,13 +20,18 @@ def strip_ansi(text: str) -> str:
 class TestBasics:
     class Parser(argclass.Parser):
         integers: List[int] = argclass.Argument(
-            "integers", type=int,
-            nargs=argclass.Nargs.ONE_OR_MORE, metavar="N",
+            "integers",
+            type=int,
+            nargs=argclass.Nargs.ONE_OR_MORE,
+            metavar="N",
             help="an integer for the accumulator",
         )
         accumulate = argclass.Argument(
-            "--sum", action=argclass.Actions.STORE_CONST, const=sum,
-            default=max, help="sum the integers (default: find the max)",
+            "--sum",
+            action=argclass.Actions.STORE_CONST,
+            const=sum,
+            default=max,
+            help="sum the integers (default: find the max)",
         )
         secret = argclass.Secret()
 
@@ -47,8 +52,11 @@ class TestFoo:
     class Parser(argclass.Parser):
         foo: str = argclass.Argument(help="foo")
         http: HostPortGroup = HostPortGroup(
-            title="HTTP host and port", prefix="api", defaults={
-                "port": 80, "host": "0.0.0.0",
+            title="HTTP host and port",
+            prefix="api",
+            defaults={
+                "port": 80,
+                "host": "0.0.0.0",
             },
         )
         grpc: HostPortGroup = HostPortGroup(
@@ -69,13 +77,15 @@ class TestFoo:
         parser.parse_args(["--foo", "bar"])
         assert parser.foo == "bar"
 
-        parser.parse_args([
-            "--foo=bar",
-            "--api-host=127.0.0.1",
-            "--api-port=8080",
-            "--grpc-host=127.0.0.2",
-            "--grpc-port=9000",
-        ])
+        parser.parse_args(
+            [
+                "--foo=bar",
+                "--api-host=127.0.0.1",
+                "--api-port=8080",
+                "--grpc-host=127.0.0.2",
+                "--grpc-port=9000",
+            ]
+        )
         assert parser.foo == "bar"
         assert parser.http.host == "127.0.0.1"
         assert parser.http.port == 8080
@@ -130,7 +140,8 @@ def test_env_var(request: pytest.FixtureRequest):
 def test_nargs():
     class Parser(argclass.Parser):
         foo: List[int] = argclass.Argument(
-            nargs=argclass.Nargs.ZERO_OR_MORE, type=int,
+            nargs=argclass.Nargs.ZERO_OR_MORE,
+            type=int,
         )
         bar: int = argclass.Argument(nargs="*")
         spam: int = argclass.Argument(nargs=1)
@@ -156,6 +167,7 @@ def test_group_aliases():
 
 def test_group_empty_prefix():
     """Test that prefix='' allows arguments without group prefix (issue #26)."""
+
     class AddressPort(argclass.Group):
         address: str
         port: int
@@ -173,12 +185,18 @@ def test_group_empty_prefix():
 
     # With prefix='', we get --address and --port (no prefix)
     # telemetry uses default prefix, so --telemetry-address and --telemetry-port
-    parser.parse_args([
-        "--address", "192.168.1.1",
-        "--port", "9000",
-        "--telemetry-address", "10.0.0.1",
-        "--telemetry-port", "9999",
-    ])
+    parser.parse_args(
+        [
+            "--address",
+            "192.168.1.1",
+            "--port",
+            "9000",
+            "--telemetry-address",
+            "10.0.0.1",
+            "--telemetry-port",
+            "9999",
+        ]
+    )
     assert parser.api.address == "192.168.1.1"
     assert parser.api.port == 9000
     assert parser.telemetry.address == "10.0.0.1"
@@ -187,6 +205,7 @@ def test_group_empty_prefix():
 
 def test_group_empty_prefix_with_defaults():
     """Test empty prefix with default values (issue #27)."""
+
     class LearningOptions(argclass.Group):
         batch_size: int = 256
         learning_rate: float = 1e-1
@@ -271,6 +290,7 @@ def test_optional_type():
 
 def test_pep604_union_type():
     """Test PEP 604 union types (float | None syntax)."""
+
     class Parser(argclass.Parser):
         param: float | None
         count: int | None = None
@@ -306,9 +326,14 @@ def test_argument_defaults():
     assert parser.pool_size == 4
     assert parser.forks == 2
 
-    parser.parse_args([
-        "--debug", "--forks=8", "--pool-size=2", "--confused-default",
-    ])
+    parser.parse_args(
+        [
+            "--debug",
+            "--forks=8",
+            "--pool-size=2",
+            "--confused-default",
+        ]
+    )
     assert parser.debug is True
     assert parser.confused_default is False
     assert parser.pool_size == 2
@@ -331,6 +356,7 @@ def test_inheritance():
 
 def test_inherited_required_arguments():
     """Test that required arguments stay required when inherited (issue #21)."""
+
     class BaseParser(argclass.Parser):
         argument1: str  # should be required
         argument2: str = argclass.Argument(required=True)
@@ -344,14 +370,63 @@ def test_inherited_required_arguments():
         parser.parse_args([])
 
     # Providing all arguments should work
-    parser.parse_args([
-        "--argument1", "a",
-        "--argument2", "b",
-        "--argument3", "c",
-    ])
+    parser.parse_args(
+        [
+            "--argument1",
+            "a",
+            "--argument2",
+            "b",
+            "--argument3",
+            "c",
+        ]
+    )
     assert parser.argument1 == "a"
     assert parser.argument2 == "b"
     assert parser.argument3 == "c"
+
+
+def test_deep_inheritance():
+    """Test that multi-level inheritance (3+ levels) works correctly."""
+
+    class Level1(argclass.Parser):
+        arg1: str
+        debug: bool = False
+
+    class Level2(Level1):
+        arg2: str
+
+    class Level3(Level2):
+        arg3: str
+
+    class Level4(Level3):
+        arg4: str
+
+    # All arguments from all levels should be available
+    assert "arg1" in Level4.__arguments__
+    assert "arg2" in Level4.__arguments__
+    assert "arg3" in Level4.__arguments__
+    assert "arg4" in Level4.__arguments__
+    assert "debug" in Level4.__arguments__
+
+    parser = Level4()
+    parser.parse_args(
+        [
+            "--arg1",
+            "a",
+            "--arg2",
+            "b",
+            "--arg3",
+            "c",
+            "--arg4",
+            "d",
+            "--debug",
+        ]
+    )
+    assert parser.arg1 == "a"
+    assert parser.arg2 == "b"
+    assert parser.arg3 == "c"
+    assert parser.arg4 == "d"
+    assert parser.debug is True
 
 
 def test_config_for_required(tmp_path):
@@ -421,7 +496,8 @@ def test_log_group():
     class LogGroup(argclass.Group):
         level: int = argclass.LogLevel
         format = argclass.Argument(
-            choices=("json", "stream"), default="stream",
+            choices=("json", "stream"),
+            default="stream",
         )
 
     class Parser(argclass.Parser):
@@ -476,7 +552,9 @@ def test_environment_required():
 def test_nargs_and_converter():
     class Parser(argclass.Parser):
         args_set: FrozenSet[int] = argclass.Argument(
-            type=int, nargs="+", converter=frozenset,
+            type=int,
+            nargs="+",
+            converter=frozenset,
         )
 
     parser = Parser()
@@ -488,7 +566,9 @@ def test_nargs_and_converter():
 def test_nargs_and_converter_not_required():
     class Parser(argclass.Parser):
         args_set: FrozenSet[int] = argclass.Argument(
-            type=int, nargs="*", converter=frozenset,
+            type=int,
+            nargs="*",
+            converter=frozenset,
         )
 
     parser = Parser()
@@ -504,7 +584,9 @@ def test_nargs_and_converter_not_required():
 def test_nargs_1():
     class Parser(argclass.Parser):
         args_set: FrozenSet[int] = argclass.Argument(
-            type=int, nargs=1, converter=frozenset,
+            type=int,
+            nargs=1,
+            converter=frozenset,
         )
 
     parser = Parser()
@@ -520,7 +602,10 @@ def test_nargs_1():
 def test_nargs_env_var():
     class Parser(argclass.Parser):
         nargs: FrozenSet[int] = argclass.Argument(
-            type=int, nargs="*", converter=frozenset, env_var="NARGS",
+            type=int,
+            nargs="*",
+            converter=frozenset,
+            env_var="NARGS",
         )
 
     os.environ["NARGS"] = "[1, 2, 3]"
@@ -536,7 +621,10 @@ def test_nargs_env_var():
 def test_nargs_env_var_str():
     class Parser(argclass.Parser):
         nargs: FrozenSet[int] = argclass.Argument(
-            type=str, nargs="*", converter=frozenset, env_var="NARGS",
+            type=str,
+            nargs="*",
+            converter=frozenset,
+            env_var="NARGS",
         )
 
     os.environ["NARGS"] = '["a", "b", "c"]'
@@ -552,7 +640,10 @@ def test_nargs_env_var_str():
 def test_nargs_config_list(tmp_path):
     class Parser(argclass.Parser):
         nargs: FrozenSet[int] = argclass.Argument(
-            type=int, nargs="*", converter=frozenset, env_var="NARGS",
+            type=int,
+            nargs="*",
+            converter=frozenset,
+            env_var="NARGS",
         )
 
     conf_file = tmp_path / "config.ini"
@@ -570,7 +661,10 @@ def test_nargs_config_list(tmp_path):
 def test_nargs_config_set(tmp_path):
     class Parser(argclass.Parser):
         nargs: FrozenSet[int] = argclass.Argument(
-            type=int, nargs="*", converter=frozenset, env_var="NARGS",
+            type=int,
+            nargs="*",
+            converter=frozenset,
+            env_var="NARGS",
         )
 
     conf_file = tmp_path / "config.ini"
@@ -699,3 +793,275 @@ def test_json_action(tmp_path):
     parser.parse_args(["--config", str(tmp_path / "config.json")])
 
     assert parser.config["foo"] == "bar"
+
+
+# ============================================================================
+# Container Type Annotation Tests (PEP 585 and typing module)
+# ============================================================================
+
+
+def test_list_str_lowercase():
+    """Test list[str] (PEP 585 style)."""
+
+    class Parser(argclass.Parser):
+        names: list[str]
+
+    parser = Parser()
+    parser.parse_args(["--names", "alice", "bob", "charlie"])
+    assert parser.names == ["alice", "bob", "charlie"]
+    assert isinstance(parser.names, list)
+
+
+def test_list_str_typing():
+    """Test List[str] (typing module style)."""
+
+    class Parser(argclass.Parser):
+        names: List[str]
+
+    parser = Parser()
+    parser.parse_args(["--names", "alice", "bob", "charlie"])
+    assert parser.names == ["alice", "bob", "charlie"]
+    assert isinstance(parser.names, list)
+
+
+def test_list_int_lowercase():
+    """Test list[int] with automatic type conversion."""
+
+    class Parser(argclass.Parser):
+        numbers: list[int]
+
+    parser = Parser()
+    parser.parse_args(["--numbers", "1", "2", "3"])
+    assert parser.numbers == [1, 2, 3]
+    assert all(isinstance(n, int) for n in parser.numbers)
+
+
+def test_list_int_typing():
+    """Test List[int] (typing module style)."""
+
+    class Parser(argclass.Parser):
+        numbers: List[int]
+
+    parser = Parser()
+    parser.parse_args(["--numbers", "1", "2", "3"])
+    assert parser.numbers == [1, 2, 3]
+
+
+def test_list_float_lowercase():
+    """Test list[float] with automatic type conversion."""
+
+    class Parser(argclass.Parser):
+        values: list[float]
+
+    parser = Parser()
+    parser.parse_args(["--values", "1.5", "2.7", "3.14"])
+    assert parser.values == [1.5, 2.7, 3.14]
+
+
+def test_set_str_lowercase():
+    """Test set[str] (PEP 585 style)."""
+
+    class Parser(argclass.Parser):
+        tags: set[str]
+
+    parser = Parser()
+    parser.parse_args(["--tags", "alpha", "beta", "alpha"])
+    assert parser.tags == {"alpha", "beta"}
+    assert isinstance(parser.tags, set)
+
+
+def test_set_str_typing():
+    """Test Set[str] (typing module style)."""
+
+    class Parser(argclass.Parser):
+        tags: Set[str]
+
+    parser = Parser()
+    parser.parse_args(["--tags", "alpha", "beta", "alpha"])
+    assert parser.tags == {"alpha", "beta"}
+    assert isinstance(parser.tags, set)
+
+
+def test_set_int_lowercase():
+    """Test set[int] with automatic type conversion and deduplication."""
+
+    class Parser(argclass.Parser):
+        nums: set[int]
+
+    parser = Parser()
+    parser.parse_args(["--nums", "1", "2", "2", "3", "1"])
+    assert parser.nums == {1, 2, 3}
+
+
+def test_frozenset_str_lowercase():
+    """Test frozenset[str] (PEP 585 style)."""
+
+    class Parser(argclass.Parser):
+        immutable_tags: frozenset[str]
+
+    parser = Parser()
+    parser.parse_args(["--immutable-tags", "x", "y", "x"])
+    assert parser.immutable_tags == frozenset({"x", "y"})
+    assert isinstance(parser.immutable_tags, frozenset)
+
+
+def test_frozenset_str_typing():
+    """Test FrozenSet[str] (typing module style)."""
+
+    class Parser(argclass.Parser):
+        immutable_tags: FrozenSet[str]
+
+    parser = Parser()
+    parser.parse_args(["--immutable-tags", "x", "y", "x"])
+    assert parser.immutable_tags == frozenset({"x", "y"})
+
+
+def test_optional_list_str():
+    """Test Optional[list[str]] - should be optional with nargs=*."""
+
+    class Parser(argclass.Parser):
+        files: Optional[list[str]]
+
+    parser = Parser()
+    # Without argument - should be None or empty list
+    parser.parse_args([])
+    assert parser.files is None or parser.files == []
+
+    # With argument
+    parser.parse_args(["--files", "a.txt", "b.txt"])
+    assert parser.files == ["a.txt", "b.txt"]
+
+
+def test_optional_list_int():
+    """Test Optional[List[int]] - typing style."""
+
+    class Parser(argclass.Parser):
+        ids: Optional[List[int]]
+
+    parser = Parser()
+    parser.parse_args([])
+    assert parser.ids is None or parser.ids == []
+
+    parser.parse_args(["--ids", "100", "200"])
+    assert parser.ids == [100, 200]
+
+
+def test_list_required_without_args():
+    """Test that required list[str] fails without arguments."""
+
+    class Parser(argclass.Parser):
+        files: list[str]  # Required by default
+
+    parser = Parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args([])
+
+
+def test_list_with_default():
+    """Test list with default value."""
+
+    class Parser(argclass.Parser):
+        tags: list[str] = ["default"]
+
+    parser = Parser()
+    parser.parse_args([])
+    assert parser.tags == ["default"]
+
+    parser.parse_args(["--tags", "new"])
+    assert parser.tags == ["new"]
+
+
+def test_tuple_str_lowercase():
+    """Test tuple[str] (PEP 585 style) - treated as variable length."""
+
+    class Parser(argclass.Parser):
+        args: tuple[str]
+
+    parser = Parser()
+    parser.parse_args(["--args", "a", "b", "c"])
+    assert parser.args == ("a", "b", "c")
+    assert isinstance(parser.args, tuple)
+
+
+def test_tuple_int_typing():
+    """Test Tuple[int] (typing module style)."""
+
+    class Parser(argclass.Parser):
+        coords: Tuple[int]
+
+    parser = Parser()
+    parser.parse_args(["--coords", "10", "20", "30"])
+    assert parser.coords == (10, 20, 30)
+
+
+def test_mixed_container_types():
+    """Test multiple different container types in one parser."""
+
+    class Parser(argclass.Parser):
+        names: list[str]
+        unique_ids: set[int]
+        frozen_tags: frozenset[str]
+
+    parser = Parser()
+    parser.parse_args(
+        [
+            "--names",
+            "alice",
+            "bob",
+            "--unique-ids",
+            "1",
+            "2",
+            "2",
+            "3",
+            "--frozen-tags",
+            "a",
+            "b",
+            "a",
+        ]
+    )
+    assert parser.names == ["alice", "bob"]
+    assert parser.unique_ids == {1, 2, 3}
+    assert parser.frozen_tags == frozenset({"a", "b"})
+
+
+def test_container_with_explicit_argument():
+    """Test that explicit Argument still works with container types."""
+
+    class Parser(argclass.Parser):
+        items: list[str] = argclass.Argument(
+            nargs="+",
+            help="List of items",
+            metavar="ITEM",
+        )
+
+    parser = Parser()
+    parser.parse_args(["--items", "x", "y", "z"])
+    assert parser.items == ["x", "y", "z"]
+
+
+def test_list_in_group():
+    """Test list type in argument group."""
+
+    class HostsGroup(argclass.Group):
+        addresses: list[str]
+
+    class Parser(argclass.Parser):
+        hosts = HostsGroup()
+
+    parser = Parser()
+    parser.parse_args(["--hosts-addresses", "192.168.1.1", "192.168.1.2"])
+    assert parser.hosts.addresses == ["192.168.1.1", "192.168.1.2"]
+
+
+def test_set_in_group():
+    """Test set type in argument group."""
+
+    class TagsGroup(argclass.Group):
+        values: set[str]
+
+    class Parser(argclass.Parser):
+        tags = TagsGroup()
+
+    parser = Parser()
+    parser.parse_args(["--tags-values", "a", "b", "a"])
+    assert parser.tags.values == {"a", "b"}
