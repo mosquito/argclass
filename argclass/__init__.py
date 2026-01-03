@@ -215,17 +215,21 @@ class StoreMeta(type):
         mcs, name: str, bases: Tuple[Type["StoreMeta"], ...],
         attrs: Dict[str, Any],
     ) -> "StoreMeta":
+        # Create the class first to ensure annotations are available
+        # Python 3.14+ (PEP 649) defers annotation evaluation
+        cls = super().__new__(mcs, name, bases, attrs)
+
         annotations = merge_annotations(
-            attrs.get("__annotations__", {}), *bases,
+            getattr(cls, "__annotations__", {}), *bases,
         )
-        attrs["__annotations__"] = annotations
-        attrs["_fields"] = tuple(
+        cls.__annotations__ = annotations
+        cls._fields = tuple(
             filter(
                 lambda x: not x.startswith("_"),
                 annotations.keys(),
             ),
         )
-        return super().__new__(mcs, name, bases, attrs)
+        return cls
 
 
 class Store(metaclass=StoreMeta):
@@ -236,10 +240,12 @@ class Store(metaclass=StoreMeta):
         obj = super().__new__(cls)
 
         type_map: Dict[str, Tuple[Type, Any]] = {}
-        for key, value in obj.__annotations__.items():
+        # Use cls.__annotations__ instead of obj.__annotations__ to avoid
+        # triggering __getattr__ before _values is initialized (Python 3.14+)
+        for key, value in cls.__annotations__.items():
             if key.startswith("_"):
                 continue
-            type_map[key] = (value, getattr(obj, key, cls._default_value))
+            type_map[key] = (value, getattr(cls, key, cls._default_value))
 
         for key, (value_type, default) in type_map.items():
             if default is cls._default_value and key not in kwargs:
@@ -420,8 +426,14 @@ class Meta(ABCMeta):
         mcs, name: str, bases: Tuple[Type["Meta"], ...],
         attrs: Dict[str, Any],
     ) -> "Meta":
+        # Create the class first to ensure annotations are available
+        # Python 3.14+ (PEP 649) defers annotation evaluation, so
+        # __annotations__ may not be in attrs during class creation
+        cls = super().__new__(mcs, name, bases, attrs)
+
+        # Now get annotations from the created class
         annotations = merge_annotations(
-            attrs.get("__annotations__", {}), *bases,
+            getattr(cls, "__annotations__", {}), *bases,
         )
 
         arguments = {}
@@ -441,7 +453,7 @@ class Meta(ABCMeta):
             if not isinstance(
                 argument, (TypedArgument, AbstractGroup, AbstractParser),
             ):
-                attrs[key] = ...
+                setattr(cls, key, ...)
 
                 is_required = argument is None or argument is Ellipsis
 
@@ -481,10 +493,9 @@ class Meta(ABCMeta):
             elif isinstance(value, AbstractParser):
                 subparsers[key] = value
 
-        attrs["__arguments__"] = MappingProxyType(arguments)
-        attrs["__argument_groups__"] = MappingProxyType(argument_groups)
-        attrs["__subparsers__"] = MappingProxyType(subparsers)
-        cls = super().__new__(mcs, name, bases, attrs)
+        cls.__arguments__ = MappingProxyType(arguments)
+        cls.__argument_groups__ = MappingProxyType(argument_groups)
+        cls.__subparsers__ = MappingProxyType(subparsers)
         return cls
 
 
