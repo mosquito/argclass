@@ -64,6 +64,7 @@ subparsers
 config-files
 environment
 secrets
+integrations
 ```
 
 ```{toctree}

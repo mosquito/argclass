@@ -212,3 +212,47 @@ assert parser.port == 3000  # From CLI (override)
 
 Path(config_path).unlink()
 ```
+
+## Custom Config Parsers
+
+Create custom configuration file parsers by extending `ConfigAction`.
+
+### YAML Parser
+
+```python
+from pathlib import Path
+from typing import Mapping, Any
+import argclass
+import yaml
+
+class YAMLConfigAction(argclass.ConfigAction):
+    def parse_file(self, file: Path) -> Mapping[str, Any]:
+        with file.open("r") as fp:
+            return yaml.safe_load(fp)
+
+class YAMLConfig(argclass.ConfigArgument):
+    action = YAMLConfigAction
+
+class Parser(argclass.Parser):
+    config = argclass.Config(config_class=YAMLConfig)
+```
+
+### TOML Parser
+
+```python
+from pathlib import Path
+from typing import Mapping, Any
+import argclass
+import tomllib  # Python 3.11+ or use tomli
+
+class TOMLConfigAction(argclass.ConfigAction):
+    def parse_file(self, file: Path) -> Mapping[str, Any]:
+        with file.open("rb") as fp:
+            return tomllib.load(fp)
+
+class TOMLConfig(argclass.ConfigArgument):
+    action = TOMLConfigAction
+
+class Parser(argclass.Parser):
+    config = argclass.Config(config_class=TOMLConfig)
+```
