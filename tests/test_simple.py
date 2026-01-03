@@ -215,6 +215,28 @@ def test_optional_type():
         assert parser.optional is False
 
 
+def test_pep604_union_type():
+    """Test PEP 604 union types (float | None syntax)."""
+    class Parser(argclass.Parser):
+        param: float | None
+        count: int | None = None
+        name: str | None = "default"
+
+    parser = Parser()
+
+    # Test with no arguments - optional fields should use defaults
+    parser.parse_args([])
+    assert parser.param is None
+    assert parser.count is None
+    assert parser.name == "default"
+
+    # Test with values provided
+    parser.parse_args(["--param", "3.14", "--count", "42", "--name", "test"])
+    assert parser.param == 3.14
+    assert parser.count == 42
+    assert parser.name == "test"
+
+
 def test_argument_defaults():
     class Parser(argclass.Parser):
         debug: bool = False

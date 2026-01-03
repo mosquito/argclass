@@ -13,6 +13,7 @@ from argparse import Action, ArgumentParser
 from enum import Enum, EnumMeta, IntEnum
 from functools import partial
 from pathlib import Path
+import types
 from types import MappingProxyType
 from typing import (
     Any, Callable, Dict, Iterable, Iterator, List, Literal, Mapping,
@@ -382,8 +383,18 @@ def parse_bool(value: str) -> bool:
     return value.lower() in TEXT_TRUE_VALUES
 
 
+def _is_union_type(typespec: Any) -> bool:
+    """Check if typespec is a Union type (typing.Union or PEP 604 types.UnionType)."""
+    if typespec.__class__ == UnionClass:
+        return True
+    # PEP 604: float | None creates types.UnionType in Python 3.10+
+    if hasattr(types, "UnionType") and isinstance(typespec, types.UnionType):
+        return True
+    return False
+
+
 def unwrap_optional(typespec: Any) -> Optional[Any]:
-    if typespec.__class__ != UnionClass:
+    if not _is_union_type(typespec):
         return None
 
     union_args = [a for a in typespec.__args__ if a is not NoneType]
