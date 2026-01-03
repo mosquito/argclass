@@ -583,7 +583,11 @@ class Parser(AbstractParser, Base):
         if not argument.is_positional:
             kwargs["dest"] = dest
 
-        if argument.default is not None and not argument.secret:
+        if (
+            argument.default is not None
+            and argument.default is not ...
+            and not argument.secret
+        ):
             kwargs["help"] = (
                 f"{kwargs.get('help', '')} (default: {argument.default})"
             ).strip()
@@ -607,7 +611,8 @@ class Parser(AbstractParser, Base):
             if argument.env_var in os.environ:
                 self._used_env_vars.add(argument.env_var)
 
-        if kwargs.get("default"):
+        default = kwargs.get("default")
+        if default is not None and default is not ...:
             kwargs["required"] = False
 
         return dest, parser.add_argument(*aliases, **kwargs)
@@ -695,7 +700,7 @@ class Parser(AbstractParser, Base):
                 default=default,
             )
 
-            if default and argument.required:
+            if default is not None and default is not ... and argument.required:
                 argument = argument.copy(required=False)
 
             dest, action = self._add_argument(parser, argument, name, *aliases)

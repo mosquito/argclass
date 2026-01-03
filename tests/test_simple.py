@@ -275,6 +275,31 @@ def test_inheritance():
     assert parser.port == 9876
 
 
+def test_inherited_required_arguments():
+    """Test that required arguments stay required when inherited (issue #21)."""
+    class BaseParser(argclass.Parser):
+        argument1: str  # should be required
+        argument2: str = argclass.Argument(required=True)
+
+    class SuperParser(BaseParser):
+        argument3: str  # should be required
+
+    # All three should be required
+    parser = SuperParser()
+    with pytest.raises(SystemExit):
+        parser.parse_args([])
+
+    # Providing all arguments should work
+    parser.parse_args([
+        "--argument1", "a",
+        "--argument2", "b",
+        "--argument3", "c",
+    ])
+    assert parser.argument1 == "a"
+    assert parser.argument2 == "b"
+    assert parser.argument3 == "c"
+
+
 def test_config_for_required(tmp_path):
     class Parser(argclass.Parser):
         required: int = argclass.Argument(required=True)
