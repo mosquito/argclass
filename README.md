@@ -2,14 +2,48 @@
 
 ![Coverage](https://coveralls.io/repos/github/mosquito/argclass/badge.svg?branch=master) [![Actions](https://github.com/mosquito/argclass/workflows/tests/badge.svg)](https://github.com/mosquito/argclass/actions?query=workflow%3Atests) [![Latest Version](https://img.shields.io/pypi/v/argclass.svg)](https://pypi.python.org/pypi/argclass/) [![Python Versions](https://img.shields.io/pypi/pyversions/argclass.svg)](https://pypi.python.org/pypi/argclass/) [![License](https://img.shields.io/pypi/l/argclass.svg)](https://pypi.python.org/pypi/argclass/)
 
-A wrapper around the standard `argparse` module that allows you to describe argument parsers declaratively.
+**Declarative CLI parser with type hints, config files, and environment variables.**
 
-By default, the `argparse` module suggests creating parsers imperatively, which is not convenient for type checking and attribute access. Additionally, IDE autocompletion and type hints are not applicable in this case.
+Build type-safe command-line interfaces using Python classes. Get IDE autocompletion, automatic `--help` generation, and seamless integration with config files and environment variables - all with zero dependencies.
 
-This module allows you to declare command-line parsers using classes with full type safety and IDE support.
+<!--- name: test_hero_example --->
+```python
+import argclass
+
+class Server(argclass.Parser):
+    host: str = "127.0.0.1"
+    port: int = 8080
+    debug: bool = False
+
+server = Server()
+server.parse_args(["--host", "0.0.0.0", "--port", "9000", "--debug"])
+assert server.host == "0.0.0.0"
+assert server.port == 9000
+assert server.debug is True
+```
+
+Usage:
+```bash
+$ python server.py --host 0.0.0.0 --port 9000 --debug
+```
+
+## Why argclass?
+
+| Feature                  | argclass   | argparse   | click/typer |
+|--------------------------|------------|------------|-------------|
+| Type hints → arguments   | ✅          | ❌          | ✅           |
+| IDE autocompletion       | ✅          | ❌          | ✅           |
+| Config file support      | ✅ Built-in | ❌          | ❌           |
+| Environment variables    | ✅ Built-in | ❌          | ❌ Plugin    |
+| Secret masking           | ✅ Built-in | ❌          | ❌           |
+| Argument groups          | ✅ Reusable | ⚠️ Limited | ❌           |
+| Dependencies             | **None**   | stdlib     | many        |
+
+**argclass** is ideal for applications that need configuration from multiple sources (CLI + config files + environment) with full type safety.
 
 ## Table of Contents
 
+- [Why argclass?](#why-argclass)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Type Annotations](#type-annotations)
@@ -747,6 +781,8 @@ class Parser(argclass.Parser):
 ```
 
 ## Third Party Integration
+
+**argclass** is a thin layer between `argparse` and Python's type system. Since it builds on the standard library, any argparse extension or third-party library works seamlessly.
 
 ### Rich Help Output
 

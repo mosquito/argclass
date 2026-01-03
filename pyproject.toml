@@ -1,8 +1,19 @@
 [project]
 name = "argclass"
 version = "1.2.0"
-description = "A wrapper around the standard argparse module that allows you to describe argument parsers declaratively"
+description = "Declarative CLI parser with type hints, config files, and environment variables - zero dependencies"
 authors = [{ name = "Dmitry Orlov", email = "me@mosquito.su" }]
+keywords = [
+    "argparse",
+    "cli",
+    "command-line",
+    "argument-parser",
+    "type-hints",
+    "dataclass",
+    "config",
+    "environment-variables",
+    "declarative",
+]
 requires-python = ">=3.10,<4"
 readme = "README.md"
 license = "Apache-2.0"
