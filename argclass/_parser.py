@@ -312,6 +312,17 @@ class Parser(AbstractParser, Base):
             if argument.env_var in os.environ:
                 self._used_env_vars.add(argument.env_var)
 
+        # Convert string boolean values from config/env to proper bools
+        action = kwargs.get("action")
+        default = kwargs.get("default")
+        if isinstance(default, str) and action in (
+            Actions.STORE_TRUE,
+            Actions.STORE_FALSE,
+            "store_true",
+            "store_false",
+        ):
+            kwargs["default"] = parse_bool(default)
+
         default = kwargs.get("default")
         if default is not None and default is not ...:
             kwargs["required"] = False

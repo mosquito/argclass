@@ -92,13 +92,14 @@ def ArgumentSequence(
     Create a multi-value argument with precise typing.
 
     Use this when you need exact type inference for a list of values.
-    The `type` parameter is required and determines the element type.
+    The ``type`` parameter is required and determines the element type.
 
     Args:
         nargs: Number of values. Defaults to "+" (one or more).
-            Use "*" for zero or more, or an int for exact count.
+               Use "*" for zero or more, or an int for exact count.
 
-    Example:
+    Example::
+
         class Parser(argclass.Parser):
             files: list[str] = argclass.ArgumentSequence(type=str)
             numbers: list[int] = argclass.ArgumentSequence(
@@ -223,13 +224,11 @@ def Argument(
     Dispatches to ArgumentSingle or ArgumentSequence based on nargs.
 
     Args:
-        *aliases: Command-line aliases (e.g., "-n", "--name").
+        aliases: Command-line aliases (e.g., "-n", "--name").
         action: How to handle the argument (store, store_true, etc.).
         choices: Restrict values to these options.
         const: Constant value for store_const/append_const actions.
-        converter: Function to transform the final parsed value(s).
-            Called after argparse parsing, receives the full result.
-            With nargs, receives the list and should return transformed list.
+        converter: Post-parse transform function. With nargs, receives the list.
         default: Default value if argument not provided.
         env_var: Environment variable to read default from.
         help: Help text for --help output.
@@ -237,13 +236,13 @@ def Argument(
         nargs: Number of values (int, "?", "*", "+", or Nargs enum).
         required: Whether the argument must be provided.
         secret: If True, hide value from help and wrap str in SecretString.
-        type: Function to convert each individual string value from CLI.
-            Passed directly to argparse. With nargs, called for EACH value.
+        type: Per-value converter for argparse. With nargs, called per value.
 
     Returns:
         TypedArgument instance.
 
-    Example - type vs converter with nargs:
+    Example::
+
         # type: converts each CLI value individually
         numbers = Argument(nargs="+", type=int)
         # Parsing ["1", "2"] -> calls int("1"), int("2") -> [1, 2]
@@ -337,7 +336,7 @@ def EnumArgument(
 
     Args:
         enum_class: The Enum class to use for choices and conversion.
-        *aliases: Command-line aliases (e.g., "-l", "--level").
+        aliases: Command-line aliases (e.g., "-l", "--level").
         action: How to handle the argument.
         default: Default value (as string name, not enum member).
         env_var: Environment variable to read default from.

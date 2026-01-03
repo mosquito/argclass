@@ -346,7 +346,11 @@ assert parser.features == ["auth", "metrics"]
 
 ## Boolean Arguments
 
-Boolean arguments use `store_true`/`store_false` actions based on their default value:
+Boolean arguments have special handling in argclass.
+
+### Shortcut Syntax
+
+Using `bool = False` or `bool = True` directly creates flag-style arguments:
 
 <!--- name: test_bools --->
 ```python
@@ -354,17 +358,54 @@ import argclass
 
 
 class ArgumentParser(argclass.Parser):
-    # Default False: --flag sets it to True
-    stored_true_short: bool = False
-    # Default True: --no-cache sets it to False
-    stored_false: bool = True
+    # bool = False is a shortcut for action="store_true"
+    # The flag --debug sets it to True
+    debug: bool = False
+    # bool = True is a shortcut for action="store_false"
+    # The flag --no-cache sets it to False
+    cache: bool = True
 
 
 parser = ArgumentParser()
-parser.parse_args(["--stored-true-short"])
-assert parser.stored_true_short is True
-assert parser.stored_false is True
+parser.parse_args(["--debug"])
+assert parser.debug is True
+assert parser.cache is True
 ```
+
+### Explicit Syntax with Argument()
+
+When using `argclass.Argument()` for booleans (e.g., to add help text or aliases),
+you **must** explicitly specify the `action` parameter:
+
+<!--- name: test_bools_explicit --->
+```python
+import argclass
+
+
+class Parser(argclass.Parser):
+    # Using Argument() requires explicit action
+    verbose: bool = argclass.Argument(
+        "-v", "--verbose",
+        action=argclass.Actions.STORE_TRUE,  # Required!
+        default=False,
+        help="Enable verbose output"
+    )
+    # Can also use string literal
+    quiet: bool = argclass.Argument(
+        "-q", "--quiet",
+        action="store_true",  # String literal works too
+        default=False,
+        help="Suppress output"
+    )
+
+
+parser = Parser()
+parser.parse_args(["-v", "-q"])
+assert parser.verbose is True
+assert parser.quiet is True
+```
+
+Without `action`, the boolean argument would expect a value like `--verbose true`.
 
 ## Argument Groups
 
