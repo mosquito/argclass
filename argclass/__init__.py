@@ -222,13 +222,13 @@ class StoreMeta(type):
         annotations = merge_annotations(
             getattr(cls, "__annotations__", {}), *bases,
         )
-        cls.__annotations__ = annotations
-        cls._fields = tuple(
+        setattr(cls, "__annotations__", annotations)
+        setattr(cls, "_fields", tuple(
             filter(
                 lambda x: not x.startswith("_"),
                 annotations.keys(),
             ),
-        )
+        ))
         return cls
 
 
@@ -493,9 +493,9 @@ class Meta(ABCMeta):
             elif isinstance(value, AbstractParser):
                 subparsers[key] = value
 
-        cls.__arguments__ = MappingProxyType(arguments)
-        cls.__argument_groups__ = MappingProxyType(argument_groups)
-        cls.__subparsers__ = MappingProxyType(subparsers)
+        setattr(cls, "__arguments__", MappingProxyType(arguments))
+        setattr(cls, "__argument_groups__", MappingProxyType(argument_groups))
+        setattr(cls, "__subparsers__", MappingProxyType(subparsers))
         return cls
 
 

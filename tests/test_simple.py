@@ -12,6 +12,11 @@ import pytest
 import argclass
 
 
+def strip_ansi(text: str) -> str:
+    """Remove ANSI escape codes from text."""
+    return re.sub(r"\x1b\[[0-9;]*m", "", text)
+
+
 class TestBasics:
     class Parser(argclass.Parser):
         integers: List[int] = argclass.Argument(
@@ -168,11 +173,12 @@ def test_print_help(capsys: pytest.CaptureFixture):
     parser = Parser()
     parser.print_help()
     captured = capsys.readouterr()
-    assert "--foo" in captured.out
-    assert "--bar" in captured.out
-    assert "--help" in captured.out
-    assert "--foo FOO" in captured.out
-    assert "[--bar BAR]" in captured.out
+    output = strip_ansi(captured.out)
+    assert "--foo" in output
+    assert "--bar" in output
+    assert "--help" in output
+    assert "--foo FOO" in output
+    assert "[--bar BAR]" in output
 
 
 def test_print_log_level(capsys: pytest.CaptureFixture):
