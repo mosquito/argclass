@@ -208,7 +208,14 @@ class Parser(argclass.Parser):
 :::{tip}
 To add group arguments without a prefix, use `prefix=""`:
 ```python
-database = DatabaseGroup(prefix="")  # Arguments: --host, --port
+import argclass
+
+class DatabaseGroup(argclass.Group):
+    host: str = "localhost"
+    port: int = 5432
+
+class Parser(argclass.Parser):
+    database = DatabaseGroup(prefix="")  # Arguments: --host, --port
 ```
 :::
 
