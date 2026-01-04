@@ -2,6 +2,26 @@
 
 Subparsers enable multi-command CLIs like `git commit`, `docker run`, etc.
 
+## Design Philosophy
+
+Many CLI tools need multiple related commands under a single entry point.
+Instead of creating separate scripts (`myapp-init`, `myapp-build`, `myapp-deploy`),
+subparsers let you organize them as `myapp init`, `myapp build`, `myapp deploy`.
+
+**argclass subparser design principles:**
+
+- **Composition over inheritance**: Each subcommand is a standalone Parser class
+  that can be tested and reused independently
+- **Type-safe access**: Parsed values are accessed as typed attributes, not
+  dictionary lookups
+- **Hierarchical structure**: Subcommands can have their own subcommands,
+  enabling deep command trees like `kubectl get pods`
+- **Shared context**: Parent parser arguments (like `--verbose`) are accessible
+  from subcommands via `__parent__`
+- **Callable dispatch**: Implement `__call__` on subcommands to define their
+  behavior; calling the root parser automatically dispatches to the selected
+  subcommand
+
 ## Basic Subcommands
 
 Define subcommands by assigning Parser instances as class attributes.

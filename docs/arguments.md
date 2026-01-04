@@ -4,7 +4,9 @@ This guide covers all ways to define and configure arguments in argclass.
 
 ## Basic Arguments
 
-The simplest way to define an argument is with a type annotation:
+The simplest way to define an argument is with a type annotation. Arguments
+without defaults are required; arguments with defaults are optional. The type
+hint determines how string values from the command line are converted.
 
 <!--- name: test_args_basic --->
 ```python
@@ -42,7 +44,9 @@ argclass automatically handles these types:
 
 ### Optional Types
 
-Use `Optional[T]` or `T | None` for optional arguments:
+Use `Optional[T]` or `T | None` for arguments that may not be provided.
+Unlike required arguments, these default to `None` when not specified,
+allowing you to detect whether the user provided a value.
 
 <!--- name: test_args_optional --->
 ```python
@@ -64,7 +68,9 @@ assert parser.optional_with_default == 42
 
 ### Collection Types
 
-Collection types automatically use `nargs`:
+Collection types accept multiple values after the flag. Use `list[T]` to
+preserve order and duplicates, `set[T]` for unique values, or `frozenset[T]`
+for immutable unique values. argclass automatically configures `nargs`.
 
 <!--- name: test_args_collections --->
 ```python
@@ -89,7 +95,9 @@ assert parser.tags == frozenset(["web", "api"])
 
 ## Using Argument()
 
-Use `argclass.Argument()` for additional configuration:
+Use `argclass.Argument()` when you need more control: short aliases like `-n`,
+help text for `--help` output, custom metavars, or other argparse options.
+The first positional arguments define flag names.
 
 <!--- name: test_args_argument_func --->
 ```python
@@ -112,11 +120,14 @@ assert parser.count == 5
 
 ## Typed Argument Functions
 
-For precise type inference, use the typed variants:
+For better IDE support and type checking, use the typed variants. These
+provide exact return type information to static analyzers like mypy and
+enable precise autocompletion in your editor.
 
 ### ArgumentSingle
 
-For single-value arguments with exact type:
+Use `ArgumentSingle` for arguments that accept exactly one value. Specify
+the `type` parameter explicitly for proper type inference in your IDE.
 
 <!--- name: test_args_single --->
 ```python
@@ -135,7 +146,8 @@ assert parser.name == "test"
 
 ### ArgumentSequence
 
-For multi-value arguments:
+Use `ArgumentSequence` for arguments that accept multiple values. The result
+is always a list. Use `nargs="*"` for zero-or-more, `nargs="+"` for one-or-more.
 
 <!--- name: test_args_sequence --->
 ```python
@@ -212,7 +224,9 @@ Without `action`, the boolean argument expects a value like `--verbose true`.
 
 ## Actions
 
-Control how arguments are processed:
+Actions define how argument values are stored. Use `STORE_TRUE` for flags
+that enable features, `STORE_FALSE` for flags that disable features, and
+`COUNT` for arguments that can be repeated (like `-vvv` for verbosity).
 
 <!--- name: test_args_actions --->
 ```python
@@ -243,7 +257,9 @@ assert parser.verbosity == 2
 
 ## Nargs
 
-Control how many values an argument accepts:
+The `nargs` parameter controls how many values an argument consumes. Use `?`
+for zero-or-one, `*` for zero-or-more, `+` for one-or-more, or an integer
+for an exact count. This is essential for multi-value arguments.
 
 <!--- name: test_args_nargs --->
 ```python
@@ -267,7 +283,7 @@ assert parser.files == ["a.txt", "b.txt"]
 assert parser.point == [1.0, 2.0, 3.0]
 ```
 
-Using the `Nargs` enum:
+For better readability, use the `Nargs` enum instead of string literals:
 
 <!--- name: test_args_nargs_enum --->
 ```python
@@ -292,7 +308,9 @@ assert parser.multiple == ["a", "b", "c"]
 
 ## Choices
 
-Restrict values to specific options:
+Use `choices` to restrict an argument to a predefined set of values. The
+parser will reject any value not in the list and display valid options in
+the error message and `--help` output.
 
 <!--- name: test_args_choices --->
 ```python
@@ -317,10 +335,12 @@ assert parser.format == "yaml"
 
 ## Type vs Converter
 
-Understanding the difference:
+These two parameters serve different purposes in the parsing pipeline:
 
-- **`type`**: Called for each input value during parsing
-- **`converter`**: Called once on the final result after parsing
+- **`type`**: Called for each input string during parsing (before collecting)
+- **`converter`**: Called once on the final collected result (after parsing)
+
+Use `type` for per-value conversion, `converter` for post-processing the result.
 
 <!--- name: test_args_type_vs_converter --->
 ```python
@@ -353,7 +373,9 @@ assert parser.unique_alt == {4, 5}
 
 ## Custom Types
 
-Use any callable as a type:
+Any callable that takes a string and returns the desired type works as a
+type converter. This enables parsing dates, URLs, custom formats, or any
+domain-specific value types your application needs.
 
 <!--- name: test_args_custom_types --->
 ```python

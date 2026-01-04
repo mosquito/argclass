@@ -1,10 +1,14 @@
 # Argument Groups
 
 Groups organize related arguments together and enable reuse across parsers.
+They provide logical structure to your CLI, make `--help` output more readable,
+and allow you to define common argument sets once and reuse them in multiple parsers.
 
 ## Basic Groups
 
-Define a group by inheriting from `argclass.Group`:
+Create a group by inheriting from `argclass.Group`. When you add a group to a
+parser, its arguments are prefixed with the attribute name. Here, `database`
+becomes the prefix, so arguments become `--database-host`, `--database-port`, etc.
 
 <!--- name: test_groups_basic --->
 ```python
@@ -30,7 +34,8 @@ assert parser.database.user == "admin"
 
 ## Group Titles
 
-Add a title for help output:
+Add a descriptive title that appears in `--help` output. This makes the help
+more readable by clearly labeling each section of related arguments.
 
 <!--- name: test_groups_title --->
 ```python
@@ -52,7 +57,9 @@ assert parser.database.port == 5432
 
 ## Custom Prefixes
 
-Override the default prefix:
+Override the default prefix with `prefix=`. Use an empty string to add
+arguments without any prefix. This is useful when you want short argument
+names or when the group represents the main configuration.
 
 <!--- name: test_groups_custom_prefix --->
 ```python
@@ -84,7 +91,9 @@ assert parser.server.port == 3000
 
 ## Reusing Groups
 
-The same group class can be used multiple times:
+The same group class can be instantiated multiple times with different
+settings. Use `defaults=` to override default values for each instance.
+This avoids duplicating group definitions for similar configurations.
 
 <!--- name: test_groups_reuse --->
 ```python
@@ -114,7 +123,9 @@ assert parser.database.port == 5432
 
 ## Group Defaults
 
-Override defaults when instantiating:
+Use `defaults=` to provide instance-specific default values. This is useful
+for deployment presets like production vs development configurations, where
+the same group structure needs different default values.
 
 <!--- name: test_groups_defaults --->
 ```python
@@ -142,7 +153,9 @@ assert parser.prod.ssl is True
 
 ## Inheriting from Groups
 
-Parsers can inherit from groups to include arguments directly:
+Parsers can inherit from groups as mixins to include arguments directly
+at the top level (without a prefix). This is useful for common arguments
+like logging or verbosity that you want available in multiple parsers.
 
 <!--- name: test_groups_inherit --->
 ```python
@@ -170,7 +183,8 @@ assert parser.quiet is False
 
 ## Accessing Group Values
 
-Access group attributes through the group instance:
+After parsing, access group values through the group attribute. Groups behave
+like regular Python objects - use dot notation to read the parsed values.
 
 <!--- name: test_groups_access --->
 ```python
@@ -193,7 +207,9 @@ assert parser.database.port == 5432
 
 ## Groups in Config Files
 
-Groups map to INI sections:
+Groups map to INI sections. The section name matches the group attribute name.
+Top-level parser arguments go in `[DEFAULT]`, while each group gets its own
+section named after the attribute.
 
 <!--- name: test_groups_config --->
 ```python
@@ -210,16 +226,21 @@ class Parser(argclass.Parser):
     database = ConnectionGroup()
     cache = ConnectionGroup()
 
-# Create config file
+CONFIG = """
+[DEFAULT]
+verbose = true
+
+[database]
+host = db.example.com
+port = 5432
+
+[cache]
+host = redis.example.com
+port = 6379
+"""
+
 with NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as f:
-    f.write("[DEFAULT]\n")
-    f.write("verbose = true\n\n")
-    f.write("[database]\n")
-    f.write("host = db.example.com\n")
-    f.write("port = 5432\n\n")
-    f.write("[cache]\n")
-    f.write("host = redis.example.com\n")
-    f.write("port = 6379\n")
+    f.write(CONFIG)
     config_path = f.name
 
 parser = Parser(config_files=[config_path])
@@ -231,6 +252,5 @@ assert parser.database.port == 5432
 assert parser.cache.host == "redis.example.com"
 assert parser.cache.port == 6379
 
-# Cleanup
 Path(config_path).unlink()
 ```

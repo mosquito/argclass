@@ -28,19 +28,37 @@ class Parser(argclass.Parser):
 
 ## Logging Configuration
 
-Integrate with Python's logging module:
+argclass provides a pre-built `LogLevel` argument for easy logging integration.
+It accepts level names (`debug`, `info`, `warning`, `error`, `critical`)
+case-insensitively and returns the corresponding `logging` module constant.
+
+### Using the Built-in LogLevel
+
+<!--- name: test_integrations_loglevel --->
+```python
+import argclass
+import logging
+
+class Parser(argclass.Parser):
+    log_level: int = argclass.LogLevel
+
+parser = Parser()
+parser.parse_args(["--log-level", "debug"])
+
+assert parser.log_level == logging.DEBUG
+logging.basicConfig(level=parser.log_level)
+```
+
+### Custom Logging Setup
+
+For more control, combine `LogLevel` with additional options:
 
 ```python
 import argclass
 import logging
 
 class Parser(argclass.Parser):
-    log_level: str = argclass.Argument(
-        "-l", "--log-level",
-        default="INFO",
-        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-        help="Set logging level"
-    )
+    log_level: int = argclass.LogLevel
     log_file: str | None = argclass.Argument(
         "--log-file",
         default=None,
@@ -55,7 +73,7 @@ class Parser(argclass.Parser):
             handlers.append(logging.StreamHandler())
 
         logging.basicConfig(
-            level=getattr(logging, self.log_level),
+            level=self.log_level,
             format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
             handlers=handlers,
             force=True,

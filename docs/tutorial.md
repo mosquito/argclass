@@ -8,7 +8,9 @@ We'll build a backup utility that demonstrates all major argclass features.
 
 ### Basic Structure
 
-Start with a simple parser:
+Every argclass application starts with a Parser class. Define your arguments
+as class attributes with type hints. Required arguments have no default value,
+and `Path` types are automatically converted from strings.
 
 <!--- name: test_tutorial_basic --->
 ```python
@@ -29,7 +31,9 @@ assert backup.destination == Path("/backup")
 
 ### Adding Options
 
-Add optional arguments with defaults:
+Make arguments optional by providing default values. Boolean arguments with
+`False` defaults become flags - users pass `--compress` without a value to
+enable the feature. Integer and other typed defaults work the same way.
 
 <!--- name: test_tutorial_options --->
 ```python
@@ -62,7 +66,9 @@ Note: `bool = False` is a shortcut that creates a flag-style argument (using
 
 ### Help Text and Aliases
 
-Make the CLI user-friendly.
+Use `argclass.Argument()` to add help text and short aliases like `-c` for
+`--compress`. Help text appears in `--help` output, making your CLI
+self-documenting.
 
 **Important:** When using `argclass.Argument()` for booleans, you must explicitly
 specify the `action` parameter. Without it, the argument would expect a value
@@ -104,7 +110,9 @@ assert backup.verbose is True
 
 ### Using Argument Groups
 
-Organize related options into groups:
+Groups bundle related arguments under a common prefix. Here, compression
+settings become `--compression-enabled`, `--compression-level`, etc. Groups
+keep your CLI organized and can be reused across different parsers.
 
 <!--- name: test_tutorial_groups --->
 ```python
@@ -145,7 +153,10 @@ assert backup.compression.format == "lzma"
 
 ### Adding Subcommands
 
-Create a multi-command CLI:
+For tools with multiple operations, use subcommands. Each subcommand is a
+separate Parser class with its own arguments. Implement `__call__` to define
+what happens when that command runs. The root parser dispatches to the
+selected subcommand automatically.
 
 <!--- name: test_tutorial_subcommands --->
 ```python
@@ -188,7 +199,9 @@ assert tool() == 0
 
 ### Configuration Files
 
-Load defaults from a config file:
+Ship default configurations in INI, JSON, or TOML files. Users can override
+these defaults with CLI arguments. This is useful for deployment-specific
+settings or user preferences that shouldn't be hardcoded.
 
 <!--- name: test_tutorial_config_file --->
 ```python
@@ -223,7 +236,10 @@ Path(config_path).unlink()
 
 ### Environment Variables
 
-Add environment variable support.
+Read configuration from environment variables - essential for containerized
+deployments and 12-factor apps. Use `env_var` to bind specific arguments to
+environment variables. Values from environment override config files but are
+overridden by CLI arguments.
 
 :::{warning}
 Environment variables are inherited by child processes. If your app spawns
@@ -264,7 +280,10 @@ del os.environ["BACKUP_COMPRESS"]
 
 ### Complete Example
 
-Here's a complete backup tool:
+This example combines everything: subcommands for different operations,
+groups for organizing related settings, list arguments for multiple values,
+and a global `--verbose` flag. This pattern scales well for real-world CLI
+applications.
 
 <!--- name: test_tutorial_complete --->
 ```python
