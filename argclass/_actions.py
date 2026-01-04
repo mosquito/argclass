@@ -10,10 +10,12 @@ from typing import Any, Iterable, List, Mapping, Optional, Sequence, Union
 
 try:
     import tomllib
+
     toml_load = tomllib.load
 except ImportError:
     try:
         import tomli
+
         toml_load = tomli.load  # type: ignore[assignment]
     except ImportError:
         toml_load = None  # type: ignore[assignment]

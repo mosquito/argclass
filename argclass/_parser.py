@@ -25,6 +25,7 @@ from typing import (
 )
 
 from ._actions import ConfigAction
+from ._defaults import AbstractDefaultsParser, INIDefaultsParser
 from ._secret import SecretString
 from ._store import AbstractGroup, AbstractParser, TypedArgument
 from ._types import Actions, Nargs
@@ -33,7 +34,6 @@ from ._utils import (
     deep_getattr,
     merge_annotations,
     parse_bool,
-    read_configs,
     unwrap_optional,
 )
 
@@ -269,7 +269,7 @@ class Parser(AbstractParser, Base):
     HELP_APPENDIX_END = (
         "The configuration files is INI-formatted files "
         "where configuration groups is INI sections. "
-        "See more https://pypi.org/project/argclass/#configs"
+        "See more https://docs.argclass.com/config-files.html"
     )
 
     def _add_argument(
@@ -345,15 +345,17 @@ class Parser(AbstractParser, Base):
         config_files: Iterable[Union[str, Path]] = (),
         auto_env_var_prefix: Optional[str] = None,
         strict_config: bool = False,
+        config_parser_class: Type[AbstractDefaultsParser] = INIDefaultsParser,
         **kwargs: Any,
     ):
         super().__init__()
         self.current_subparsers: Tuple[AbstractParser, ...] = ()
         self._config_files = config_files
-        self._config, filenames = read_configs(
-            *config_files,
-            strict=strict_config,
-        )
+
+        # Parse config files using the specified parser class
+        config_parser = config_parser_class(config_files, strict=strict_config)
+        self._config = config_parser.parse()
+        filenames = config_parser.loaded_files
 
         self._epilog = kwargs.pop("epilog", "")
 

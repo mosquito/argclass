@@ -13,6 +13,12 @@ from ._actions import (
     JSONConfigAction,
     TOMLConfigAction,
 )
+from ._defaults import (
+    AbstractDefaultsParser,
+    INIDefaultsParser,
+    JSONDefaultsParser,
+    TOMLDefaultsParser,
+)
 from ._factory import (
     Argument,
     ArgumentSequence,
@@ -71,6 +77,11 @@ __all__ = [
     "INIConfigAction",
     "JSONConfigAction",
     "TOMLConfigAction",
+    # Defaults parsers (for config_files parameter)
+    "AbstractDefaultsParser",
+    "INIDefaultsParser",
+    "JSONDefaultsParser",
+    "TOMLDefaultsParser",
     # Factory functions
     "Argument",
     "ArgumentSingle",

@@ -1,40 +1,10 @@
 # Configuration Files
 
-argclass provides two distinct approaches for working with configuration files,
-each designed for different use cases:
+argclass can load default values for CLI arguments from configuration files.
+This is useful for site-specific defaults, deployment configurations, and
+separating configuration from code.
 
-## Two Approaches Overview
-
-| Approach | Mechanism | Format | Purpose |
-|----------|-----------|--------|---------|
-| **Preconfigured Defaults** | `config_files=[...]` in Parser | INI | Preset CLI argument defaults |
-| **Config Argument** | `ConfigArgument` / `argclass.Config()` | YAML, TOML, JSON, INI | Load complex structures via `--config` |
-
-### Approach 1: Preconfigured CLI Defaults
-
-Use the `config_files=[...]` parameter in the Parser constructor to preset default
-values for CLI arguments from INI files. These defaults are loaded at initialization
-and can be overridden by environment variables and command-line arguments.
-
-**Best for:** Site-specific defaults (e.g., `/etc/myapp.ini`), deployment configurations.
-
-### Approach 2: Config File as Argument Value
-
-Use `ConfigArgument` subclasses (`JSONConfig`, `INIConfig`, or custom YAML/TOML parsers)
-to add a `--config` argument. The user provides a config file path at runtime, and the
-parsed content becomes available as a `MappingProxyType` for your application to use.
-
-**Best for:** Loading complex nested structures, application-specific data, user-provided configs.
-
----
-
-## Approach 1: Preconfigured CLI Defaults
-
-This approach loads default values for CLI arguments from INI configuration files.
-
-### INI Files
-
-The default format is INI:
+## Quick Start
 
 <!--- name: test_config_ini --->
 ```python
@@ -69,9 +39,92 @@ assert parser.debug is True
 Path(config_path).unlink()
 ```
 
-### Config File Search
+## Supported Formats
 
-Specify multiple paths - first found is used:
+| Format | Complex Types | Native Types | Parser Class |
+|--------|--------------|--------------|--------------|
+| **INI** (default) | `ast.literal_eval` syntax | All strings | `INIDefaultsParser` |
+| **JSON** | Native arrays/objects | int, float, bool, null | `JSONDefaultsParser` |
+| **TOML** | Native arrays/tables | int, float, bool, datetime | `TOMLDefaultsParser` |
+
+### INI Format (Default)
+
+All values are strings. For lists, use Python literal syntax:
+
+```ini
+[DEFAULT]
+ports = [8080, 8081, 8082]
+hosts = ["primary.example.com", "backup.example.com"]
+```
+
+These are parsed using `ast.literal_eval` when the argument type requires it.
+
+### JSON Format
+
+```python
+import argclass
+
+class Parser(argclass.Parser):
+    host: str = "localhost"
+    port: int = 8080
+
+# config.json: {"host": "json.example.com", "port": 9000}
+parser = Parser(
+    config_files=["config.json"],
+    config_parser_class=argclass.JSONDefaultsParser,
+)
+```
+
+### TOML Format
+
+Requires Python 3.11+ (stdlib `tomllib`) or `tomli` package.
+
+```python
+import argclass
+
+class Parser(argclass.Parser):
+    host: str = "localhost"
+    port: int = 8080
+
+# config.toml:
+# host = "toml.example.com"
+# port = 9000
+parser = Parser(
+    config_files=["config.toml"],
+    config_parser_class=argclass.TOMLDefaultsParser,
+)
+```
+
+### Custom Format
+
+Subclass `AbstractDefaultsParser` to support other formats (e.g., YAML):
+
+```python
+import argclass
+
+class YAMLDefaultsParser(argclass.AbstractDefaultsParser):
+    def parse(self):
+        import yaml
+        result = {}
+        for path in self._filter_readable_paths():
+            with path.open() as f:
+                data = yaml.safe_load(f)
+                if isinstance(data, dict):
+                    result.update(data)
+            self._loaded_files = (path,)
+        return result
+
+parser = Parser(
+    config_files=["config.yaml"],
+    config_parser_class=YAMLDefaultsParser,
+)
+```
+
+## Loading Behavior
+
+### File Search
+
+Specify multiple paths - all readable files are merged:
 
 <!--- name: test_config_search --->
 ```python
@@ -104,10 +157,9 @@ assert parser.value == "from_config"
 Path(config_path).unlink()
 ```
 
-### Dynamic Config Paths
+### Dynamic Paths
 
-For flexible deployments, use `os.getenv()` to allow users to override config file
-locations via environment variables:
+Use `os.getenv()` to allow users to override config file locations:
 
 ```python
 import os
@@ -128,20 +180,17 @@ parser = Parser(config_files=[
 ```
 
 This pattern allows:
-- Operators to override config location: `MYAPP_CONFIG=/custom/path.ini myapp`
-- Default system-wide config: `/etc/myapp/config.ini`
+
+- Operators to override: `MYAPP_CONFIG=/custom/path.ini myapp`
+- System-wide config: `/etc/myapp/config.ini`
 - User-specific config: `~/.config/myapp.ini`
-- Local development config: `./config.ini`
+- Local development: `./config.ini`
 
-### Partial Configuration (Multi-File Merging)
+### Multi-File Merging
 
-When multiple config files are specified, they are **merged together** with later files
-overriding earlier ones. This enables a layered configuration approach where each file
-only needs to specify the values it wants to override.
+Multiple config files are **merged together** - later files override earlier ones:
 
-**Example: Global defaults with user overrides**
-
-```
+```ini
 # /etc/myapp.ini (global defaults)
 [DEFAULT]
 log_level = warning
@@ -150,19 +199,12 @@ max_connections = 100
 [database]
 host = db.production.example.com
 port = 5432
-
-[server]
-host = 0.0.0.0
-port = 8080
 ```
 
-```
-# ~/.config/myapp.ini (user overrides - only specify what differs)
+```ini
+# ~/.config/myapp.ini (user overrides - partial config)
 [DEFAULT]
 log_level = debug
-
-[server]
-host = 127.0.0.1
 ```
 
 ```python
@@ -173,19 +215,14 @@ class DatabaseGroup(argclass.Group):
     host: str = "localhost"
     port: int = 5432
 
-class ServerGroup(argclass.Group):
-    host: str = "localhost"
-    port: int = 80
-
 class Parser(argclass.Parser):
     log_level: str = "info"
     max_connections: int = 10
     database = DatabaseGroup()
-    server = ServerGroup()
 
 parser = Parser(config_files=[
-    "/etc/myapp.ini",                # Global defaults
-    os.path.expanduser("~/.config/myapp.ini"),  # User overrides
+    "/etc/myapp.ini",
+    os.path.expanduser("~/.config/myapp.ini"),
 ])
 parser.parse_args([])
 
@@ -193,19 +230,9 @@ parser.parse_args([])
 # - log_level = "debug"           (user overrides global)
 # - max_connections = 100         (from global, not in user config)
 # - database.host = "db.production.example.com"  (from global)
-# - database.port = 5432          (from global)
-# - server.host = "127.0.0.1"     (user overrides global)
-# - server.port = 8080            (from global, not in user config)
 ```
 
-**Key benefits:**
-- **Separation of concerns:** Global config in `/etc/` for system-wide defaults,
-  user config in `~/.config/` for personal preferences
-- **Partial configs:** Each file only needs to define what it wants to change
-- **Group isolation:** Configure different groups in different files (e.g., database
-  settings managed by DBAs, server settings by developers)
-
-### Config Priority
+### Value Priority
 
 Values are applied in this order (later overrides earlier):
 
@@ -246,9 +273,11 @@ assert parser2.port == 3000
 Path(config_path).unlink()
 ```
 
+## Syntax Reference
+
 ### Group Sections
 
-Groups map to config sections:
+Groups map to INI sections:
 
 <!--- name: test_config_groups --->
 ```python
@@ -303,6 +332,10 @@ Path(config_path).unlink()
 
 These strings are recognized as boolean:
 
+| True | False |
+|------|-------|
+| `true`, `yes`, `on`, `1` | `false`, `no`, `off`, `0` |
+
 <!--- name: test_config_bool --->
 ```python
 import argclass
@@ -341,7 +374,7 @@ Path(config_path).unlink()
 
 ### CLI Override
 
-Command-line arguments override config file values:
+Command-line arguments always override config file values:
 
 <!--- name: test_config_cli_override --->
 ```python
@@ -375,18 +408,16 @@ Path(config_path).unlink()
 
 ---
 
-## Approach 2: Config File as Argument Value
+## Config as Argument Value
 
-This approach adds a `--config` argument that accepts a file path. The config file
-is parsed and its content becomes available as a `MappingProxyType` (immutable dict)
-for programmatic use within your application.
+> **Note:** This is a separate feature from `config_files`. Instead of presetting
+> CLI argument defaults, this adds a `--config` argument that loads structured
+> data for your application to use programmatically.
 
-Unlike Approach 1 (which sets CLI argument defaults), this approach is for loading
-complex structured data that your application logic needs to process.
+This is useful when your application needs to load complex nested structures,
+arrays, or application-specific data that doesn't map to CLI arguments.
 
 ### Built-in Config Types
-
-argclass provides built-in support for JSON, INI, and TOML formats:
 
 ```python
 import argclass
@@ -402,11 +433,83 @@ class Parser(argclass.Parser):
     toml_config = argclass.Config(config_class=argclass.TOMLConfig)
 ```
 
+### JSON Example
+
+<!--- name: test_config_json_argument --->
+```python
+import argclass
+import json
+from pathlib import Path
+from tempfile import NamedTemporaryFile
+
+class Parser(argclass.Parser):
+    config = argclass.Config(config_class=argclass.JSONConfig)
+
+# Config file content
+CONFIG_DATA = {
+    "database": {
+        "host": "localhost",
+        "port": 5432,
+        "replicas": ["replica1.db", "replica2.db"]
+    },
+    "features": ["auth", "logging"]
+}
+
+with NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+    json.dump(CONFIG_DATA, f)
+    config_path = f.name
+
+parser = Parser()
+parser.parse_args(["--config", config_path])
+
+# Access nested data
+assert parser.config["database"]["host"] == "localhost"
+assert parser.config["database"]["replicas"] == ["replica1.db", "replica2.db"]
+assert parser.config["features"] == ["auth", "logging"]
+
+Path(config_path).unlink()
+```
+
+### TOML Example
+
+<!--- name: test_config_toml_argument --->
+```python
+import argclass
+from pathlib import Path
+from tempfile import NamedTemporaryFile
+
+class Parser(argclass.Parser):
+    config = argclass.Config(config_class=argclass.TOMLConfig)
+
+# Config file content
+CONFIG_CONTENT = """
+[database]
+host = "localhost"
+port = 5432
+replicas = ["replica1.db", "replica2.db"]
+
+[features]
+enabled = ["auth", "logging"]
+"""
+
+with NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
+    f.write(CONFIG_CONTENT)
+    config_path = f.name
+
+parser = Parser()
+parser.parse_args(["--config", config_path])
+
+# Access nested data
+assert parser.config["database"]["host"] == "localhost"
+assert parser.config["database"]["replicas"] == ["replica1.db", "replica2.db"]
+assert parser.config["features"]["enabled"] == ["auth", "logging"]
+
+Path(config_path).unlink()
+```
+
 ### Custom Config Parsers
 
-For other formats like YAML, create custom parsers by extending `ConfigAction`.
-
-#### YAML Parser
+For other formats like YAML, extend `ConfigAction`:
 
 ```python
 from pathlib import Path
@@ -426,49 +529,10 @@ class Parser(argclass.Parser):
     config = argclass.Config(config_class=YAMLConfig)
 ```
 
-### Complete Usage Example
+### Key Difference
 
-Here's how Approach 2 differs from Approach 1 - the config data is accessed
-programmatically rather than being mapped to CLI arguments:
-
-```python
-import argclass
-import json
-from pathlib import Path
-from tempfile import NamedTemporaryFile
-
-class Parser(argclass.Parser):
-    verbose: bool = False
-    config: argclass.JSONConfig  # Adds --config argument
-
-# Create a JSON config with complex nested data
-config_data = {
-    "database": {
-        "connections": [
-            {"host": "primary.db", "port": 5432},
-            {"host": "replica.db", "port": 5432}
-        ]
-    },
-    "features": ["auth", "logging", "metrics"]
-}
-
-with NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-    json.dump(config_data, f)
-    config_path = f.name
-
-parser = Parser()
-parser.parse_args(["--config", config_path, "--verbose"])
-
-# CLI arguments work as normal
-assert parser.verbose is True
-
-# Config data is available as MappingProxyType (immutable dict)
-assert parser.config["database"]["connections"][0]["host"] == "primary.db"
-assert parser.config["features"] == ["auth", "logging", "metrics"]
-
-Path(config_path).unlink()
-```
-
-**Key difference:** In Approach 1, config values map directly to CLI argument defaults.
-In Approach 2, the entire config structure is available for your application logic
-to process however needed.
+| Feature | `config_files=[...]` | `argclass.Config()` |
+|---------|---------------------|---------------------|
+| Purpose | Preset CLI argument defaults | Load structured data |
+| Access | Via parser attributes | Via dict-like access |
+| Use case | Site configuration | Application data |
