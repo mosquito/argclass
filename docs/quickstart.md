@@ -1,16 +1,37 @@
 # Quick Start
 
-This guide will get you started with argclass in 5 minutes.
+Get started with argclass in 5 minutes.
 
 ## Installation
 
-```bash
+```console
 pip install argclass
 ```
 
-## Your First Parser
+## Basic Usage
 
-Create a simple command-line parser by defining a class:
+Define a class with type hints to create a CLI parser:
+
+```python
+import argclass
+
+class Greeter(argclass.Parser):
+    name: str          # Required argument
+    count: int = 1     # Optional with default
+
+greeter = Greeter()
+greeter.parse_args()
+print(f"Hello, {greeter.name}!" * greeter.count)
+```
+
+```console
+$ python greeter.py --name World --count 3
+Hello, World!Hello, World!Hello, World!
+```
+
+## Examples
+
+### Required and Optional Arguments
 
 <!--- name: test_quickstart_first_parser --->
 ```python
@@ -27,16 +48,7 @@ assert greeter.name == "World"
 assert greeter.count == 3
 ```
 
-## How It Works
-
-1. **Class attributes become arguments** - Each annotated attribute becomes a CLI argument
-2. **Types are enforced** - `int` annotations automatically convert string input to integers
-3. **Defaults make arguments optional** - `count: int = 1` means `--count` is optional
-4. **No default means required** - `name: str` has no default, so `--name` is required
-
-## Adding Help Text
-
-Use `argclass.Argument()` to add descriptions:
+### Help Text
 
 <!--- name: test_quickstart_help_text --->
 ```python
@@ -53,9 +65,7 @@ assert greeter.name == "Alice"
 assert greeter.count == 1
 ```
 
-## Short Aliases
-
-Add short flags with aliases:
+### Short Aliases
 
 <!--- name: test_quickstart_aliases --->
 ```python
@@ -72,9 +82,9 @@ assert greeter.name == "World"
 assert greeter.count == 3
 ```
 
-## Boolean Flags
+Usage: `python greeter.py -n World -c 3`
 
-Boolean arguments with `False` default become flags:
+### Boolean Flags
 
 <!--- name: test_quickstart_bool_flags --->
 ```python
@@ -91,9 +101,9 @@ assert app.verbose is True
 assert app.debug is True
 ```
 
-## Multiple Values
+Usage: `python app.py --verbose --debug`
 
-Use `list[T]` for arguments that accept multiple values:
+### Multiple Values
 
 <!--- name: test_quickstart_multiple_values --->
 ```python
@@ -110,9 +120,9 @@ assert processor.files == ["a.txt", "b.txt", "c.txt"]
 assert processor.exclude == ["b.txt"]
 ```
 
-## Environment Variables
+Usage: `python processor.py --files a.txt b.txt c.txt --exclude b.txt`
 
-Read defaults from environment variables:
+### Environment Variables
 
 <!--- name: test_quickstart_env_vars --->
 ```python
@@ -137,9 +147,51 @@ del os.environ["TEST_DB_HOST"]
 del os.environ["TEST_DB_PORT"]
 ```
 
+Usage: `TEST_DB_HOST=prod.example.com python app.py`
+
+## Quick Reference
+
+| Pattern | Syntax | Result |
+|---------|--------|--------|
+| Required arg | `name: str` | `--name` (required) |
+| Optional arg | `name: str = "default"` | `--name` (optional) |
+| Boolean flag | `debug: bool = False` | `--debug` |
+| Multiple values | `files: list[str]` | `--files a b c` |
+| Help text | `argclass.Argument(help="...")` | Shows in `--help` |
+| Short alias | `argclass.Argument("-n", "--name")` | `-n` or `--name` |
+| Env variable | `argclass.Argument(env_var="VAR")` | Reads from `$VAR` |
+
 ## Next Steps
 
-- [Tutorial](tutorial.md) - Complete walkthrough of all features
-- [Arguments](arguments.md) - Detailed argument configuration
-- [Config Files](config-files.md) - Load defaults from INI/JSON files
-- [API Reference](api.md) - Complete API documentation
+::::{grid} 2
+:gutter: 3
+
+:::{grid-item-card} Tutorial
+:link: tutorial
+:link-type: doc
+
+Complete walkthrough of all features with practical examples.
+:::
+
+:::{grid-item-card} Config Files
+:link: config-files
+:link-type: doc
+
+Load defaults from INI, JSON, or TOML configuration files.
+:::
+
+:::{grid-item-card} Arguments
+:link: arguments
+:link-type: doc
+
+Detailed argument configuration: types, choices, validators.
+:::
+
+:::{grid-item-card} API Reference
+:link: api
+:link-type: doc
+
+Complete API documentation for all classes and functions.
+:::
+
+::::

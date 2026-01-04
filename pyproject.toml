@@ -61,6 +61,7 @@ docs = [
     "myst-parser>=3.0",
     "sphinx-copybutton>=0.5",
     "sphinx-autodoc-typehints>=2.0",
+    "sphinx-design>=0.6",
 ]
 
 [tool.ruff]

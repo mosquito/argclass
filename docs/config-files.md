@@ -1,8 +1,10 @@
 # Configuration Files
 
-argclass can load default values for CLI arguments from configuration files.
-This is useful for site-specific defaults, deployment configurations, and
-separating configuration from code.
+Load default values for CLI arguments from configuration files. Useful for
+site-specific defaults, deployment configurations, and separating configuration
+from code.
+
+---
 
 ## Quick Start
 
@@ -39,17 +41,62 @@ assert parser.debug is True
 Path(config_path).unlink()
 ```
 
+---
+
 ## Supported Formats
+
+::::{grid} 3
+:gutter: 3
+
+:::{grid-item-card} INI (Default)
+:class-card: sd-rounded-3
+
+```ini
+[DEFAULT]
+host = localhost
+port = 8080
+```
+
+Use `INIDefaultsParser` (default)
+:::
+
+:::{grid-item-card} JSON
+:class-card: sd-rounded-3
+
+```json
+{
+  "host": "localhost",
+  "port": 8080
+}
+```
+
+Use `JSONDefaultsParser`
+:::
+
+:::{grid-item-card} TOML
+:class-card: sd-rounded-3
+
+```toml
+host = "localhost"
+port = 8080
+```
+
+Use `TOMLDefaultsParser`
+:::
+
+::::
+
+### Format Comparison
 
 | Format | Complex Types | Native Types | Parser Class |
 |--------|--------------|--------------|--------------|
-| **INI** (default) | `ast.literal_eval` syntax | All strings | `INIDefaultsParser` |
+| **INI** | `ast.literal_eval` syntax | All strings | `INIDefaultsParser` |
 | **JSON** | Native arrays/objects | int, float, bool, null | `JSONDefaultsParser` |
 | **TOML** | Native arrays/tables | int, float, bool, datetime | `TOMLDefaultsParser` |
 
-### INI Format (Default)
+### INI Complex Types
 
-All values are strings. For lists, use Python literal syntax:
+All INI values are strings. For lists, use Python literal syntax:
 
 ```ini
 [DEFAULT]
@@ -59,7 +106,7 @@ hosts = ["primary.example.com", "backup.example.com"]
 
 These are parsed using `ast.literal_eval` when the argument type requires it.
 
-### JSON Format
+### Using JSON
 
 ```python
 import argclass
@@ -75,7 +122,7 @@ parser = Parser(
 )
 ```
 
-### TOML Format
+### Using TOML
 
 Requires Python 3.11+ (stdlib `tomllib`) or `tomli` package.
 
@@ -97,7 +144,7 @@ parser = Parser(
 
 ### Custom Format
 
-Subclass `AbstractDefaultsParser` to support other formats (e.g., YAML):
+Subclass `AbstractDefaultsParser` for other formats (e.g., YAML):
 
 ```python
 import argclass
@@ -119,6 +166,8 @@ parser = Parser(
     config_parser_class=YAMLDefaultsParser,
 )
 ```
+
+---
 
 ## Loading Behavior
 
@@ -179,17 +228,20 @@ parser = Parser(config_files=[
 ])
 ```
 
-This pattern allows:
+**This pattern allows:**
 
-- Operators to override: `MYAPP_CONFIG=/custom/path.ini myapp`
-- System-wide config: `/etc/myapp/config.ini`
-- User-specific config: `~/.config/myapp.ini`
-- Local development: `./config.ini`
+| Location | Purpose |
+|----------|---------|
+| `$MYAPP_CONFIG` | Operator override |
+| `/etc/myapp.ini` | System-wide defaults |
+| `~/.config/myapp.ini` | User preferences |
+| `./config.ini` | Local development |
 
 ### Multi-File Merging
 
 Multiple config files are **merged together** - later files override earlier ones:
 
+:::{card} Example: Global + User Config
 ```ini
 # /etc/myapp.ini (global defaults)
 [DEFAULT]
@@ -198,14 +250,16 @@ max_connections = 100
 
 [database]
 host = db.production.example.com
-port = 5432
 ```
 
 ```ini
-# ~/.config/myapp.ini (user overrides - partial config)
+# ~/.config/myapp.ini (user overrides)
 [DEFAULT]
 log_level = debug
 ```
+
+**Result:** `log_level = debug`, `max_connections = 100`, `database.host = db.production.example.com`
+:::
 
 ```python
 import os
@@ -224,22 +278,15 @@ parser = Parser(config_files=[
     "/etc/myapp.ini",
     os.path.expanduser("~/.config/myapp.ini"),
 ])
-parser.parse_args([])
-
-# Results after merging:
-# - log_level = "debug"           (user overrides global)
-# - max_connections = 100         (from global, not in user config)
-# - database.host = "db.production.example.com"  (from global)
 ```
 
 ### Value Priority
 
-Values are applied in this order (later overrides earlier):
+Values are applied in order (later overrides earlier):
 
-1. Class defaults
-2. Config file values
-3. Environment variables
-4. Command-line arguments
+:::{card}
+1. **Class defaults** → 2. **Config files** → 3. **Environment variables** → 4. **CLI arguments**
+:::
 
 <!--- name: test_config_priority --->
 ```python
@@ -272,6 +319,8 @@ assert parser2.port == 3000
 
 Path(config_path).unlink()
 ```
+
+---
 
 ## Syntax Reference
 
@@ -330,10 +379,8 @@ Path(config_path).unlink()
 
 ### Boolean Values
 
-These strings are recognized as boolean:
-
-| True | False |
-|------|-------|
+| True values | False values |
+|-------------|--------------|
 | `true`, `yes`, `on`, `1` | `false`, `no`, `off`, `0` |
 
 <!--- name: test_config_bool --->
@@ -410,12 +457,14 @@ Path(config_path).unlink()
 
 ## Config as Argument Value
 
-> **Note:** This is a separate feature from `config_files`. Instead of presetting
-> CLI argument defaults, this adds a `--config` argument that loads structured
-> data for your application to use programmatically.
+:::{note}
+This is a **separate feature** from `config_files`. Instead of presetting CLI argument
+defaults, this adds a `--config` argument that loads structured data for your
+application to use programmatically.
+:::
 
-This is useful when your application needs to load complex nested structures,
-arrays, or application-specific data that doesn't map to CLI arguments.
+Useful when your application needs complex nested structures, arrays, or
+application-specific data that doesn't map to CLI arguments.
 
 ### Built-in Config Types
 
@@ -533,6 +582,6 @@ class Parser(argclass.Parser):
 
 | Feature | `config_files=[...]` | `argclass.Config()` |
 |---------|---------------------|---------------------|
-| Purpose | Preset CLI argument defaults | Load structured data |
-| Access | Via parser attributes | Via dict-like access |
-| Use case | Site configuration | Application data |
+| **Purpose** | Preset CLI argument defaults | Load structured data |
+| **Access** | Via parser attributes | Via dict-like access |
+| **Use case** | Site configuration | Application data |

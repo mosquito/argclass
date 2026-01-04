@@ -21,28 +21,140 @@ print(f"Starting server on {server.host}:{server.port}")
 
 ```bash
 $ python server.py --host 0.0.0.0 --port 9000 --debug
+Starting server on 0.0.0.0:9000
 ```
+
+---
 
 ## Why argclass?
 
+::::{grid} 3
+:gutter: 3
+
+:::{grid-item-card} Type-Safe
+:class-card: sd-border-0
+
+Define arguments with Python type hints. Get automatic validation and conversion.
+:::
+
+:::{grid-item-card} Zero Dependencies
+:class-card: sd-border-0
+
+Built on stdlib `argparse`. No external dependencies required.
+:::
+
+:::{grid-item-card} IDE Support
+:class-card: sd-border-0
+
+Full autocompletion and type checking in your editor.
+:::
+
+::::
+
 | Feature                 | argclass | argparse | click/typer |
 |-------------------------|----------|----------|-------------|
-| Type hints → arguments  | Yes      | No       | Yes         |
-| IDE autocompletion      | Yes      | No       | Yes         |
-| Config file support     | Built-in | No       | No          |
-| Environment variables   | Built-in | No       | Plugin      |
-| Secret masking          | Built-in | No       | No          |
-| Argument groups         | Reusable | Limited  | No          |
-| Dependencies            | stdlib   | stdlib   | Many        |
+| Type hints → arguments  | Yes | No | Yes |
+| IDE autocompletion      | Yes | No | Yes |
+| Config file support     | Built-in | No | No |
+| Environment variables   | Built-in | No | Plugin |
+| Secret masking          | Built-in | No | No |
+| Argument groups         | Reusable | Limited | No |
+| Dependencies            | None | stdlib | Many |
 
-**argclass** is a thin layer between `argparse` and Python's type system.
-Any argparse extension works seamlessly with argclass.
+---
 
 ## Installation
 
-```bash
+```console
 pip install argclass
 ```
+
+---
+
+## Quick Examples
+
+### Groups
+
+Organize related arguments:
+
+```python
+import argclass
+
+class DatabaseGroup(argclass.Group):
+    host: str = "localhost"
+    port: int = 5432
+
+class Parser(argclass.Parser):
+    debug: bool = False
+    db = DatabaseGroup()
+
+parser = Parser()
+parser.parse_args(["--db-host", "prod.db", "--db-port", "5432"])
+# parser.db.host == "prod.db"
+```
+
+### Config Files
+
+Load defaults from INI, JSON, or TOML:
+
+```python
+import argclass
+
+class Parser(argclass.Parser):
+    host: str = "localhost"
+    port: int = 8080
+
+parser = Parser(config_files=[
+    "/etc/myapp.ini",
+    "~/.config/myapp.ini",
+])
+```
+
+### Environment Variables
+
+Read from environment with a prefix:
+
+```python
+import argclass
+
+class Parser(argclass.Parser):
+    host: str = "localhost"
+    port: int = 8080
+
+parser = Parser(auto_env_var_prefix="MYAPP_")
+# Reads from MYAPP_HOST, MYAPP_PORT
+```
+
+---
+
+## Get Started
+
+::::{grid} 2
+:gutter: 3
+
+:::{grid-item-card} Quick Start
+:link: quickstart
+:link-type: doc
+:class-card: sd-rounded-3
+
+**5 minute introduction**
+
+Learn the basics: arguments, types, flags, and environment variables.
+:::
+
+:::{grid-item-card} Tutorial
+:link: tutorial
+:link-type: doc
+:class-card: sd-rounded-3
+
+**Complete walkthrough**
+
+Build a real CLI application step by step.
+:::
+
+::::
+
+---
 
 ## Documentation
 
@@ -72,7 +184,6 @@ integrations
 :caption: Reference
 
 api
-changelog
 ```
 
 ## Indices and tables
