@@ -91,6 +91,11 @@ assert parser.db.port == 3306
 
 ### Configuration Files
 
+argclass supports two approaches: **preconfigured defaults** (INI files that set argument defaults)
+and **config arguments** (YAML/TOML/JSON loaded as structured data). See [Config Files](https://docs.argclass.com/config-files.html) for details.
+
+**Preconfigured defaults** - preset CLI argument values from INI:
+
 <!--- name: test_config_example --->
 ```python
 import argclass
@@ -101,8 +106,15 @@ class Parser(argclass.Parser):
     host: str = "localhost"
     port: int = 8080
 
+# Config file content
+CONFIG_CONTENT = """
+[DEFAULT]
+host = example.com
+port = 9000
+"""
+
 with NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as f:
-    f.write("[DEFAULT]\nhost = example.com\nport = 9000\n")
+    f.write(CONFIG_CONTENT)
     config_path = f.name
 
 parser = Parser(config_files=[config_path])
@@ -111,6 +123,22 @@ assert parser.host == "example.com"
 assert parser.port == 9000
 
 Path(config_path).unlink()
+```
+
+**Tip:** Use `os.getenv()` for dynamic config paths. Multiple files are merged
+(later overrides earlier), enabling global defaults with user overrides:
+
+```python
+import os
+import argclass
+
+class Parser(argclass.Parser):
+    host: str = "localhost"
+
+parser = Parser(config_files=[
+    os.getenv("MYAPP_CONFIG", "/etc/myapp/config.ini"),  # Global defaults
+    "~/.config/myapp.ini",  # User overrides (partial config OK)
+])
 ```
 
 ### Environment Variables

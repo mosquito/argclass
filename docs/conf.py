@@ -54,6 +54,7 @@ html_theme_options = {
     "dark_logo": "logo-dark.svg",
     "sidebar_hide_name": True,
     "navigation_with_keys": True,
+    "top_of_page_buttons": ["view", "edit"],
     "footer_icons": [
         {
             "name": "GitHub",

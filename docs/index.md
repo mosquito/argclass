@@ -25,15 +25,15 @@ $ python server.py --host 0.0.0.0 --port 9000 --debug
 
 ## Why argclass?
 
-| Feature | argclass | argparse | click/typer |
-|---------|----------|----------|-------------|
-| Type hints → arguments | Yes | No | Yes |
-| IDE autocompletion | Yes | No | Yes |
-| Config file support | Built-in | No | No |
-| Environment variables | Built-in | No | Plugin |
-| Secret masking | Built-in | No | No |
-| Argument groups | Reusable | Limited | No |
-| Dependencies | None | stdlib | Many |
+| Feature                 | argclass | argparse | click/typer |
+|-------------------------|----------|----------|-------------|
+| Type hints → arguments  | Yes      | No       | Yes         |
+| IDE autocompletion      | Yes      | No       | Yes         |
+| Config file support     | Built-in | No       | No          |
+| Environment variables   | Built-in | No       | Plugin      |
+| Secret masking          | Built-in | No       | No          |
+| Argument groups         | Reusable | Limited  | No          |
+| Dependencies            | stdlib   | stdlib   | Many        |
 
 **argclass** is a thin layer between `argparse` and Python's type system.
 Any argparse extension works seamlessly with argclass.

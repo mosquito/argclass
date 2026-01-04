@@ -40,9 +40,9 @@ classifiers = [
 
 [project.urls]
 Homepage = "https://github.com/mosquito/argclass"
+Documentation = "https://docs.argclass.com"
 Source = "https://github.com/mosquito/argclass"
 Tracker = "https://github.com/mosquito/argclass/issues"
-Documentation = "https://github.com/mosquito/argclass/blob/master/README.md"
 
 [dependency-groups]
 dev = [

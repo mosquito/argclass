@@ -1,5 +1,5 @@
 SPHINXOPTS    ?= -W
-SPHINXBUILD   ?= sphinx-build
+SPHINXBUILD   ?= uv run --group docs sphinx-build
 SOURCEDIR     = .
 BUILDDIR      = _build
 
@@ -14,10 +14,11 @@ help:
 	@echo "  clean   Remove build directory"
 
 html:
+	@mkdir -p $(BUILDDIR)/html
 	$(SPHINXBUILD) $(SPHINXOPTS) -b html $(SOURCEDIR) $(BUILDDIR)/html
 
 test:
-	pytest -svv ../README.md .
+	uv run pytest -svv ../README.md .
 
 clean:
 	rm -rf $(BUILDDIR)

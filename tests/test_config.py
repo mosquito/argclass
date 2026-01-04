@@ -242,6 +242,211 @@ class TestConfigBooleanConversion:
         assert parser.data == Path("/data/files")
 
 
+class TestPartialConfigMerging:
+    """
+    Test loading and merging partial configs from multiple files.
+    """
+
+    def test_multiple_files_merge(self, tmp_path: Path):
+        """
+        Test that multiple config files are merged, later overrides earlier.
+        """
+        # Global config (e.g., /etc/myapp.ini)
+        global_config = tmp_path / "global.ini"
+        global_config.write_text(
+            "[DEFAULT]\nhost = global.example.com\nport = 8080\ndebug = false\n"
+        )
+
+        # User config (e.g., ~/.config/myapp.ini)
+        user_config = tmp_path / "user.ini"
+        user_config.write_text(
+            "[DEFAULT]\n"
+            "host = user.example.com\n"
+            # port not specified - should use global value
+            "debug = true\n"
+        )
+
+        class Parser(argclass.Parser):
+            host: str = "localhost"
+            port: int = 80
+            debug: bool = False
+
+        parser = Parser(config_files=[global_config, user_config])
+        parser.parse_args([])
+
+        # User config overrides global
+        assert parser.host == "user.example.com"
+        # Global config value preserved (not in user config)
+        assert parser.port == 8080
+        # User config overrides global
+        assert parser.debug is True
+
+    def test_groups_in_separate_files(self, tmp_path: Path):
+        """Test different groups can be configured in different files."""
+        # Global config with database settings
+        global_config = tmp_path / "global.ini"
+        global_config.write_text(
+            "[DEFAULT]\n"
+            "verbose = false\n"
+            "[database]\n"
+            "host = db.global.example.com\n"
+            "port = 5432\n"
+            "[server]\n"
+            "host = 0.0.0.0\n"
+            "port = 8080\n"
+        )
+
+        # User config with only server overrides
+        user_config = tmp_path / "user.ini"
+        user_config.write_text(
+            "[DEFAULT]\nverbose = true\n[server]\nhost = 127.0.0.1\n"
+            # port not specified - should use global
+        )
+
+        class DatabaseGroup(argclass.Group):
+            host: str = "localhost"
+            port: int = 5432
+
+        class ServerGroup(argclass.Group):
+            host: str = "localhost"
+            port: int = 80
+
+        class Parser(argclass.Parser):
+            verbose: bool = False
+            database = DatabaseGroup()
+            server = ServerGroup()
+
+        parser = Parser(config_files=[global_config, user_config])
+        parser.parse_args([])
+
+        # User overrides global default
+        assert parser.verbose is True
+        # Database group unchanged from global config
+        assert parser.database.host == "db.global.example.com"
+        assert parser.database.port == 5432
+        # Server host overridden by user, port from global
+        assert parser.server.host == "127.0.0.1"
+        assert parser.server.port == 8080
+
+    def test_three_level_config_hierarchy(self, tmp_path: Path):
+        """Test system -> global -> user config hierarchy."""
+        # System defaults (e.g., /usr/share/myapp/defaults.ini)
+        system_config = tmp_path / "system.ini"
+        system_config.write_text(
+            "[DEFAULT]\n"
+            "log_level = warning\n"
+            "max_connections = 100\n"
+            "timeout = 30\n"
+        )
+
+        # Global config (e.g., /etc/myapp.ini)
+        global_config = tmp_path / "global.ini"
+        global_config.write_text(
+            "[DEFAULT]\nlog_level = info\nmax_connections = 500\n"
+            # timeout not specified - uses system default
+        )
+
+        # User config (e.g., ~/.config/myapp.ini)
+        user_config = tmp_path / "user.ini"
+        user_config.write_text(
+            "[DEFAULT]\nlog_level = debug\n"
+            # Others not specified - use previous values
+        )
+
+        class Parser(argclass.Parser):
+            log_level: str = "error"
+            max_connections: int = 10
+            timeout: int = 60
+
+        parser = Parser(
+            config_files=[system_config, global_config, user_config]
+        )
+        parser.parse_args([])
+
+        # User overrides everything
+        assert parser.log_level == "debug"
+        # Global overrides system
+        assert parser.max_connections == 500
+        # System value preserved
+        assert parser.timeout == 30
+
+    def test_partial_group_override(self, tmp_path: Path):
+        """Test partial override of group settings."""
+        global_config = tmp_path / "global.ini"
+        global_config.write_text(
+            "[logging]\n"
+            "level = warning\n"
+            "file = /var/log/app.log\n"
+            "format = json\n"
+            "rotate = true\n"
+        )
+
+        user_config = tmp_path / "user.ini"
+        user_config.write_text(
+            "[logging]\nlevel = debug\nfile = ./debug.log\n"
+            # format and rotate not specified - use global
+        )
+
+        class LoggingGroup(argclass.Group):
+            level: str = "info"
+            file: str = "app.log"
+            format: str = "text"
+            rotate: bool = False
+
+        class Parser(argclass.Parser):
+            logging = LoggingGroup()
+
+        parser = Parser(config_files=[global_config, user_config])
+        parser.parse_args([])
+
+        # User overrides
+        assert parser.logging.level == "debug"
+        assert parser.logging.file == "./debug.log"
+        # Global values preserved
+        assert parser.logging.format == "json"
+        assert parser.logging.rotate is True
+
+    def test_missing_intermediate_config(self, tmp_path: Path):
+        """Test that missing config files in the chain are skipped."""
+        global_config = tmp_path / "global.ini"
+        global_config.write_text("[DEFAULT]\nvalue = global\n")
+
+        # Middle config doesn't exist
+        missing_config = tmp_path / "missing.ini"
+
+        user_config = tmp_path / "user.ini"
+        user_config.write_text("[DEFAULT]\nother = user\n")
+
+        class Parser(argclass.Parser):
+            value: str = "default"
+            other: str = "default"
+
+        parser = Parser(
+            config_files=[global_config, missing_config, user_config]
+        )
+        parser.parse_args([])
+
+        assert parser.value == "global"
+        assert parser.other == "user"
+
+    def test_cli_overrides_all_configs(self, tmp_path: Path):
+        """Test CLI arguments override all config files."""
+        global_config = tmp_path / "global.ini"
+        global_config.write_text("[DEFAULT]\nport = 8080\n")
+
+        user_config = tmp_path / "user.ini"
+        user_config.write_text("[DEFAULT]\nport = 9000\n")
+
+        class Parser(argclass.Parser):
+            port: int = 80
+
+        parser = Parser(config_files=[global_config, user_config])
+        parser.parse_args(["--port", "3000"])
+
+        # CLI overrides both configs
+        assert parser.port == 3000
+
+
 class TestEnvVarBooleanConversion:
     """Test boolean type conversion from environment variables."""
 
