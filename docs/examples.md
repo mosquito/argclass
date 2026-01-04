@@ -1,10 +1,21 @@
 # Examples Gallery
 
-Copy-pastable examples for common CLI patterns.
+Copy-pastable examples for common CLI patterns. Each example is self-contained
+and demonstrates specific argclass features you can adapt for your own projects.
 
 ## Simple CLI Tool
 
-A minimal CLI with options and flags:
+This example shows the fundamental building blocks of any CLI application.
+It demonstrates how to create a parser class with different argument types:
+a required positional-style argument, an optional argument with a default,
+and a boolean flag.
+
+**Key features demonstrated:**
+- Required arguments (`name: str`)
+- Optional arguments with defaults (`count: int = 1`)
+- Boolean flags (`loud: bool = False`)
+- Short aliases (`-c` for `--count`)
+- Implementing `__call__` for executable parsers
 
 <!--- name: test_example_simple --->
 ```python
@@ -33,7 +44,20 @@ assert greeter.loud is True
 
 ## Subcommand CLI (git-style)
 
-Multi-command CLI like git or docker:
+Many professional CLI tools use subcommands to organize functionality:
+`git commit`, `docker run`, `kubectl apply`. This pattern makes complex tools
+intuitive by grouping related operations under descriptive command names.
+
+This example shows how to build a project management tool with `init`, `build`,
+and `deploy` subcommands. Each subcommand is a separate parser class with its
+own arguments, while the parent parser holds global options like `--verbose`.
+
+**Key features demonstrated:**
+- Subcommand pattern for multi-command CLIs
+- Global options available to all subcommands
+- `choices` parameter for constrained values
+- `Path` type for file system arguments
+- Each subcommand as a callable with its own `__call__` method
 
 <!--- name: test_example_subcommands --->
 ```python
@@ -87,7 +111,23 @@ assert cli.build.release is True
 
 ## Config + Env + CLI
 
-Full configuration with all three sources:
+Real-world applications often need configuration from multiple sources:
+config files for deployment defaults, environment variables for container
+orchestration, and CLI arguments for ad-hoc overrides. argclass handles
+all three with a clear priority order: CLI > environment > config file.
+
+This example demonstrates the complete configuration stack. It shows how
+defaults in a config file can be overridden by environment variables, which
+can in turn be overridden by command-line arguments. It also demonstrates
+secret handling with `argclass.Secret` and the `sanitize_env()` method.
+
+**Key features demonstrated:**
+- Config file loading with `config_files` parameter
+- Automatic environment variable binding with `auto_env_var_prefix`
+- Priority order: CLI arguments override env vars override config
+- Secret masking with `argclass.Secret`
+- `sanitize_env()` to remove secrets from environment
+- Argument groups for organizing related settings
 
 <!--- name: test_example_full_config --->
 ```python
@@ -173,7 +213,21 @@ Path(config_path).unlink()
 
 ## File Processing Tool
 
-CLI for batch file operations:
+File processing utilities are one of the most common CLI applications.
+This example shows how to build a tool that accepts multiple input files,
+an output directory, and various processing options.
+
+The pattern demonstrated here is useful for any batch processing tool:
+image converters, log analyzers, code formatters, or data transformers.
+The `--dry-run` flag is a best practice that lets users preview changes
+before committing to them.
+
+**Key features demonstrated:**
+- Multiple input files with `nargs="+"` and `list[Path]`
+- `Path` type for automatic path handling
+- `--dry-run` pattern for safe previews
+- Boolean flags with explicit `action=STORE_TRUE`
+- Combining short (`-n`) and long (`--dry-run`) aliases
 
 <!--- name: test_example_file_processor --->
 ```python
@@ -229,7 +283,21 @@ assert processor.dry_run is True
 
 ## HTTP Client CLI
 
-API client with authentication:
+API clients often need flexible authentication and request configuration.
+This example shows how to build a curl-like tool with support for different
+HTTP methods, custom headers, request bodies, and authentication options.
+
+The argument groups (`AuthGroup`, `RequestOptions`) keep related settings
+organized and make the `--help` output more readable. Using `argclass.Secret`
+for tokens and passwords ensures they won't appear in logs or process listings.
+
+**Key features demonstrated:**
+- Curl-like interface with `-X`, `-H`, `-d` options
+- Multiple headers with `nargs="*"` and `list[str]`
+- Optional arguments with `str | None` type
+- Secrets for sensitive authentication data
+- Grouped settings for better organization
+- `choices` for HTTP methods
 
 <!--- name: test_example_http_client --->
 ```python
@@ -292,7 +360,21 @@ assert client.options.timeout == 60
 
 ## Database Migration Tool
 
-Multi-subcommand with shared options:
+Database migration tools like Alembic, Flyway, or Django migrations use
+subcommands for different operations: applying migrations, rolling back,
+checking status. This example shows how to structure such a tool with
+argclass.
+
+The parent parser holds connection settings that apply to all subcommands,
+while each subcommand has its own specific options. This pattern is ideal
+for any tool that performs multiple related operations on a shared resource.
+
+**Key features demonstrated:**
+- Multiple subcommands (`up`, `down`, `status`)
+- Shared parent options (`--database`, `--migrations`)
+- Environment variable fallback with `env_var` parameter
+- Optional target specification with `str | None`
+- `--fake` flag for marking migrations without running them
 
 <!--- name: test_example_migrations --->
 ```python
@@ -357,7 +439,22 @@ assert cli.up.target == "002"
 
 ## Daemon/Service Configuration
 
-Long-running service with extensive config:
+Long-running services like web servers, message brokers, or background
+workers need extensive configuration: logging levels, metrics endpoints,
+process management options. This example shows how to organize these
+settings into logical groups.
+
+The grouped approach (`LoggingGroup`, `MetricsGroup`) makes configuration
+manageable and the resulting `--help` output organized by category. This
+pattern works well for any application with many configuration options.
+
+**Key features demonstrated:**
+- Complex configuration with multiple groups
+- Daemon-style options (`--daemonize`, `--pid-file`, `--user`)
+- Logging configuration with level and format choices
+- Metrics/monitoring endpoint configuration
+- `Path | None` for optional file paths
+- Short flags for common operations (`-D`, `-c`)
 
 <!--- name: test_example_daemon --->
 ```python
@@ -418,7 +515,19 @@ assert daemon.metrics.port == 8080
 
 ## Testing Your CLI
 
+Testing CLI parsers is straightforward because argclass parsers are just
+Python classes. You can instantiate them, call `parse_args()` with test
+arguments, and assert on the resulting attribute values.
+
+The examples below show common testing patterns using pytest. Each pattern
+addresses a specific testing need: basic argument parsing, environment
+variable handling, config file loading, and subcommand dispatch.
+
 ### Basic Test
+
+The simplest test pattern: create a parser instance, parse known arguments,
+and verify the results. This works for any parser and catches regressions
+in argument definitions.
 
 ```python
 import pytest
@@ -443,6 +552,10 @@ def test_parser_all_args():
 
 ### Testing with Environment
 
+Use pytest's `monkeypatch` fixture to set environment variables for tests.
+This isolates each test and ensures environment changes don't leak between
+tests.
+
 ```python
 def test_with_env(monkeypatch):
     monkeypatch.setenv("APP_HOST", "test-host")
@@ -456,6 +569,9 @@ def test_with_env(monkeypatch):
 ```
 
 ### Testing with Config Files
+
+Use pytest's `tmp_path` fixture to create temporary config files. This
+ensures tests are isolated and don't depend on files in your filesystem.
 
 ```python
 def test_with_config(tmp_path):
@@ -471,6 +587,9 @@ def test_with_config(tmp_path):
 ```
 
 ### Testing Subcommands
+
+Test subcommand dispatch by parsing arguments that include the subcommand
+name, then call the parser to execute the selected subcommand.
 
 ```python
 def test_subcommand():

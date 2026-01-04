@@ -33,6 +33,10 @@ Hello, World!Hello, World!Hello, World!
 
 ### Required and Optional Arguments
 
+Arguments without defaults are required - the parser will exit with an error
+if they're not provided. Arguments with defaults are optional. Type hints
+determine how values are parsed and validated.
+
 <!--- name: test_quickstart_first_parser --->
 ```python
 import argclass
@@ -50,6 +54,9 @@ assert greeter.count == 3
 
 ### Help Text
 
+Use `argclass.Argument()` to add help text that appears in `--help` output.
+Good help text makes your CLI self-documenting and easier for users to learn.
+
 <!--- name: test_quickstart_help_text --->
 ```python
 import argclass
@@ -66,6 +73,9 @@ assert greeter.count == 1
 ```
 
 ### Short Aliases
+
+Add short single-letter aliases like `-n` for frequently used arguments.
+Users can then choose between `--name World` or the shorter `-n World`.
 
 <!--- name: test_quickstart_aliases --->
 ```python
@@ -86,6 +96,9 @@ Usage: `python greeter.py -n World -c 3`
 
 ### Boolean Flags
 
+Boolean arguments with `False` defaults become flags: `--verbose` sets
+the value to `True`. No value is needed - the flag's presence is enough.
+
 <!--- name: test_quickstart_bool_flags --->
 ```python
 import argclass
@@ -105,6 +118,9 @@ Usage: `python app.py --verbose --debug`
 
 ### Multiple Values
 
+Use `list[T]` type hints to accept multiple values. Users can provide
+several values after the flag: `--files a.txt b.txt c.txt`.
+
 <!--- name: test_quickstart_multiple_values --->
 ```python
 import argclass
@@ -123,6 +139,9 @@ assert processor.exclude == ["b.txt"]
 Usage: `python processor.py --files a.txt b.txt c.txt --exclude b.txt`
 
 ### Environment Variables
+
+Read defaults from environment variables with `env_var`. This is useful for
+containerized deployments where configuration comes from the environment.
 
 :::{tip}
 For secrets, use `argclass.Secret(env_var="...")` and call `parser.sanitize_env()`

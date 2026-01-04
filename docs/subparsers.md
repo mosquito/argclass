@@ -4,7 +4,9 @@ Subparsers enable multi-command CLIs like `git commit`, `docker run`, etc.
 
 ## Basic Subcommands
 
-Define subcommands as nested Parser classes:
+Define subcommands by assigning Parser instances as class attributes.
+Each nested parser becomes a subcommand with its own arguments. The parent
+parser can have global options that apply before any subcommand.
 
 <!--- name: test_subparsers_basic --->
 ```python
@@ -36,7 +38,9 @@ assert cli.add.value == 42
 
 ## Executing Commands
 
-Implement `__call__` to define command behavior:
+Implement `__call__` to make your parser executable. When you call
+`parser()` on the root parser, it automatically dispatches to the
+selected subcommand's `__call__` method. Return an integer exit code.
 
 <!--- name: test_subparsers_call --->
 ```python
@@ -68,7 +72,9 @@ assert result == 9000
 
 ## Accessing Parent Parser
 
-Use `__parent__` to access the parent parser:
+Subcommands can access their parent parser via the `__parent__` attribute.
+This is useful when subcommands need to read global options like `--verbose`
+or `--debug` that were defined on the parent.
 
 <!--- name: test_subparsers_parent --->
 ```python
@@ -94,7 +100,9 @@ assert cli.deploy() is True  # Returns parent's verbose
 
 ## Nested Subcommands
 
-Subcommands can have their own subcommands:
+For complex CLIs, subcommands can have their own subcommands, creating
+a hierarchy like `docker image pull` or `kubectl get pods`. Each level
+can define its own arguments and behavior.
 
 <!--- name: test_subparsers_nested --->
 ```python
@@ -132,7 +140,9 @@ assert cli() == "pull:ubuntu:latest"
 
 ## Current Subparser
 
-Access the selected subparser chain:
+After parsing, use `current_subparsers` to get a list of the selected
+subcommand chain. This is useful for conditional logic based on which
+command was invoked, especially with nested subcommands.
 
 <!--- name: test_subparsers_current --->
 ```python
@@ -162,7 +172,9 @@ assert cli() == 10
 
 ## Shared Arguments with Groups
 
-Use groups for arguments shared across subcommands:
+When multiple subcommands need the same options (like output format
+or verbosity settings), define them in a Group and include it in each
+subcommand. This avoids duplication and ensures consistency.
 
 <!--- name: test_subparsers_shared --->
 ```python
@@ -202,7 +214,9 @@ assert cli() == "item1:json"
 
 ## Multiple Subcommands Selection
 
-Only one subcommand is active at a time:
+When a parser has multiple subcommands, exactly one is selected per
+invocation. The selected subcommand's arguments are parsed and populated,
+while other subcommands retain their default values.
 
 <!--- name: test_subparsers_selection --->
 ```python

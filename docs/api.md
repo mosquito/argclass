@@ -128,11 +128,65 @@ Complete API documentation for argclass.
    :show-inheritance:
 ```
 
+### TOMLConfig
+
+:::{note}
+Requires `tomllib` (Python 3.11+) or `tomli` package (Python 3.10).
+Install `tomli` for Python 3.10: `pip install tomli`
+:::
+
+```{eval-rst}
+.. autoclass:: argclass.TOMLConfig
+   :members:
+   :show-inheritance:
+```
+
 ### ConfigAction
 
 ```{eval-rst}
 .. autoclass:: argclass.ConfigAction
    :members:
+```
+
+## Config File Parsers
+
+These classes parse configuration files to provide default values for arguments.
+
+### AbstractDefaultsParser
+
+```{eval-rst}
+.. autoclass:: argclass.AbstractDefaultsParser
+   :members:
+   :show-inheritance:
+```
+
+### INIDefaultsParser
+
+```{eval-rst}
+.. autoclass:: argclass.INIDefaultsParser
+   :members:
+   :show-inheritance:
+```
+
+### JSONDefaultsParser
+
+```{eval-rst}
+.. autoclass:: argclass.JSONDefaultsParser
+   :members:
+   :show-inheritance:
+```
+
+### TOMLDefaultsParser
+
+:::{note}
+Requires `tomllib` (Python 3.11+) or `tomli` package (Python 3.10).
+Install `tomli` for Python 3.10: `pip install tomli`
+:::
+
+```{eval-rst}
+.. autoclass:: argclass.TOMLDefaultsParser
+   :members:
+   :show-inheritance:
 ```
 
 ## Internal Classes

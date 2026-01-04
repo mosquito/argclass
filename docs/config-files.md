@@ -145,7 +145,16 @@ Path(config_path).unlink()
 
 ### Using TOML
 
-Requires Python 3.11+ (stdlib `tomllib`) or `tomli` package.
+:::{note}
+TOML support uses the standard library `tomllib` module (Python 3.11+).
+For Python 3.10, install the `tomli` package as a fallback:
+
+```console
+pip install tomli
+```
+
+argclass automatically uses `tomllib` when available, falling back to `tomli`.
+:::
 
 <!--- name: test_config_toml_defaults --->
 ```python
@@ -673,6 +682,10 @@ Path(config_path).unlink()
 ```
 
 ### TOML Example
+
+:::{note}
+Requires `tomllib` (Python 3.11+) or `tomli` package for Python 3.10.
+:::
 
 <!--- name: test_config_toml_argument --->
 ```python
