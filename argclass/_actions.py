@@ -14,7 +14,7 @@ try:
     toml_load = tomllib.load
 except ImportError:
     try:
-        import tomli
+        import tomli  # type: ignore[import-not-found]
 
         toml_load = tomli.load  # type: ignore[assignment]
     except ImportError:
