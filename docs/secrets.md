@@ -229,6 +229,14 @@ del os.environ["API_KEY"]
 
 ### 2. Sanitize After Parsing
 
+:::{danger}
+**Critical:** Environment variables are inherited by child processes. If your
+application spawns subprocesses, runs shell commands, or calls external tools,
+those processes can read your secrets from the environment.
+
+Call `sanitize_env()` **immediately after parsing** and **before any subprocess calls**.
+:::
+
 Remove secrets from the environment:
 
 <!--- name: test_secrets_sanitize --->

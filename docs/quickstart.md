@@ -124,6 +124,12 @@ Usage: `python processor.py --files a.txt b.txt c.txt --exclude b.txt`
 
 ### Environment Variables
 
+:::{tip}
+For secrets, use `argclass.Secret(env_var="...")` and call `parser.sanitize_env()`
+after parsing. This removes secrets from the environment, preventing child
+processes from accessing them. See [Secrets](secrets.md).
+:::
+
 <!--- name: test_quickstart_env_vars --->
 ```python
 import os

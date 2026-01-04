@@ -2,6 +2,13 @@
 
 argclass can read default values from environment variables.
 
+:::{warning}
+**Security Risk:** Environment variables are inherited by all child processes.
+Any subprocess your application spawns (shell commands, external tools, other
+scripts) can read secrets from environment variables. Always call `sanitize_env()`
+after parsing to remove sensitive values. See [Sanitizing Environment](#sanitizing-environment).
+:::
+
 ## Per-Argument Environment Variables
 
 Specify an environment variable for a single argument:
@@ -144,6 +151,21 @@ Path(config_path).unlink()
 ```
 
 ## Sanitizing Environment
+
+:::{danger}
+**Child processes inherit environment variables.** When your application runs
+shell commands, spawns subprocesses, or calls external tools, those processes
+receive a copy of all environment variables - including your secrets.
+
+**Example attack scenario:**
+1. Your app reads `DB_PASSWORD` from environment
+2. Your app runs `subprocess.run(["backup-tool", ...])`
+3. `backup-tool` (or malicious code in it) reads `DB_PASSWORD`
+4. Your secret is compromised
+
+**Solution:** Call `parser.sanitize_env()` immediately after parsing to remove
+sensitive environment variables before spawning any child processes.
+:::
 
 Remove sensitive variables after parsing:
 

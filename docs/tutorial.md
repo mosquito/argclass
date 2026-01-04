@@ -223,7 +223,13 @@ Path(config_path).unlink()
 
 ### Environment Variables
 
-Add environment variable support:
+Add environment variable support.
+
+:::{warning}
+Environment variables are inherited by child processes. If your app spawns
+subprocesses, call `parser.sanitize_env()` after parsing to remove secrets.
+See [Secrets](secrets.md) for details.
+:::
 
 <!--- name: test_tutorial_env_vars --->
 ```python
