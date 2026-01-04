@@ -24,7 +24,8 @@ latexpdf:
 	@mkdir -p $(BUILDDIR)/latex
 	$(SPHINXBUILD) $(SPHINXOPTS) -b latex $(SOURCEDIR) $(BUILDDIR)/latex
 	@echo "Running LaTeX..."
-	$(MAKE) -C $(BUILDDIR)/latex all-pdf LATEXMKOPTS="-interaction=nonstopmode"
+	-$(MAKE) -C $(BUILDDIR)/latex all-pdf LATEXMKOPTS="-f -interaction=nonstopmode"
+	@test -f $(BUILDDIR)/latex/argclass.pdf || (echo "ERROR: PDF not generated" && exit 1)
 	@echo "PDF available at $(BUILDDIR)/latex/argclass.pdf"
 
 pdf: latexpdf
