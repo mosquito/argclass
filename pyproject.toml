@@ -1,11 +1,22 @@
-[tool.poetry]
+[project]
 name = "argclass"
-version = "1.1.1"
-description = "A wrapper around the standard argparse module that allows you to describe argument parsers declaratively"
-authors = ["Dmitry Orlov <me@mosquito.su>"]
+version = "1.2.0"
+description = "Declarative CLI parser with type hints, config files, and environment variables - zero dependencies"
+authors = [{ name = "Dmitry Orlov", email = "me@mosquito.su" }]
+keywords = [
+    "argparse",
+    "cli",
+    "command-line",
+    "argument-parser",
+    "type-hints",
+    "dataclass",
+    "config",
+    "environment-variables",
+    "declarative",
+]
+requires-python = ">=3.10,<4"
 readme = "README.md"
-license = "Apache 2"
-homepage = "https://github.com/mosquito/argclass"
+license = "Apache-2.0"
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
@@ -22,37 +33,61 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
-    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.14",
     "Programming Language :: Python",
     "Typing :: Typed",
 ]
-packages = [
-    { include = "argclass" },
+
+[project.urls]
+Homepage = "https://github.com/mosquito/argclass"
+Source = "https://github.com/mosquito/argclass"
+Tracker = "https://github.com/mosquito/argclass/issues"
+Documentation = "https://github.com/mosquito/argclass/blob/master/README.md"
+
+[dependency-groups]
+dev = [
+    "coveralls>=3.3.1",
+    "pytest>=7.2",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.8",
+    "setuptools>=69.0.2",
+    "markdown-pytest>=0.3.1",
+    "pyyaml>=6.0.2,<7",
+]
+mypy = ["mypy>=1.13"]
+docs = [
+    "sphinx>=7.0",
+    "furo>=2024.0",
+    "myst-parser>=3.0",
+    "sphinx-copybutton>=0.5",
+    "sphinx-autodoc-typehints>=2.0",
 ]
 
-[tool.poetry.urls]
-"Source" = "https://github.com/mosquito/argclass"
-"Tracker" = "https://github.com/mosquito/argclass/issues"
-"Documentation" = "https://github.com/mosquito/argclass/blob/master/README.md"
+[tool.ruff]
+line-length = 80
 
-[tool.poetry.dependencies]
-python = "^3.9"
+[tool.ruff.lint]
+select = ["E", "F", "W", "C90"]
+ignore = ["C901"]
 
-[tool.poetry.group.dev.dependencies]
-coveralls = ">=3.3.1"
-pytest = ">=7.2"
-pytest-cov = ">=4.0.0"
-pylama = ">=8.4.1"
-setuptools = ">=69.0.2"
-markdown-pytest = ">=0.3.1"
-pyyaml = "^6.0.2"
+[tool.ruff.lint.per-file-ignores]
+"docs/conf.py" = ["E501"]
 
-[tool.poetry.group.mypy.dependencies]
-mypy = "0.991"
+[tool.uv]
+default-groups = [
+    "dev",
+    "mypy",
+]
+
+[tool.hatch.build.targets.sdist]
+include = ["argclass"]
+
+[tool.hatch.build.targets.wheel]
+include = ["argclass"]
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.mypy]
 check_untyped_defs = true

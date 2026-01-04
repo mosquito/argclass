@@ -1,0 +1,63 @@
+name: docs
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --group docs
+
+      - name: Test documentation examples
+        run: uv run make -C docs test
+        env:
+          FORCE_COLOR: 1
+
+      - name: Build Sphinx documentation
+        run: uv run make -C docs html
+        env:
+          FORCE_COLOR: 1
+
+      - name: Upload documentation artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation
+          path: docs/_build/html
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    env:
+      AWS_ENDPOINT_URL: ${{ secrets.AWS_S3_ENDPOINT_URL }}
+    steps:
+      - name: Download documentation artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: documentation
+          path: docs/_build/html
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Publish to S3
+        run: |
+          aws s3 sync docs/_build/html/ s3://${{ secrets.AWS_S3_BUCKET }}/ \
+            --delete \
+            --cache-control "max-age=3600"

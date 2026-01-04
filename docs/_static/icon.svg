@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#319795"/>
+      <stop offset="100%" style="stop-color:#38b2ac"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Rounded square background -->
+  <rect x="4" y="4" width="56" height="56" rx="14" fill="#2d3748"/>
+
+  <!-- Two horizontal dashes representing CLI args -->
+  <rect x="12" y="22" width="18" height="6" rx="3" fill="url(#g1)"/>
+  <rect x="12" y="36" width="18" height="6" rx="3" fill="url(#g1)"/>
+
+  <!-- Angle bracket representing class/type -->
+  <path d="M38 18 L52 32 L38 46" stroke="url(#g1)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>
