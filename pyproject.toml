@@ -62,6 +62,7 @@ docs = [
     "sphinx-copybutton>=0.5",
     "sphinx-autodoc-typehints>=2.0",
     "sphinx-design>=0.6",
+    "sphinxcontrib-svg2pdfconverter[cairosvg]>=1.2",
 ]
 
 [tool.ruff]

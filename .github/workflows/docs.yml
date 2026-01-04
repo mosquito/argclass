@@ -17,6 +17,14 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install Python dependencies
+        run: uv sync --group docs
+
+      - name: Test documentation examples
+        run: uv run make -C docs test
+        env:
+          FORCE_COLOR: 1
+
       - name: Install LaTeX dependencies
         run: |
           sudo apt-get update
@@ -26,15 +34,8 @@ jobs:
             texlive-fonts-extra \
             texlive-latex-extra \
             latexmk \
-            fonts-dejavu
-
-      - name: Install Python dependencies
-        run: uv sync --group docs
-
-      - name: Test documentation examples
-        run: uv run make -C docs test
-        env:
-          FORCE_COLOR: 1
+            fonts-dejavu \
+            libcairo2-dev
 
       - name: Build PDF documentation
         run: uv run make -C docs latexpdf
