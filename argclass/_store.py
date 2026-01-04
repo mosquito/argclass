@@ -5,7 +5,12 @@ from argparse import Action
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, Optional, Tuple, Type, Union
 
-from ._actions import ConfigAction, INIConfigAction, JSONConfigAction
+from ._actions import (
+    ConfigAction,
+    INIConfigAction,
+    JSONConfigAction,
+    TOMLConfigAction,
+)
 from ._types import Actions, ConverterType, Nargs
 from ._utils import merge_annotations
 
@@ -170,6 +175,15 @@ class JSONConfig(ConfigArgument):
     """Parse JSON file and set results as a value."""
 
     action: Type[ConfigAction] = JSONConfigAction
+
+
+class TOMLConfig(ConfigArgument):
+    """Parse TOML file and set results as a value.
+
+    Uses stdlib tomllib (Python 3.11+) or tomli package as fallback.
+    """
+
+    action: Type[ConfigAction] = TOMLConfigAction
 
 
 class AbstractGroup:

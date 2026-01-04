@@ -91,10 +91,8 @@ assert parser.db.port == 3306
 
 ### Configuration Files
 
-argclass supports two approaches: **preconfigured defaults** (INI files that set argument defaults)
-and **config arguments** (YAML/TOML/JSON loaded as structured data). See [Config Files](https://docs.argclass.com/config-files.html) for details.
-
-**Preconfigured defaults** - preset CLI argument values from INI:
+Load default values from configuration files. INI by default, JSON/TOML via `config_parser_class`.
+See [Config Files](https://docs.argclass.com/config-files.html) for details.
 
 <!--- name: test_config_example --->
 ```python

@@ -7,7 +7,18 @@ argument parsers declaratively using classes with type annotations.
 
 from enum import EnumMeta
 
-from ._actions import ConfigAction, INIConfigAction, JSONConfigAction
+from ._actions import (
+    ConfigAction,
+    INIConfigAction,
+    JSONConfigAction,
+    TOMLConfigAction,
+)
+from ._defaults import (
+    AbstractDefaultsParser,
+    INIDefaultsParser,
+    JSONDefaultsParser,
+    TOMLDefaultsParser,
+)
 from ._factory import (
     Argument,
     ArgumentSequence,
@@ -26,6 +37,7 @@ from ._store import (
     ConfigArgument,
     INIConfig,
     JSONConfig,
+    TOMLConfig,
     Store,
     StoreMeta,
     TypedArgument,
@@ -52,6 +64,7 @@ __all__ = [
     "ConfigArgument",
     "INIConfig",
     "JSONConfig",
+    "TOMLConfig",
     "AbstractGroup",
     "AbstractParser",
     "Group",
@@ -63,6 +76,12 @@ __all__ = [
     "ConfigAction",
     "INIConfigAction",
     "JSONConfigAction",
+    "TOMLConfigAction",
+    # Defaults parsers (for config_files parameter)
+    "AbstractDefaultsParser",
+    "INIDefaultsParser",
+    "JSONDefaultsParser",
+    "TOMLDefaultsParser",
     # Factory functions
     "Argument",
     "ArgumentSingle",
