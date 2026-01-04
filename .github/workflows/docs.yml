@@ -53,7 +53,7 @@ jobs:
 
       - name: Publish to S3
         run: |
-          rclone sync docs/_build/html/ :s3:$AWS_S3_BUCKET/ \
+          rclone sync docs/_build/html/ ":s3:${AWS_S3_BUCKET}/" \
             --header-upload "Cache-Control: max-age=3600"
         env:
           RCLONE_S3_PROVIDER: ${{ secrets.AWS_S3_PROVIDER }}
