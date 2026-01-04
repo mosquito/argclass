@@ -422,6 +422,16 @@ class Parser(AbstractParser, Base):
 
         return parser, destinations
 
+    def create_parser(self) -> ArgumentParser:
+        """
+        Create an ArgumentParser instance without parsing arguments.
+        Can be used to inspect the parser structure in external integrations.
+        NOT AN ALTERNATIVE TO parse_args, because it does not back populates
+        the parser attributes.
+        """
+        parser, _ = self._make_parser()
+        return parser
+
     def _fill_arguments(
         self,
         destinations: DestinationsType,
