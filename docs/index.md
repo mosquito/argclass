@@ -1,5 +1,11 @@
 # argclass
 
+[![PyPI Version](https://img.shields.io/pypi/v/argclass.svg)](https://pypi.python.org/pypi/argclass/)
+[![Python Versions](https://img.shields.io/pypi/pyversions/argclass.svg)](https://pypi.python.org/pypi/argclass/)
+[![Coverage](https://coveralls.io/repos/github/mosquito/argclass/badge.svg?branch=master)](https://coveralls.io/github/mosquito/argclass?branch=master)
+[![Tests](https://github.com/mosquito/argclass/workflows/tests/badge.svg)](https://github.com/mosquito/argclass/actions?query=workflow%3Atests)
+[![License](https://img.shields.io/pypi/l/argclass.svg)](https://pypi.python.org/pypi/argclass/)
+
 **Declarative CLI parser with type hints, config files, and environment variables.**
 
 Build type-safe command-line interfaces using Python classes. Get IDE autocompletion,
@@ -53,13 +59,13 @@ Full autocompletion and type checking in your editor.
 
 | Feature                 | argclass | argparse | click/typer |
 |-------------------------|----------|----------|-------------|
-| Type hints → arguments  | Yes | No | Yes |
-| IDE autocompletion      | Yes | No | Yes |
-| Config file support     | Built-in | No | No |
-| Environment variables   | Built-in | No | Plugin |
-| Secret masking          | Built-in | No | No |
-| Argument groups         | Reusable | Limited | No |
-| Dependencies            | None | stdlib | Many |
+| Type hints → arguments  | Yes      | No       | Yes         |
+| IDE autocompletion      | Yes      | No       | Yes         |
+| Config file support     | Built-in | No       | No          |
+| Environment variables   | Built-in | No       | Plugin      |
+| Secret masking          | Built-in | No       | No          |
+| Argument groups         | Reusable | Limited  | No          |
+| Dependencies            | stdlib   | stdlib   | Many        |
 
 ---
 
@@ -164,6 +170,7 @@ Build a real CLI application step by step.
 
 quickstart
 tutorial
+examples
 ```
 
 ```{toctree}
@@ -176,7 +183,16 @@ subparsers
 config-files
 environment
 secrets
+security
 integrations
+```
+
+```{toctree}
+:maxdepth: 2
+:caption: Help
+
+errors
+pitfalls
 ```
 
 ```{toctree}

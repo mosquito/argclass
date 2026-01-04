@@ -393,7 +393,43 @@ def Secret(
     required: Optional[bool] = None,
     type: Optional[ConverterType] = None,
 ) -> Any:
-    """Create a secret argument (hidden from help output)."""
+    """
+    Create a secret argument that masks sensitive values.
+
+    Secret arguments are wrapped in SecretString, which:
+
+    - Returns ``'******'`` for repr() to prevent accidental logging
+    - Supports equality comparison without exposing the value
+    - Use str() to access the actual value when needed
+
+    Use ``parser.sanitize_env()`` after parsing to remove secret
+    environment variables before spawning subprocesses.
+
+    Args:
+        aliases: Command-line aliases (e.g., "-p", "--password").
+        env_var: Environment variable to read the secret from.
+        default: Default value if not provided.
+        help: Help text (the actual value is never shown).
+
+    Returns:
+        TypedArgument with secret=True.
+
+    Example::
+
+        class Parser(argclass.Parser):
+            api_key: str = argclass.Secret(env_var="API_KEY")
+            password: str = argclass.Secret()
+
+        parser = Parser()
+        parser.parse_args()
+        parser.sanitize_env()  # Remove secrets from environment
+
+        # Safe: shows '******'
+        print(f"API key: {parser.api_key!r}")
+
+        # Access actual value
+        connect(api_key=str(parser.api_key))
+    """
     return Argument(  # type: ignore[misc,call-overload]
         *aliases,
         action=action,
@@ -426,7 +462,38 @@ def Config(
     required: Optional[bool] = None,
     config_class: Type[ConfigArgument] = INIConfig,
 ) -> Any:
-    """Create a configuration file argument."""
+    """
+    Create a configuration file argument.
+
+    This creates a ``--config`` argument that loads structured data
+    from a file. The loaded data is accessible as a dict-like object.
+
+    Note:
+        This is different from ``config_files`` parameter on Parser,
+        which presets CLI argument defaults. This argument loads
+        arbitrary configuration data for your application.
+
+    Args:
+        aliases: Command-line aliases (default: "--config").
+        search_paths: Default paths to search for config files.
+        config_class: Parser class (INIConfig, JSONConfig, TOMLConfig).
+        env_var: Environment variable for config file path.
+        help: Help text for --help output.
+
+    Returns:
+        ConfigArgument instance.
+
+    Example::
+
+        class Parser(argclass.Parser):
+            config = argclass.Config(config_class=argclass.JSONConfig)
+
+        parser = Parser()
+        parser.parse_args(["--config", "settings.json"])
+
+        # Access loaded configuration
+        db_host = parser.config["database"]["host"]
+    """
     return config_class(
         search_paths=search_paths,
         aliases=aliases,
