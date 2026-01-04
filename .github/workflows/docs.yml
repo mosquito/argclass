@@ -34,8 +34,7 @@ jobs:
             texlive-fonts-extra \
             texlive-latex-extra \
             latexmk \
-            fonts-dejavu \
-            libcairo2-dev
+            fonts-dejavu
 
       - name: Build PDF documentation
         run: uv run make -C docs latexpdf

@@ -39,7 +39,6 @@ extensions = [
     "sphinx_autodoc_typehints",
     "sphinx_copybutton",
     "sphinx_design",
-    "sphinxcontrib.cairosvgconverter",
 ]
 
 # MyST settings
@@ -141,3 +140,6 @@ latex_elements = {
 
 latex_show_urls = "footnote"
 latex_show_pagerefs = True
+
+# Use PNG logo for LaTeX (SVG not supported)
+latex_logo = "_static/logo.png"

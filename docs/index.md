@@ -1,10 +1,12 @@
 # argclass
 
+```{only} html
 [![PyPI Version](https://img.shields.io/pypi/v/argclass.svg)](https://pypi.python.org/pypi/argclass/)
 [![Python Versions](https://img.shields.io/pypi/pyversions/argclass.svg)](https://pypi.python.org/pypi/argclass/)
 [![Coverage](https://coveralls.io/repos/github/mosquito/argclass/badge.svg?branch=master)](https://coveralls.io/github/mosquito/argclass?branch=master)
 [![Tests](https://github.com/mosquito/argclass/workflows/tests/badge.svg)](https://github.com/mosquito/argclass/actions?query=workflow%3Atests)
 [![License](https://img.shields.io/pypi/l/argclass.svg)](https://pypi.python.org/pypi/argclass/)
+```
 
 **Declarative CLI parser with type hints, config files, and environment variables.**
 
@@ -76,7 +78,7 @@ pip install argclass
 ```
 
 :::{tip}
-📥 <a href="_static/argclass.pdf" download>**Download PDF Documentation**</a> for offline reading.
+<a href="_static/argclass.pdf" download>**Download PDF Documentation**</a> for offline reading.
 :::
 
 ---
