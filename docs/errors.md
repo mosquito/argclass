@@ -2,8 +2,6 @@
 
 argclass inherits error handling from Python's `argparse`.
 
----
-
 ## Exit Codes
 
 | Exit Code | Meaning | Triggered By |
@@ -11,8 +9,6 @@ argclass inherits error handling from Python's `argparse`.
 | `0` | Success | `__call__` returns `0` |
 | `1` | Application error | `__call__` returns non-zero |
 | `2` | Syntax error | Invalid arguments, missing required args, type errors |
-
----
 
 ## Validation Rules
 
@@ -75,8 +71,6 @@ except ValueError as e:
     assert "start must be less than end" in str(e)
 ```
 
----
-
 ## Application Exit Codes
 
 Use `__call__` to return application-level exit codes:
@@ -127,8 +121,6 @@ class Parser(argclass.Parser):
         sys.exit(2)
 ```
 
----
-
 ## Config and Environment Errors
 
 | Source | Behavior |
@@ -137,8 +129,6 @@ class Parser(argclass.Parser):
 | Malformed config | Silently ignored (unless `strict_config=True`) |
 | Invalid env var value | Same as CLI — exits with code 2 |
 | Config provides value | Does NOT make argument "provided" — CLI can still override |
-
----
 
 ## Testing
 

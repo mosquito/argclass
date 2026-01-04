@@ -32,8 +32,6 @@ $ python server.py --host 0.0.0.0 --port 9000 --debug
 Starting server on 0.0.0.0:9000
 ```
 
----
-
 ## Why argclass?
 
 ::::{grid} 3
@@ -69,8 +67,6 @@ Full autocompletion and type checking in your editor.
 | Argument groups         | Reusable | Limited  | No          |
 | Dependencies            | stdlib   | stdlib   | Many        |
 
----
-
 ## Installation
 
 ```console
@@ -80,8 +76,6 @@ pip install argclass
 :::{tip}
 <a href="_static/argclass.pdf" download>**Download PDF Documentation**</a> for offline reading.
 :::
-
----
 
 ## Quick Examples
 
@@ -137,8 +131,6 @@ parser = Parser(auto_env_var_prefix="MYAPP_")
 # Reads from MYAPP_HOST, MYAPP_PORT
 ```
 
----
-
 ## Get Started
 
 ::::{grid} 2
@@ -165,8 +157,6 @@ Build a real CLI application step by step.
 :::
 
 ::::
-
----
 
 ## Documentation
 

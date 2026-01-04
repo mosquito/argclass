@@ -3,8 +3,6 @@
 **argclass** builds on the standard library's `argparse`, so many argparse
 extensions work with argclass.
 
----
-
 ## Rich Help Output
 
 Use `rich_argparse` for beautiful help formatting:
@@ -83,8 +81,6 @@ parser = Parser()
 parser.parse_args([])
 parser.configure_logging()
 ```
-
----
 
 ## pytest Integration
 

@@ -4,8 +4,6 @@ Load default values for CLI arguments from configuration files. Useful for
 site-specific defaults, deployment configurations, and separating configuration
 from code.
 
----
-
 ## Quick Start
 
 <!--- name: test_config_ini --->
@@ -40,8 +38,6 @@ assert parser.debug is True
 
 Path(config_path).unlink()
 ```
-
----
 
 ## Supported Formats
 
@@ -269,8 +265,6 @@ Path(config_path).unlink()
 Use `strict_config=True` in development to catch configuration errors early.
 Use `strict_config=False` (default) in production for resilience.
 :::
-
----
 
 ## Loading Behavior
 
@@ -614,8 +608,6 @@ assert parser.port == 3000  # From CLI (override)
 
 Path(config_path).unlink()
 ```
-
----
 
 ## Config as Argument Value
 

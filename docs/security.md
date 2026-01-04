@@ -13,8 +13,6 @@ data in CLI applications built with argclass.
 - [ ] Use `logging.info("value: %s", secret)` (not f-strings) for safe logging
 - [ ] Never pass secrets via command-line arguments in production
 
----
-
 ## Threat Model
 
 ### What `sanitize_env()` Protects Against
@@ -145,8 +143,6 @@ def main():
 if __name__ == "__main__":
     main()
 ```
-
----
 
 ## Other Secret Leakage Channels
 
@@ -322,8 +318,6 @@ assert secret1 == "password123"
 assert repr(secret1) == "'******'"
 ```
 
----
-
 ## Config File Security
 
 ### File Permissions
@@ -393,8 +387,6 @@ subprocess.check_output(
     text=True,
 )
 ```
-
----
 
 ## Common Mistakes
 

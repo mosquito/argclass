@@ -3,8 +3,6 @@
 Quick reference for common mistakes and their solutions. These are the issues
 most frequently encountered when building CLI applications with argclass.
 
----
-
 ## Boolean Flags
 
 Boolean arguments are the most common source of confusion. The shortcut syntax
@@ -38,8 +36,6 @@ parser = Parser()
 parser.parse_args(["--feature"])
 assert parser.feature is False
 ```
-
----
 
 ## Environment Variables
 
@@ -97,8 +93,6 @@ assert parser.flag is False
 os.environ.pop("TEST_FLAG", None)
 ```
 
----
-
 ## Lists
 
 List arguments have subtle behavior differences depending on `nargs` configuration.
@@ -126,8 +120,6 @@ parser = Parser()
 parser.parse_args(["--files"])  # Zero values OK with nargs="*"
 assert parser.files == []
 ```
-
----
 
 ## Type Hints
 
@@ -187,8 +179,6 @@ host = db.example.com
 INI section names are case-sensitive in argclass. `[Database]` and `[database]`
 are different sections. Always use lowercase to match Python attribute names.
 :::
-
----
 
 ## Groups
 
