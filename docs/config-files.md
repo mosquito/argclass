@@ -108,38 +108,77 @@ These are parsed using `ast.literal_eval` when the argument type requires it.
 
 ### Using JSON
 
+<!--- name: test_config_json_defaults --->
 ```python
 import argclass
+import json
+from pathlib import Path
+from tempfile import NamedTemporaryFile
 
 class Parser(argclass.Parser):
     host: str = "localhost"
     port: int = 8080
+    debug: bool = False
 
-# config.json: {"host": "json.example.com", "port": 9000}
+CONFIG_DATA = {
+    "host": "json.example.com",
+    "port": 9000,
+    "debug": True
+}
+
+with NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+    json.dump(CONFIG_DATA, f)
+    config_path = f.name
+
 parser = Parser(
-    config_files=["config.json"],
+    config_files=[config_path],
     config_parser_class=argclass.JSONDefaultsParser,
 )
+parser.parse_args([])
+
+assert parser.host == "json.example.com"
+assert parser.port == 9000
+assert parser.debug is True
+
+Path(config_path).unlink()
 ```
 
 ### Using TOML
 
 Requires Python 3.11+ (stdlib `tomllib`) or `tomli` package.
 
+<!--- name: test_config_toml_defaults --->
 ```python
 import argclass
+from pathlib import Path
+from tempfile import NamedTemporaryFile
 
 class Parser(argclass.Parser):
     host: str = "localhost"
     port: int = 8080
+    debug: bool = False
 
-# config.toml:
-# host = "toml.example.com"
-# port = 9000
+CONFIG_CONTENT = '''
+host = "toml.example.com"
+port = 9000
+debug = true
+'''
+
+with NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
+    f.write(CONFIG_CONTENT)
+    config_path = f.name
+
 parser = Parser(
-    config_files=["config.toml"],
+    config_files=[config_path],
     config_parser_class=argclass.TOMLDefaultsParser,
 )
+parser.parse_args([])
+
+assert parser.host == "toml.example.com"
+assert parser.port == 9000
+assert parser.debug is True
+
+Path(config_path).unlink()
 ```
 
 ### Custom Format
@@ -161,11 +200,66 @@ class YAMLDefaultsParser(argclass.AbstractDefaultsParser):
             self._loaded_files = (path,)
         return result
 
+class Parser(argclass.Parser):
+    host: str = "localhost"
+
 parser = Parser(
     config_files=["config.yaml"],
     config_parser_class=YAMLDefaultsParser,
 )
 ```
+
+### Strict Mode
+
+Use `strict_config=True` to raise errors on configuration problems:
+
+<!--- name: test_config_strict_mode --->
+```python
+import argclass
+from pathlib import Path
+from tempfile import NamedTemporaryFile
+
+class Parser(argclass.Parser):
+    host: str = "localhost"
+
+# Config with duplicate keys (invalid in strict mode)
+CONFIG_CONTENT = """
+[DEFAULT]
+host = first.example.com
+host = second.example.com
+"""
+
+with NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as f:
+    f.write(CONFIG_CONTENT)
+    config_path = f.name
+
+# Non-strict mode (default): last value wins, no error
+parser1 = Parser(config_files=[config_path], strict_config=False)
+parser1.parse_args([])
+assert parser1.host == "second.example.com"
+
+# Strict mode: raises DuplicateOptionError
+try:
+    parser2 = Parser(config_files=[config_path], strict_config=True)
+    assert False, "Should have raised"
+except Exception as e:
+    assert "DuplicateOptionError" in type(e).__name__
+
+Path(config_path).unlink()
+```
+
+**Behavior by format:**
+
+| Format | `strict_config=False` (default) | `strict_config=True` |
+|--------|--------------------------------|---------------------|
+| **INI** | Duplicate keys: last wins | Raises `DuplicateOptionError` |
+| **JSON** | Parse errors: silently skipped | Raises `JSONDecodeError` |
+| **TOML** | Parse errors: silently skipped | Raises parse exception |
+
+:::{tip}
+Use `strict_config=True` in development to catch configuration errors early.
+Use `strict_config=False` (default) in production for resilience.
+:::
 
 ---
 
@@ -288,6 +382,15 @@ Values are applied in order (later overrides earlier):
 1. **Class defaults** → 2. **Config files** → 3. **Environment variables** → 4. **CLI arguments**
 :::
 
+**Override Matrix:**
+
+| Source | Overrides | Overridden by |
+|--------|-----------|---------------|
+| Class default | — | Config, Env, CLI |
+| Config file | Class default | Env, CLI |
+| Environment variable | Class default, Config | CLI |
+| CLI argument | All | — |
+
 <!--- name: test_config_priority --->
 ```python
 import argclass
@@ -317,6 +420,56 @@ parser2 = Parser(config_files=[config_path])
 parser2.parse_args(["--port", "3000"])
 assert parser2.port == 3000
 
+Path(config_path).unlink()
+```
+
+**End-to-end example with all sources:**
+
+<!--- name: test_config_priority_full --->
+```python
+import os
+import argclass
+from pathlib import Path
+from tempfile import NamedTemporaryFile
+
+class Parser(argclass.Parser):
+    host: str = "default-host"      # 1. Class default
+    port: int = 8080                # 1. Class default
+    debug: bool = False             # 1. Class default
+    timeout: int = 30               # 1. Class default
+
+# 2. Config file sets host and port
+CONFIG_CONTENT = """
+[DEFAULT]
+host = config-host
+port = 9000
+"""
+
+with NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as f:
+    f.write(CONFIG_CONTENT)
+    config_path = f.name
+
+# 3. Environment sets port and debug
+os.environ["APP_PORT"] = "9500"
+os.environ["APP_DEBUG"] = "true"
+
+parser = Parser(
+    config_files=[config_path],
+    auto_env_var_prefix="APP_"
+)
+
+# 4. CLI sets only timeout
+parser.parse_args(["--timeout", "60"])
+
+# Final values:
+assert parser.host == "config-host"    # From config (no env/cli)
+assert parser.port == 9500             # From env (overrides config)
+assert parser.debug is True            # From env (overrides default)
+assert parser.timeout == 60            # From CLI (overrides default)
+
+# Cleanup
+del os.environ["APP_PORT"]
+del os.environ["APP_DEBUG"]
 Path(config_path).unlink()
 ```
 
