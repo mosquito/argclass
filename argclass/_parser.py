@@ -110,7 +110,10 @@ class Meta(ABCMeta):
 
                 is_required = argument is None or argument is Ellipsis
 
-                if _type_is_bool(kind):
+                # Handle Enum types with auto-generated EnumArgument
+                if isinstance(kind, EnumMeta):
+                    argument = EnumArgument(kind, default=argument)
+                elif _type_is_bool(kind):
                     # For inherited bools, Ellipsis means use default False
                     if argument is Ellipsis:
                         argument = False
@@ -159,9 +162,25 @@ class Meta(ABCMeta):
                         if argument.default is None:
                             argument.default = None
 
+                    # Handle bool type: set STORE_TRUE/STORE_FALSE action
+                    if kind is bool and argument.action == Actions.default():
+                        default = argument.default
+                        if default is False or default is None:
+                            argument = argument.copy(
+                                action=Actions.STORE_TRUE,
+                                default=False,
+                                type=None,
+                            )
+                        elif default is True:
+                            argument = argument.copy(
+                                action=Actions.STORE_FALSE,
+                                default=True,
+                                type=None,
+                            )
                     # Then check for container types
-                    container_info = _unwrap_container_type(kind)
-                    if container_info is not None:
+                    elif (
+                        container_info := _unwrap_container_type(kind)
+                    ) is not None:
                         container_type, element_type = container_info
                         argument.type = element_type
                         # Only set nargs if not already specified
@@ -177,11 +196,13 @@ class Meta(ABCMeta):
             elif isinstance(argument, AbstractGroup):
                 argument_groups[key] = argument
 
-            if isinstance(kind, EnumMeta):
-                arguments[key] = EnumArgument(kind)
 
         for key, value in attrs.items():
             if key.startswith("_"):
+                continue
+
+            # Skip if already processed from annotations
+            if key in arguments or key in argument_groups or key in subparsers:
                 continue
 
             if isinstance(value, TypedArgument):

@@ -507,6 +507,69 @@ class TestEnvVarBooleanConversion:
         assert parser.debug is True
         assert parser.verbose is True
 
+    def test_bool_env_var_false_values(self, monkeypatch):
+        """Test boolean env var with false values."""
+        monkeypatch.setenv("FLAG1", "no")
+        monkeypatch.setenv("FLAG2", "false")
+        monkeypatch.setenv("FLAG3", "0")
+        monkeypatch.setenv("FLAG4", "off")
+
+        class Parser(argclass.Parser):
+            flag1: bool = argclass.Argument(env_var="FLAG1", default=False)
+            flag2: bool = argclass.Argument(env_var="FLAG2", default=False)
+            flag3: bool = argclass.Argument(env_var="FLAG3", default=False)
+            flag4: bool = argclass.Argument(env_var="FLAG4", default=False)
+
+        parser = Parser()
+        parser.parse_args([])
+
+        assert parser.flag1 is False
+        assert parser.flag2 is False
+        assert parser.flag3 is False
+        assert parser.flag4 is False
+
+    def test_bool_env_var_true_values(self, monkeypatch):
+        """Test boolean env var with all true values."""
+        monkeypatch.setenv("FLAG1", "yes")
+        monkeypatch.setenv("FLAG2", "true")
+        monkeypatch.setenv("FLAG3", "1")
+        monkeypatch.setenv("FLAG4", "on")
+        monkeypatch.setenv("FLAG5", "enable")
+        monkeypatch.setenv("FLAG6", "y")
+        monkeypatch.setenv("FLAG7", "t")
+
+        class Parser(argclass.Parser):
+            flag1: bool = argclass.Argument(env_var="FLAG1", default=False)
+            flag2: bool = argclass.Argument(env_var="FLAG2", default=False)
+            flag3: bool = argclass.Argument(env_var="FLAG3", default=False)
+            flag4: bool = argclass.Argument(env_var="FLAG4", default=False)
+            flag5: bool = argclass.Argument(env_var="FLAG5", default=False)
+            flag6: bool = argclass.Argument(env_var="FLAG6", default=False)
+            flag7: bool = argclass.Argument(env_var="FLAG7", default=False)
+
+        parser = Parser()
+        parser.parse_args([])
+
+        assert parser.flag1 is True
+        assert parser.flag2 is True
+        assert parser.flag3 is True
+        assert parser.flag4 is True
+        assert parser.flag5 is True
+        assert parser.flag6 is True
+        assert parser.flag7 is True
+
+    def test_bool_default_true_with_env_var(self, monkeypatch):
+        """Test boolean with default=True and env var toggling to False."""
+        monkeypatch.setenv("FEATURE", "no")
+
+        class Parser(argclass.Parser):
+            feature: bool = argclass.Argument(env_var="FEATURE", default=True)
+
+        parser = Parser()
+        parser.parse_args([])
+
+        assert parser.feature is False
+
     def test_env_overrides_config_bool(self, tmp_path: Path, monkeypatch):
         """Test env var overrides config file for boolean."""
         config_file = tmp_path / "config.ini"
