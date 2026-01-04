@@ -196,7 +196,6 @@ class Meta(ABCMeta):
             elif isinstance(argument, AbstractGroup):
                 argument_groups[key] = argument
 
-
         for key, value in attrs.items():
             if key.startswith("_"):
                 continue
