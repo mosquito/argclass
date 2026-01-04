@@ -552,3 +552,112 @@ class TestEnvVarBooleanConversion:
 
         assert parser.host == "example.com"
         assert parser.name == "test-app"
+
+
+def _has_toml_support() -> bool:
+    try:
+        import tomllib
+        return True
+    except ImportError:
+        try:
+            import tomli
+            return True
+        except ImportError:
+            return False
+
+
+@pytest.mark.skipif(
+    not _has_toml_support(),
+    reason="TOML support requires Python 3.11+ (tomllib) or 'tomli' package",
+)
+class TestTOMLConfig:
+    """Test TOML configuration file support."""
+
+    def test_toml_config_basic(self, tmp_path: Path):
+        """Test basic TOML config loading."""
+        config_file = tmp_path / "config.toml"
+        config_file.write_text(
+            'host = "example.com"\n'
+            "port = 9000\n"
+            "debug = true\n"
+        )
+
+        class Parser(argclass.Parser):
+            config = argclass.Config(config_class=argclass.TOMLConfig)
+
+        parser = Parser()
+        parser.parse_args(["--config", str(config_file)])
+
+        assert parser.config["host"] == "example.com"
+        assert parser.config["port"] == 9000
+        assert parser.config["debug"] is True
+
+    def test_toml_config_nested(self, tmp_path: Path):
+        """Test TOML config with nested tables."""
+        config_file = tmp_path / "config.toml"
+        config_file.write_text(
+            "[database]\n"
+            'host = "db.example.com"\n'
+            "port = 5432\n"
+            "\n"
+            "[server]\n"
+            'host = "0.0.0.0"\n'
+            "port = 8080\n"
+        )
+
+        class Parser(argclass.Parser):
+            config = argclass.Config(config_class=argclass.TOMLConfig)
+
+        parser = Parser()
+        parser.parse_args(["--config", str(config_file)])
+
+        assert parser.config["database"]["host"] == "db.example.com"
+        assert parser.config["database"]["port"] == 5432
+        assert parser.config["server"]["host"] == "0.0.0.0"
+        assert parser.config["server"]["port"] == 8080
+
+    def test_toml_config_arrays(self, tmp_path: Path):
+        """Test TOML config with arrays."""
+        config_file = tmp_path / "config.toml"
+        config_file.write_text(
+            'features = ["auth", "logging", "metrics"]\n'
+            "\n"
+            "[[servers]]\n"
+            'name = "primary"\n'
+            "port = 8080\n"
+            "\n"
+            "[[servers]]\n"
+            'name = "backup"\n'
+            "port = 8081\n"
+        )
+
+        class Parser(argclass.Parser):
+            config = argclass.Config(config_class=argclass.TOMLConfig)
+
+        parser = Parser()
+        parser.parse_args(["--config", str(config_file)])
+
+        assert parser.config["features"] == ["auth", "logging", "metrics"]
+        assert len(parser.config["servers"]) == 2
+        assert parser.config["servers"][0]["name"] == "primary"
+        assert parser.config["servers"][1]["name"] == "backup"
+
+    def test_toml_config_with_cli_args(self, tmp_path: Path):
+        """Test TOML config combined with CLI arguments."""
+        config_file = tmp_path / "config.toml"
+        config_file.write_text(
+            "[app]\n"
+            'name = "myapp"\n'
+            "version = 1\n"
+        )
+
+        class Parser(argclass.Parser):
+            verbose: bool = False
+            config = argclass.Config(config_class=argclass.TOMLConfig)
+
+        parser = Parser()
+        parser.parse_args(["--config", str(config_file), "--verbose"])
+
+        assert parser.verbose is True
+        assert parser.config["app"]["name"] == "myapp"
+        assert parser.config["app"]["version"] == 1

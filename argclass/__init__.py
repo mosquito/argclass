@@ -7,7 +7,12 @@ argument parsers declaratively using classes with type annotations.
 
 from enum import EnumMeta
 
-from ._actions import ConfigAction, INIConfigAction, JSONConfigAction
+from ._actions import (
+    ConfigAction,
+    INIConfigAction,
+    JSONConfigAction,
+    TOMLConfigAction,
+)
 from ._factory import (
     Argument,
     ArgumentSequence,
@@ -26,6 +31,7 @@ from ._store import (
     ConfigArgument,
     INIConfig,
     JSONConfig,
+    TOMLConfig,
     Store,
     StoreMeta,
     TypedArgument,
@@ -52,6 +58,7 @@ __all__ = [
     "ConfigArgument",
     "INIConfig",
     "JSONConfig",
+    "TOMLConfig",
     "AbstractGroup",
     "AbstractParser",
     "Group",
@@ -63,6 +70,7 @@ __all__ = [
     "ConfigAction",
     "INIConfigAction",
     "JSONConfigAction",
+    "TOMLConfigAction",
     # Factory functions
     "Argument",
     "ArgumentSingle",

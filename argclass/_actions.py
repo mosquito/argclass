@@ -8,6 +8,16 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Iterable, List, Mapping, Optional, Sequence, Union
 
+try:
+    import tomllib
+    toml_load = tomllib.load
+except ImportError:
+    try:
+        import tomli
+        toml_load = tomli.load  # type: ignore[assignment]
+    except ImportError:
+        toml_load = None  # type: ignore[assignment]
+
 from ._utils import read_configs
 
 
@@ -87,3 +97,19 @@ class JSONConfigAction(ConfigAction):
     def parse_file(self, file: Path) -> Any:
         with file.open("r") as fp:
             return json.load(fp)
+
+
+class TOMLConfigAction(ConfigAction):
+    """Action for loading TOML configuration files.
+
+    Uses stdlib tomllib (Python 3.11+) or tomli package as fallback.
+    """
+
+    def parse_file(self, file: Path) -> Any:
+        if toml_load is None:
+            raise RuntimeError(
+                "TOML support requires Python 3.11+ (tomllib) "
+                "or 'tomli' package: pip install tomli"
+            )
+        with file.open("rb") as fp:
+            return toml_load(fp)

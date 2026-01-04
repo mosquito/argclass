@@ -386,19 +386,25 @@ complex structured data that your application logic needs to process.
 
 ### Built-in Config Types
 
-argclass provides built-in support for JSON and INI formats:
+argclass provides built-in support for JSON, INI, and TOML formats:
 
 ```python
 import argclass
 
 class Parser(argclass.Parser):
     # JSON config file argument
-    config: argclass.JSONConfig
+    json_config = argclass.Config(config_class=argclass.JSONConfig)
+
+    # INI config file argument
+    ini_config = argclass.Config(config_class=argclass.INIConfig)
+
+    # TOML config file argument (Python 3.11+ or tomli package)
+    toml_config = argclass.Config(config_class=argclass.TOMLConfig)
 ```
 
 ### Custom Config Parsers
 
-For other formats like YAML or TOML, create custom parsers by extending `ConfigAction`.
+For other formats like YAML, create custom parsers by extending `ConfigAction`.
 
 #### YAML Parser
 
@@ -418,26 +424,6 @@ class YAMLConfig(argclass.ConfigArgument):
 
 class Parser(argclass.Parser):
     config = argclass.Config(config_class=YAMLConfig)
-```
-
-#### TOML Parser
-
-```python
-from pathlib import Path
-from typing import Mapping, Any
-import argclass
-import tomllib  # Python 3.11+ or use tomli
-
-class TOMLConfigAction(argclass.ConfigAction):
-    def parse_file(self, file: Path) -> Mapping[str, Any]:
-        with file.open("rb") as fp:
-            return tomllib.load(fp)
-
-class TOMLConfig(argclass.ConfigArgument):
-    action = TOMLConfigAction
-
-class Parser(argclass.Parser):
-    config = argclass.Config(config_class=TOMLConfig)
 ```
 
 ### Complete Usage Example
