@@ -75,6 +75,10 @@ Full autocompletion and type checking in your editor.
 pip install argclass
 ```
 
+:::{tip}
+📥 <a href="_static/argclass.pdf" download>**Download PDF Documentation**</a> for offline reading.
+:::
+
 ---
 
 ## Quick Examples

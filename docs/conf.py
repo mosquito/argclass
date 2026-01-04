@@ -110,3 +110,33 @@ copybutton_prompt_is_regexp = True
 # Type hints settings
 typehints_fully_qualified = False
 always_document_param_types = True
+
+# -- Options for LaTeX/PDF output --------------------------------------------
+
+latex_engine = "xelatex"
+
+latex_documents = [
+    (
+        "index",  # startdocname
+        "argclass.tex",  # targetname
+        "argclass Documentation",  # title
+        author,  # author
+        "manual",  # theme ('manual' or 'howto')
+    ),
+]
+
+latex_elements = {
+    "papersize": "a4paper",
+    "pointsize": "11pt",
+    "preamble": r"""
+\usepackage{fontspec}
+\setmainfont{DejaVu Serif}
+\setsansfont{DejaVu Sans}
+\setmonofont{DejaVu Sans Mono}
+""",
+    "fncychap": r"\usepackage[Bjornstrup]{fncychap}",
+    "printindex": r"\footnotesize\raggedright\printindex",
+}
+
+latex_show_urls = "footnote"
+latex_show_pagerefs = True

@@ -17,7 +17,18 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install dependencies
+      - name: Install LaTeX dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            texlive-xetex \
+            texlive-fonts-recommended \
+            texlive-fonts-extra \
+            texlive-latex-extra \
+            latexmk \
+            fonts-dejavu
+
+      - name: Install Python dependencies
         run: uv sync --group docs
 
       - name: Test documentation examples
@@ -25,16 +36,32 @@ jobs:
         env:
           FORCE_COLOR: 1
 
-      - name: Build Sphinx documentation
+      - name: Build PDF documentation
+        run: uv run make -C docs latexpdf
+        env:
+          FORCE_COLOR: 1
+
+      - name: Copy PDF to static directory
+        run: |
+          mkdir -p docs/_static
+          cp docs/_build/latex/argclass.pdf docs/_static/
+
+      - name: Build HTML documentation
         run: uv run make -C docs html
         env:
           FORCE_COLOR: 1
 
-      - name: Upload documentation artifact
+      - name: Upload HTML documentation
         uses: actions/upload-artifact@v4
         with:
           name: documentation
           path: docs/_build/html
+
+      - name: Upload PDF documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation-pdf
+          path: docs/_build/latex/argclass.pdf
 
   publish:
     needs: build
