@@ -52,6 +52,43 @@ assert greeter.name == "World"
 assert greeter.count == 3
 ```
 
+### Required vs Positional Arguments
+
+**Important:** Required arguments are *not* the same as positional arguments.
+By default, all argclass arguments are **named** - they use `--name value` syntax,
+even when required:
+
+```console
+$ python greeter.py --name World    # Named argument (default behavior)
+$ python greeter.py World           # Positional argument (must be explicit)
+```
+
+To create a **positional argument** (no `--` prefix, identified by position),
+pass the argument name without dashes as the first parameter to `Argument()`:
+
+<!--- name: test_quickstart_positional --->
+```python
+import argclass
+
+class Greeter(argclass.Parser):
+    name: str = argclass.Argument("name", help="Name to greet")  # Positional
+    count: int = 1  # Named optional (--count)
+
+greeter = Greeter()
+greeter.parse_args(["World"])  # No --name needed
+
+assert greeter.name == "World"
+assert greeter.count == 1
+```
+
+Usage comparison:
+
+| Definition | CLI Usage | Type |
+|------------|-----------|------|
+| `name: str` | `--name World` | Named required |
+| `name: str = "default"` | `--name World` | Named optional |
+| `Argument("name")` | `World` | Positional |
+
 ### Help Text
 
 Use `argclass.Argument()` to add help text that appears in `--help` output.
@@ -180,6 +217,7 @@ Usage: `TEST_DB_HOST=prod.example.com python app.py`
 |---------|--------|--------|
 | Required arg | `name: str` | `--name` (required) |
 | Optional arg | `name: str = "default"` | `--name` (optional) |
+| Positional arg | `argclass.Argument("name")` | `value` (by position) |
 | Boolean flag | `debug: bool = False` | `--debug` |
 | Multiple values | `files: list[str]` | `--files a b c` |
 | Help text | `argclass.Argument(help="...")` | Shows in `--help` |

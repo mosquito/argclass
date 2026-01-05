@@ -29,6 +29,40 @@ assert backup.source == Path("/data")
 assert backup.destination == Path("/backup")
 ```
 
+:::{note}
+**Named vs Positional:** By default, arguments use `--name value` syntax (named
+arguments). For positional arguments like `backup /data /backup`, use
+`Argument("name")` without dashes. See [Quick Start](quickstart.md#required-vs-positional-arguments).
+:::
+
+### Using Positional Arguments
+
+For commands where argument order is obvious (like `cp source dest`), positional
+arguments provide a cleaner interface. Pass the name without dashes to `Argument()`:
+
+<!--- name: test_tutorial_positional --->
+```python
+import argclass
+from pathlib import Path
+
+class BackupTool(argclass.Parser):
+    """Backup files to a destination directory."""
+    source: Path = argclass.Argument("source", help="Source directory")
+    destination: Path = argclass.Argument("destination", help="Destination directory")
+    compress: bool = False  # Still a named flag: --compress
+
+backup = BackupTool()
+backup.parse_args(["/data", "/backup", "--compress"])
+
+assert backup.source == Path("/data")
+assert backup.destination == Path("/backup")
+assert backup.compress is True
+```
+
+Usage: `python backup.py /data /backup --compress`
+
+This combines positional arguments for the main operands with named flags for options.
+
 ### Adding Options
 
 Make arguments optional by providing default values. Boolean arguments with
