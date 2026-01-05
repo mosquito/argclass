@@ -127,21 +127,21 @@ latex_documents = [
 
 latex_elements = {
     "papersize": "a4paper",
-    "pointsize": "11pt",
+    "pointsize": "10pt",
     "preamble": r"""
 \usepackage{fontspec}
-\setmainfont{DejaVu Serif}
-\setsansfont{DejaVu Sans}
-\setmonofont{DejaVu Sans Mono}
+\setmainfont{DejaVu Serif}[Scale=0.9]
+\setsansfont{DejaVu Sans}[Scale=0.9]
+\setmonofont{DejaVu Sans Mono}[Scale=0.9]
 
 % Fix fancyhdr warning about headheight
 \setlength{\headheight}{14pt}
 
-% Increase spacing before subsections and subsubsections
+% Increase spacing before sections and subsections
 \usepackage{titlesec}
-\titlespacing*{\section}{0pt}{2ex plus 1ex minus .2ex}{1.5ex plus .2ex}
-\titlespacing*{\subsection}{0pt}{2.5ex plus 1ex minus .2ex}{1ex plus .2ex}
-\titlespacing*{\subsubsection}{0pt}{2ex plus 1ex minus .2ex}{0.8ex plus .2ex}
+\titlespacing*{\section}{0pt}{4ex plus 2ex minus .4ex}{1.5ex plus .2ex}
+\titlespacing*{\subsection}{0pt}{5ex plus 2ex minus .4ex}{1ex plus .2ex}
+\titlespacing*{\subsubsection}{0pt}{4ex plus 2ex minus .4ex}{0.8ex plus .2ex}
 """,
     "fncychap": r"\usepackage[Bjornstrup]{fncychap}",
     "printindex": r"\footnotesize\raggedright\printindex",

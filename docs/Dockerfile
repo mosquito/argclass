@@ -1,14 +1,10 @@
 FROM python:3.13-slim
 
-# Install LaTeX and required packages
+# Install LaTeX (full distribution) and required packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    texlive-xetex \
-    texlive-fonts-recommended \
-    texlive-fonts-extra \
-    texlive-latex-extra \
+    texlive-full \
     latexmk \
     make \
-    fonts-dejavu \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv for Python dependency management
