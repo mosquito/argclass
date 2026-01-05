@@ -211,6 +211,219 @@ os.environ.pop("APP_SERVER_PORT", None)
 Path(config_path).unlink()
 ```
 
+## Configuration Formats
+
+argclass supports multiple configuration file formats out of the box.
+Each format can be used to provide default values that are overridden
+by environment variables and CLI arguments. Here are examples for each
+supported format.
+
+### INI Configuration
+
+INI is the simplest format, ideal for flat configurations. Sections map
+to argument groups. Boolean values support various formats: `true/false`,
+`yes/no`, `on/off`, `1/0`.
+
+<!--- name: test_example_ini_config --->
+```python
+import argclass
+from pathlib import Path
+from tempfile import NamedTemporaryFile
+
+class DatabaseGroup(argclass.Group):
+    host: str = "localhost"
+    port: int = 5432
+    name: str = "mydb"
+
+class Parser(argclass.Parser):
+    debug: bool = False
+    workers: int = 4
+    database = DatabaseGroup()
+
+CONFIG_INI = """
+[DEFAULT]
+debug = yes
+workers = 8
+
+[database]
+host = db.example.com
+port = 5432
+name = production
+"""
+
+with NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as f:
+    f.write(CONFIG_INI)
+    config_path = f.name
+
+parser = Parser(config_files=[config_path])
+parser.parse_args([])
+
+assert parser.debug is True
+assert parser.workers == 8
+assert parser.database.host == "db.example.com"
+assert parser.database.name == "production"
+
+Path(config_path).unlink()
+```
+
+### JSON Configuration
+
+JSON is useful when you need structured data or when your config is
+generated programmatically. Nested objects map to argument groups.
+
+<!--- name: test_example_json_config --->
+```python
+import argclass
+from pathlib import Path
+from tempfile import NamedTemporaryFile
+
+class ServerGroup(argclass.Group):
+    host: str = "127.0.0.1"
+    port: int = 8080
+
+class Parser(argclass.Parser):
+    debug: bool = False
+    log_level: str = "info"
+    server = ServerGroup()
+
+CONFIG_JSON = """
+{
+    "debug": true,
+    "log_level": "debug",
+    "server": {
+        "host": "0.0.0.0",
+        "port": 9000
+    }
+}
+"""
+
+with NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+    f.write(CONFIG_JSON)
+    config_path = f.name
+
+parser = Parser(
+    config_files=[config_path],
+    config_parser_class=argclass.JSONDefaultsParser,
+)
+parser.parse_args([])
+
+assert parser.debug is True
+assert parser.log_level == "debug"
+assert parser.server.host == "0.0.0.0"
+assert parser.server.port == 9000
+
+Path(config_path).unlink()
+```
+
+### TOML Configuration
+
+TOML provides a clean syntax popular in modern Python projects (like
+`pyproject.toml`). It has native support for different data types.
+
+:::{note}
+TOML requires Python 3.11+ (stdlib `tomllib`) or the `tomli` package
+for Python 3.10.
+:::
+
+<!--- name: test_example_toml_config --->
+```python
+import argclass
+from pathlib import Path
+from tempfile import NamedTemporaryFile
+
+class CacheGroup(argclass.Group):
+    enabled: bool = True
+    ttl: int = 300
+    backend: str = "memory"
+
+class Parser(argclass.Parser):
+    name: str = "myapp"
+    version: str = "1.0.0"
+    cache = CacheGroup()
+
+CONFIG_TOML = """
+name = "production-app"
+version = "2.1.0"
+
+[cache]
+enabled = true
+ttl = 3600
+backend = "redis"
+"""
+
+with NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
+    f.write(CONFIG_TOML)
+    config_path = f.name
+
+parser = Parser(
+    config_files=[config_path],
+    config_parser_class=argclass.TOMLDefaultsParser,
+)
+parser.parse_args([])
+
+assert parser.name == "production-app"
+assert parser.version == "2.1.0"
+assert parser.cache.enabled is True
+assert parser.cache.ttl == 3600
+assert parser.cache.backend == "redis"
+
+Path(config_path).unlink()
+```
+
+### Multiple Config Files with Fallback
+
+You can specify multiple config files. argclass reads them in order,
+with later files overriding earlier ones. Missing files are silently
+ignored, making this perfect for layered configuration.
+
+<!--- name: test_example_config_fallback --->
+```python
+import argclass
+from pathlib import Path
+from tempfile import NamedTemporaryFile
+
+class Parser(argclass.Parser):
+    host: str = "localhost"
+    port: int = 8080
+    debug: bool = False
+
+# System-wide defaults
+SYSTEM_CONFIG = """
+[DEFAULT]
+host = 0.0.0.0
+port = 80
+"""
+
+# User overrides
+USER_CONFIG = """
+[DEFAULT]
+port = 8080
+debug = true
+"""
+
+with NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as f:
+    f.write(SYSTEM_CONFIG)
+    system_path = f.name
+
+with NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as f:
+    f.write(USER_CONFIG)
+    user_path = f.name
+
+parser = Parser(config_files=[
+    "/etc/myapp/config.ini",  # Missing - ignored
+    system_path,               # Provides host=0.0.0.0, port=80
+    user_path,                 # Overrides port=8080, adds debug=true
+])
+parser.parse_args([])
+
+assert parser.host == "0.0.0.0"   # From system config
+assert parser.port == 8080        # Overridden by user config
+assert parser.debug is True       # From user config
+
+Path(system_path).unlink()
+Path(user_path).unlink()
+```
+
 ## File Processing Tool
 
 File processing utilities are one of the most common CLI applications.
