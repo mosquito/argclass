@@ -7,7 +7,9 @@
 [![Tests](https://github.com/mosquito/argclass/workflows/tests/badge.svg)](https://github.com/mosquito/argclass/actions?query=workflow%3Atests)
 [![License](https://img.shields.io/pypi/l/argclass.svg)](https://pypi.python.org/pypi/argclass/)
 
-<a href="_static/argclass.pdf">**Download PDF Documentation**</a>
+:::{note}
+For offline access, you can download the full documentation as a PDF: <a href="_static/argclass.pdf">**Download PDF Documentation**</a>
+:::
 ```
 
 **Declarative CLI parser with type hints, config files, and environment variables.**
