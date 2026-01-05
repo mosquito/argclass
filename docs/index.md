@@ -112,6 +112,161 @@ Full autocompletion and type checking in your editor.
 ::::
 ```
 
+## How to Read This Documentation
+
+All code examples in this documentation are automatically tested to ensure they
+work correctly. This means examples are written in a specific way that may look
+slightly different from real-world usage.
+
+### parse_args() with explicit arguments
+
+Throughout the documentation, you'll see examples like:
+
+<!--- name: test_index_parse_args_explicit --->
+```python
+import argclass
+
+class Parser(argclass.Parser):
+    host: str = "localhost"
+    port: int = 8080
+
+parser = Parser()
+parser.parse_args(["--host", "example.com", "--port", "9000"])
+assert parser.host == "example.com"
+```
+
+**This is for testing purposes only.** In real applications, you would call
+`parse_args()` without arguments, which reads from `sys.argv` (the command line):
+
+<!--- name: test_index_parse_args_real --->
+```python
+import argclass
+
+class Parser(argclass.Parser):
+    host: str = "localhost"
+
+parser = Parser()
+parser.parse_args([])  # In real code: parser.parse_args()
+# Real usage reads from command line: python app.py --host example.com
+```
+
+The explicit list form `parse_args(["--arg", "value"])` is used in documentation
+so examples can be tested automatically without requiring actual command-line
+execution.
+
+:::{note}
+Experienced users may pass arguments directly in specific scenarios, such as
+filtering `sys.argv`, implementing argument preprocessing, or building nested
+CLI tools. However, this is not a common pattern for typical applications.
+:::
+
+### Assert statements
+
+Examples often end with `assert` statements for verification:
+
+<!--- name: test_index_assert_example --->
+```python
+import argclass
+
+class Parser(argclass.Parser):
+    name: str
+
+parser = Parser()
+parser.parse_args(["--name", "Alice"])
+assert parser.name == "Alice"  # Verification for testing
+```
+
+In your actual code, you would simply use the parsed values:
+
+<!--- name: test_index_real_usage --->
+```python
+import argclass
+
+class Parser(argclass.Parser):
+    name: str = "World"
+
+parser = Parser()
+parser.parse_args([])
+message = f"Hello, {parser.name}!"
+assert message == "Hello, World!"
+```
+
+### Environment variables and temporary files
+
+Examples that demonstrate environment variables set them programmatically:
+
+<!--- name: test_index_env_example --->
+```python
+import os
+import argclass
+
+os.environ["MY_API_KEY"] = "secret123"  # Set for testing
+
+class Parser(argclass.Parser):
+    api_key: str = argclass.Argument(env_var="MY_API_KEY")
+
+parser = Parser()
+parser.parse_args([])
+assert parser.api_key == "secret123"
+
+del os.environ["MY_API_KEY"]  # Cleanup after test
+```
+
+In production, environment variables would be set externally (by your shell,
+container orchestrator, or deployment system), not in your Python code.
+
+Similarly, config file examples use `NamedTemporaryFile` to create test files.
+In real applications, you would reference actual configuration file paths:
+
+<!--- name: test_index_config_example --->
+```python
+import argclass
+from tempfile import NamedTemporaryFile
+from pathlib import Path
+
+class Parser(argclass.Parser):
+    host: str = "localhost"
+
+# Documentation uses temporary files for testing:
+with NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as f:
+    f.write("[DEFAULT]\nhost = example.com\n")
+    config_path = f.name
+
+parser = Parser(config_files=[config_path])
+parser.parse_args([])
+assert parser.host == "example.com"
+
+Path(config_path).unlink()
+
+# Real applications use actual paths:
+# parser = Parser(config_files=["/etc/myapp.ini", "~/.config/myapp.ini"])
+```
+
+### Real-world usage pattern
+
+Here's what a complete real-world application looks like:
+
+<!--- name: test_index_real_world --->
+```python
+import argclass
+
+class MyApp(argclass.Parser):
+    """My application description."""
+    host: str = "localhost"
+    port: int = 8080
+    debug: bool = False
+
+def main():
+    app = MyApp()
+    app.parse_args([])  # Real code: app.parse_args()
+    return f"Starting on {app.host}:{app.port}"
+
+result = main()
+assert "localhost:8080" in result
+```
+
+Run it with: `python myapp.py --host 0.0.0.0 --port 9000 --debug`
+
 ## Installation
 
 argclass requires Python 3.10 or later and has no external dependencies.
