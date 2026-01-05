@@ -25,7 +25,7 @@ and seamless integration with configuration files and environment variables.
 - **Type-safe arguments** - Define arguments using Python type hints. argclass
   automatically validates and converts values to the correct types.
 - **Pure OOP design** - Unlike decorator-based libraries, argclass uses real
-  classes. This enables proper inheritance, composition
+  classes. This enables proper inheritance and composition
   for building complex CLIs. Parsers are testable objects you can instantiate,
   extend, and compose without decorator magic.
 - **Zero dependencies** - Built entirely on Python's standard library `argparse`.

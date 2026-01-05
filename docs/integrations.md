@@ -137,6 +137,6 @@ This is useful for tools that inspect argument structure, generate documentation
 or need argparse compatibility.
 
 :::{warning}
-`create_parser()` does **not** back populates parser attributes.
+`create_parser()` does **not** back populate parser attributes.
 Always use `parse_args()` to actually parse command-line arguments.
 :::
