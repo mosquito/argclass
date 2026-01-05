@@ -133,6 +133,15 @@ latex_elements = {
 \setmainfont{DejaVu Serif}
 \setsansfont{DejaVu Sans}
 \setmonofont{DejaVu Sans Mono}
+
+% Fix fancyhdr warning about headheight
+\setlength{\headheight}{14pt}
+
+% Increase spacing before subsections and subsubsections
+\usepackage{titlesec}
+\titlespacing*{\section}{0pt}{2ex plus 1ex minus .2ex}{1.5ex plus .2ex}
+\titlespacing*{\subsection}{0pt}{2.5ex plus 1ex minus .2ex}{1ex plus .2ex}
+\titlespacing*{\subsubsection}{0pt}{2ex plus 1ex minus .2ex}{0.8ex plus .2ex}
 """,
     "fncychap": r"\usepackage[Bjornstrup]{fncychap}",
     "printindex": r"\footnotesize\raggedright\printindex",
