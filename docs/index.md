@@ -7,7 +7,7 @@
 [![Tests](https://github.com/mosquito/argclass/workflows/tests/badge.svg)](https://github.com/mosquito/argclass/actions?query=workflow%3Atests)
 [![License](https://img.shields.io/pypi/l/argclass.svg)](https://pypi.python.org/pypi/argclass/)
 
-<a href="_static/argclass.pdf" download>**📥 Download PDF Documentation**</a>
+<a href="_static/argclass.pdf">**Download PDF Documentation**</a>
 ```
 
 **Declarative CLI parser with type hints, config files, and environment variables.**
@@ -158,9 +158,57 @@ pip install -e .
 
 After installation, verify it works:
 
-```python
+```console
+$ python -m argclass --help
+usage: python -m argclass [-h] [--verbose] [--secret-key SECRET_KEY] {greet} ...
+
+This code produces this help:
+
+import argparse
+import sys
+from pathlib import Path
+
 import argclass
-print(argclass.__version__)
+
+class GreetCommand(argclass.Parser):
+    user: str = argclass.Argument("user", help="User to greet")
+
+    def __call__(self) -> int:
+        print(f"Hello, {self.user}!")
+        return 0
+
+class Parser(argclass.Parser):
+    verbose: bool = False
+    secret_key: str = argclass.Secret(help="Secret API key")
+    greet = GreetCommand()
+
+def main() -> None:
+    parser = Parser(
+        prog=f"{Path(sys.executable).name} -m argclass",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=(
+            "This code produces this help:\n\n```"
+            f"python\n{open(__file__).read().strip()}\n```"
+        ),
+    )
+    parser.parse_args()
+    parser.sanitize_env()
+    exit(parser())
+
+if __name__ == "__main__":
+    main()
+
+positional arguments:
+{greet}
+
+options:
+-h, --help            show this help message and exit
+--verbose             (default: False)
+--secret-key SECRET_KEY
+Secret API key
+
+$ python -m argclass greet Guido
+Hello, Guido!
 ```
 
 ## Quick Examples
@@ -170,6 +218,7 @@ print(argclass.__version__)
 Organize related arguments into reusable groups. Group arguments are
 automatically prefixed with the group name:
 
+<!--- name: test_groups_basic --->
 ```python
 import argclass
 
@@ -183,7 +232,7 @@ class Parser(argclass.Parser):
 
 parser = Parser()
 parser.parse_args(["--db-host", "prod.db", "--db-port", "5432"])
-# parser.db.host == "prod.db"
+assert parser.db.host == "prod.db"
 ```
 
 ### Config Files
@@ -191,6 +240,7 @@ parser.parse_args(["--db-host", "prod.db", "--db-port", "5432"])
 Load defaults from INI, JSON, or TOML configuration files. Values from
 config files can be overridden by environment variables or CLI arguments:
 
+<!--- name: test_config_files_basic --->
 ```python
 import argclass
 
@@ -202,6 +252,8 @@ parser = Parser(config_files=[
     "/etc/myapp.ini",
     "~/.config/myapp.ini",
 ])
+
+# Reads from config files in order, then environment, then CLI
 ```
 
 ### Environment Variables
@@ -209,6 +261,7 @@ parser = Parser(config_files=[
 Read configuration from environment variables. Use `auto_env_var_prefix`
 to automatically generate environment variable names from argument names:
 
+<!--- name: test_environment_auto_prefix --->
 ```python
 import argclass
 
