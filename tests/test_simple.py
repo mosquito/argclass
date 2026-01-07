@@ -711,6 +711,100 @@ def test_sanitize_env():
         assert "TEST_SECRET" not in dict(os.environ)
 
 
+def test_sanitize_secrets_on_parse():
+    """Test sanitize_secrets=True removes only secret env vars."""
+
+    class Parser(argclass.Parser):
+        secret: str = argclass.Secret(default="SECRET")
+        public: str = argclass.Argument(default="PUBLIC")
+
+    parser = Parser(auto_env_var_prefix="TEST_")
+
+    with patch("os.environ", new={}):
+        os.environ["TEST_SECRET"] = "secret_value"
+        os.environ["TEST_PUBLIC"] = "public_value"
+
+        assert os.environ["TEST_SECRET"] == "secret_value"
+        assert os.environ["TEST_PUBLIC"] == "public_value"
+
+        parser.parse_args([], sanitize_secrets=True)
+
+        # Secret env var should be removed
+        assert "TEST_SECRET" not in dict(os.environ)
+        # Non-secret env var should remain
+        assert os.environ["TEST_PUBLIC"] == "public_value"
+
+        # Values should still be parsed correctly
+        assert str.__str__(parser.secret) == "secret_value"
+        assert parser.public == "public_value"
+
+
+def test_sanitize_secrets_false_by_default():
+    """Test that sanitize_secrets=False (default) keeps all env vars."""
+
+    class Parser(argclass.Parser):
+        secret: str = argclass.Secret(default="SECRET")
+
+    parser = Parser(auto_env_var_prefix="TEST_")
+
+    with patch("os.environ", new={}):
+        os.environ["TEST_SECRET"] = "secret_value"
+
+        parser.parse_args([])
+
+        # Secret env var should NOT be removed (sanitize_secrets=False)
+        assert os.environ["TEST_SECRET"] == "secret_value"
+
+
+def test_sanitize_env_only_secrets():
+    """Test sanitize_env(only_secrets=True) removes only secret env vars."""
+
+    class Parser(argclass.Parser):
+        secret: str = argclass.Secret(default="SECRET")
+        public: str = argclass.Argument(default="PUBLIC")
+
+    parser = Parser(auto_env_var_prefix="TEST_")
+
+    with patch("os.environ", new={}):
+        os.environ["TEST_SECRET"] = "secret_value"
+        os.environ["TEST_PUBLIC"] = "public_value"
+
+        parser.parse_args([])
+
+        # Both env vars should exist before sanitize_env
+        assert os.environ["TEST_SECRET"] == "secret_value"
+        assert os.environ["TEST_PUBLIC"] == "public_value"
+
+        parser.sanitize_env(only_secrets=True)
+
+        # Secret env var should be removed
+        assert "TEST_SECRET" not in dict(os.environ)
+        # Non-secret env var should remain
+        assert os.environ["TEST_PUBLIC"] == "public_value"
+
+
+def test_sanitize_env_all():
+    """Test sanitize_env() (default) removes all env vars."""
+
+    class Parser(argclass.Parser):
+        secret: str = argclass.Secret(default="SECRET")
+        public: str = argclass.Argument(default="PUBLIC")
+
+    parser = Parser(auto_env_var_prefix="TEST_")
+
+    with patch("os.environ", new={}):
+        os.environ["TEST_SECRET"] = "secret_value"
+        os.environ["TEST_PUBLIC"] = "public_value"
+
+        parser.parse_args([])
+
+        parser.sanitize_env()
+
+        # Both env vars should be removed
+        assert "TEST_SECRET" not in dict(os.environ)
+        assert "TEST_PUBLIC" not in dict(os.environ)
+
+
 def test_enum():
     class Options(IntEnum):
         ONE = 1

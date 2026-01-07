@@ -253,8 +253,71 @@ parser = Parser()
 parser.parse_args([])
 
 assert "SECRET_VALUE" in os.environ
-parser.sanitize_env()  # Removes secret env vars
+parser.sanitize_env()  # Removes all used env vars
 assert "SECRET_VALUE" not in os.environ
+```
+
+#### Automatic Sanitization During Parsing
+
+Use `sanitize_secrets=True` to automatically remove secret environment variables
+during parsing:
+
+<!--- name: test_secrets_sanitize_on_parse --->
+```python
+import os
+import argclass
+
+os.environ["SECRET_VALUE"] = "sensitive"
+os.environ["PUBLIC_VALUE"] = "not_secret"
+
+class Parser(argclass.Parser):
+    secret: str = argclass.Secret(env_var="SECRET_VALUE")
+    public: str = argclass.Argument(env_var="PUBLIC_VALUE")
+
+parser = Parser()
+parser.parse_args([], sanitize_secrets=True)
+
+# Secret env var is removed automatically
+assert "SECRET_VALUE" not in os.environ
+# Non-secret env var remains
+assert os.environ["PUBLIC_VALUE"] == "not_secret"
+
+# Values are still accessible
+assert str(parser.secret) == "sensitive"
+assert parser.public == "not_secret"
+
+del os.environ["PUBLIC_VALUE"]
+```
+
+#### Selective Sanitization
+
+Use `sanitize_env(only_secrets=True)` to remove only secret environment variables
+while keeping non-secret ones:
+
+<!--- name: test_secrets_sanitize_only_secrets --->
+```python
+import os
+import argclass
+
+os.environ["SECRET_VALUE"] = "sensitive"
+os.environ["PUBLIC_VALUE"] = "not_secret"
+
+class Parser(argclass.Parser):
+    secret: str = argclass.Secret(env_var="SECRET_VALUE")
+    public: str = argclass.Argument(env_var="PUBLIC_VALUE")
+
+parser = Parser()
+parser.parse_args([])
+
+# Remove only secret env vars
+parser.sanitize_env(only_secrets=True)
+
+# Secret env var is removed
+assert "SECRET_VALUE" not in os.environ
+# Non-secret env var remains
+assert os.environ["PUBLIC_VALUE"] == "not_secret"
+
+del os.environ["PUBLIC_VALUE"]
 ```
 
 ### 3. Use repr for Safe Logging

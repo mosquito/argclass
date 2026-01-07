@@ -331,6 +331,8 @@ class Parser(AbstractParser, Base):
 
             if argument.env_var in os.environ:
                 self._used_env_vars.add(argument.env_var)
+                if argument.secret:
+                    self._used_secret_env_vars.add(argument.env_var)
 
         # Convert string boolean values from config/env to proper bools
         action = kwargs.get("action")
@@ -395,6 +397,7 @@ class Parser(AbstractParser, Base):
         self._auto_env_var_prefix = auto_env_var_prefix
         self._parser_kwargs = kwargs
         self._used_env_vars: Set[str] = set()
+        self._used_secret_env_vars: Set[str] = set()
 
     @property
     def current_subparser(self) -> Optional["AbstractParser"]:
@@ -546,6 +549,7 @@ class Parser(AbstractParser, Base):
     def parse_args(
         self: ParserType,
         args: Optional[List[str]] = None,
+        sanitize_secrets: bool = False,
     ) -> ParserType:
         parser, destinations = self._make_parser()
         parsed_ns = parser.parse_args(args=args)
@@ -590,16 +594,27 @@ class Parser(AbstractParser, Base):
 
                 setattr(target, name, parsed_value)
 
+        if sanitize_secrets:
+            for name in self._used_secret_env_vars:
+                os.environ.pop(name, None)
+            self._used_secret_env_vars.clear()
+
         return self
 
     def print_help(self) -> None:
         parser, _ = self._make_parser()
         return parser.print_help()
 
-    def sanitize_env(self) -> None:
-        for name in self._used_env_vars:
-            os.environ.pop(name, None)
-        self._used_env_vars.clear()
+    def sanitize_env(self, only_secrets: bool = False) -> None:
+        if only_secrets:
+            for name in self._used_secret_env_vars:
+                os.environ.pop(name, None)
+            self._used_secret_env_vars.clear()
+        else:
+            for name in self._used_env_vars:
+                os.environ.pop(name, None)
+            self._used_env_vars.clear()
+            self._used_secret_env_vars.clear()
 
     def __call__(self) -> Any:
         """
