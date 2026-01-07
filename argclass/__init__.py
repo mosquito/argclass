@@ -45,7 +45,10 @@ from .store import (
     TypedArgument,
 )
 from .types import Actions, ConverterType, LogLevelEnum, Nargs, NargsType
-from .utils import parse_bool, read_configs
+from .utils import parse_bool, read_ini_configs
+
+# Alias for backward compatibility
+read_configs = read_ini_configs
 
 # For backward compatibility
 EnumType = EnumMeta
@@ -95,6 +98,6 @@ __all__ = [
     "Config",
     "LogLevel",
     # Utilities
-    "read_configs",
+    "read_ini_configs",
     "parse_bool",
 ]

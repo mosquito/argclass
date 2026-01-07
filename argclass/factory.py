@@ -7,7 +7,6 @@ from typing import (
     Callable,
     Iterable,
     List,
-    Literal,
     Optional,
     Type,
     TypeVar,
@@ -22,9 +21,6 @@ from .store import ConfigArgument, INIConfig, TypedArgument
 from .types import Actions, ConverterType, LogLevelEnum, Nargs, NargsType
 
 T = TypeVar("T")
-
-# Nargs literals that produce sequences
-_NargsSequence = Union[Literal["+", "*"], Nargs, int]
 
 
 # noinspection PyShadowingBuiltins
@@ -77,7 +73,7 @@ def ArgumentSingle(
 def ArgumentSequence(
     *aliases: str,
     type: Type[T],
-    nargs: _NargsSequence = "+",
+    nargs: NargsType = Nargs.ONE_OR_MORE,
     action: Union[Actions, Type[Action]] = Actions.default(),
     choices: Optional[Iterable[str]] = None,
     const: Optional[Any] = None,
@@ -132,7 +128,7 @@ def ArgumentSequence(
 def Argument(
     *aliases: str,
     type: Type[T],
-    nargs: _NargsSequence,
+    nargs: Optional[NargsType],
     action: Union[Actions, Type[Action]] = ...,
     choices: Optional[Iterable[str]] = ...,
     const: Optional[Any] = ...,
@@ -177,7 +173,7 @@ def Argument(
     env_var: Optional[str] = ...,
     help: Optional[str] = ...,
     metavar: Optional[str] = ...,
-    nargs: NargsType = ...,
+    nargs: Optional[NargsType] = ...,
     required: Optional[bool] = ...,
     secret: bool = ...,
     type: Optional[ConverterType] = ...,
@@ -196,7 +192,7 @@ def Argument(
     env_var: Optional[str] = ...,
     help: Optional[str] = ...,
     metavar: Optional[str] = ...,
-    nargs: NargsType = ...,
+    nargs: Optional[NargsType] = ...,
     required: Optional[bool] = ...,
     secret: bool = ...,
     type: None = ...,
@@ -214,7 +210,7 @@ def Argument(
     env_var: Optional[str] = None,
     help: Optional[str] = None,
     metavar: Optional[str] = None,
-    nargs: NargsType = None,
+    nargs: Optional[NargsType] = None,
     required: Optional[bool] = None,
     secret: bool = False,
     type: Optional[ConverterType] = None,
@@ -332,7 +328,7 @@ def EnumArgument(
     env_var: Optional[str] = ...,
     help: Optional[str] = ...,
     metavar: Optional[str] = ...,
-    nargs: NargsType = ...,
+    nargs: Optional[NargsType] = ...,
     required: Optional[bool] = ...,
     use_value: bool = ...,
     lowercase: bool = ...,
@@ -349,7 +345,7 @@ def EnumArgument(
     env_var: Optional[str] = ...,
     help: Optional[str] = ...,
     metavar: Optional[str] = ...,
-    nargs: NargsType = ...,
+    nargs: Optional[NargsType] = ...,
     required: Optional[bool] = ...,
     use_value: bool = ...,
     lowercase: bool = ...,
@@ -364,7 +360,7 @@ def EnumArgument(
     env_var: Optional[str] = None,
     help: Optional[str] = None,
     metavar: Optional[str] = None,
-    nargs: NargsType = None,
+    nargs: Optional[NargsType] = None,
     required: Optional[bool] = None,
     use_value: bool = False,
     lowercase: bool = False,
@@ -433,7 +429,7 @@ def Secret(
     env_var: Optional[str] = None,
     help: Optional[str] = None,
     metavar: Optional[str] = None,
-    nargs: NargsType = None,
+    nargs: Optional[NargsType] = None,
     required: Optional[bool] = None,
     type: Optional[ConverterType] = None,
 ) -> Any:
@@ -502,7 +498,7 @@ def Config(
     env_var: Optional[str] = None,
     help: Optional[str] = None,
     metavar: Optional[str] = None,
-    nargs: NargsType = None,
+    nargs: Optional[NargsType] = None,
     required: Optional[bool] = None,
     config_class: Type[ConfigArgument] = INIConfig,
 ) -> Any:

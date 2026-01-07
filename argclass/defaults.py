@@ -25,21 +25,21 @@ except ImportError:  # pragma: no cover
 class ValueKind(IntEnum):
     """Expected value type for config loading."""
 
-    STRING = 0    # Default, no conversion
+    STRING = 0  # Default, no conversion
     SEQUENCE = 1  # list/tuple or something iterable
-    BOOL = 2      # boolean value
+    BOOL = 2  # boolean value
 
 
 class UnexpectedConfigValue(ValueError):
     """Config value doesn't match expected type."""
 
     def __init__(self, key: str, expected: ValueKind, value: Any):
-        self.key = key
+        self.value = repr(value)
         self.expected = expected
-        self.value = value
+        self.key = key
         super().__init__(
-            f"Config key '{key}' expected {expected.name}, "
-            f"got {type(value).__name__}: {value!r}"
+            f"Config key '{key}' expected {expected.name!r}, "
+            f"got {type(value)!r}: {self.value}"
         )
 
 
@@ -147,9 +147,18 @@ class INIDefaultsParser(AbstractDefaultsParser):
     """
 
     # Values considered as True for boolean conversion
-    BOOL_TRUE_VALUES = frozenset((
-        "true", "yes", "1", "on", "enable", "enabled", "t", "y",
-    ))
+    BOOL_TRUE_VALUES = frozenset(
+        (
+            "true",
+            "yes",
+            "1",
+            "on",
+            "enable",
+            "enabled",
+            "t",
+            "y",
+        )
+    )
 
     def parse(self) -> Mapping[str, Any]:
         parser = configparser.ConfigParser(

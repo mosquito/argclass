@@ -1837,7 +1837,7 @@ class TestReadConfigsUnreadablePath:
 
     def test_unreadable_path_skipped(self, tmp_path):
         """Test read_configs skips unreadable paths."""
-        from argclass.utils import read_configs
+        from argclass.utils import read_ini_configs
 
         config_file = tmp_path / "config.ini"
         config_file.write_text("[section]\nkey=value")
@@ -1845,7 +1845,7 @@ class TestReadConfigsUnreadablePath:
         os.chmod(config_file, 0o000)
 
         try:
-            result, paths = read_configs(config_file)
+            result, paths = read_ini_configs(config_file)
             assert result == {}
             assert paths == ()
         finally:
@@ -2218,3 +2218,141 @@ class TestRequiredBool:
         parser.parse_args([])
 
         assert parser.flag is True
+
+
+class TestCoverageGaps:
+    """Tests for uncovered code paths."""
+
+    def test_get_value_section_not_dict(self, tmp_path):
+        """Test get_value returns None when section value is not a dict."""
+        config = tmp_path / "config.ini"
+        # Section value that's not a dict (edge case)
+        config.write_text("[DEFAULT]\ngroup = not_a_dict\n")
+
+        class Parser(argclass.Parser):
+            value: str = "default"
+
+        parser = Parser(config_files=[config])
+        # Manually test get_value with section that's not a dict
+        result = parser._config_parser.get_value(
+            "key",
+            argclass.ValueKind.STRING,
+            section="group",
+        )
+        assert result is None
+
+    def test_json_unexpected_sequence_value(self, tmp_path):
+        """Test JSON raises UnexpectedConfigValue for wrong sequence type."""
+        config = tmp_path / "config.json"
+        # JSON with string instead of list for nargs field
+        config.write_text('{"items": "not_a_list"}')
+
+        class Parser(argclass.Parser):
+            items: list[str] = argclass.Argument(nargs="*", default=[])
+
+        with pytest.raises(argclass.UnexpectedConfigValue) as exc_info:
+            parser = Parser(
+                config_files=[config],
+                config_parser_class=argclass.JSONDefaultsParser,
+            )
+            parser.parse_args([])
+
+        assert exc_info.value.key == "items"
+        assert exc_info.value.expected == argclass.ValueKind.SEQUENCE
+
+    def test_json_unexpected_bool_value(self, tmp_path):
+        """Test JSON raises UnexpectedConfigValue for wrong bool type."""
+        config = tmp_path / "config.json"
+        # JSON with string instead of bool
+        config.write_text('{"flag": "yes"}')
+
+        class Parser(argclass.Parser):
+            flag: bool = False
+
+        with pytest.raises(argclass.UnexpectedConfigValue) as exc_info:
+            parser = Parser(
+                config_files=[config],
+                config_parser_class=argclass.JSONDefaultsParser,
+            )
+            parser.parse_args([])
+
+        assert exc_info.value.key == "flag"
+        assert exc_info.value.expected == argclass.ValueKind.BOOL
+
+    def test_ini_convert_non_string_value(self, tmp_path):
+        """Test INI _convert returns non-string values unchanged."""
+        config = tmp_path / "config.ini"
+        config.write_text("[DEFAULT]\nkey = value\n")
+
+        parser = argclass.INIDefaultsParser([config])
+        parser.parse()
+
+        # Manually set a non-string value to test _convert
+        parser._values["test_list"] = [1, 2, 3]
+
+        # _convert should return non-string values unchanged
+        result = parser._convert(
+            "test_list",
+            [1, 2, 3],
+            argclass.ValueKind.SEQUENCE,
+        )
+        assert result == [1, 2, 3]
+
+    def test_argument_single_function(self):
+        """Test ArgumentSingle function directly."""
+
+        class Parser(argclass.Parser):
+            count: int = argclass.ArgumentSingle(type=int, default=10)
+            name: str = argclass.ArgumentSingle(type=str, default="test")
+
+        parser = Parser()
+        parser.parse_args([])
+
+        assert parser.count == 10
+        assert parser.name == "test"
+
+    def test_argument_with_type_no_nargs(self):
+        """Test Argument with type but no nargs dispatches to ArgumentSingle."""
+
+        class Parser(argclass.Parser):
+            port: int = argclass.Argument(type=int, default=8080)
+
+        parser = Parser()
+        parser.parse_args([])
+
+        assert parser.port == 8080
+
+    def test_create_parser_method(self):
+        """Test create_parser() method returns ArgumentParser."""
+
+        class Parser(argclass.Parser):
+            name: str = "default"
+            count: int = 1
+
+        parser = Parser()
+        argparse_parser = parser.create_parser()
+
+        # Verify it returns an ArgumentParser
+        from argparse import ArgumentParser
+
+        assert isinstance(argparse_parser, ArgumentParser)
+
+    def test_is_nargs_with_nargs_star(self):
+        """Test is_nargs returns True for nargs='*'."""
+        arg = argclass.TypedArgument(nargs="*")
+        assert arg.is_nargs is True
+
+    def test_is_nargs_with_nargs_plus(self):
+        """Test is_nargs returns True for nargs='+'."""
+        arg = argclass.TypedArgument(nargs="+")
+        assert arg.is_nargs is True
+
+    def test_is_nargs_with_nargs_question(self):
+        """Test is_nargs returns True for nargs='?'."""
+        arg = argclass.TypedArgument(nargs="?")
+        assert arg.is_nargs is True
+
+    def test_is_nargs_with_nargs_enum(self):
+        """Test is_nargs returns True for Nargs enum."""
+        arg = argclass.TypedArgument(nargs=argclass.Nargs.ZERO_OR_MORE)
+        assert arg.is_nargs is True

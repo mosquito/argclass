@@ -130,9 +130,8 @@ class Meta(ABCMeta):
 
                     if inherited_arg is not None:
                         argument = inherited_arg
-                    elif (
-                        kind is bool
-                        and (argument is None or argument is Ellipsis)
+                    elif kind is bool and (
+                        argument is None or argument is Ellipsis
                     ):
                         raise TypeError(
                             f"Bool field '{key}' must have an explicit default "
@@ -359,7 +358,8 @@ class Parser(AbstractParser, Base):
         # Check if nargs produces a list
         nargs_is_list = (
             argument.nargs in (Nargs.ONE_OR_MORE, Nargs.ZERO_OR_MORE, "*", "+")
-            or isinstance(argument.nargs, int) and argument.nargs >= 1
+            or isinstance(argument.nargs, int)
+            and argument.nargs >= 1
         )
 
         if argument.env_var is not None:
@@ -429,7 +429,9 @@ class Parser(AbstractParser, Base):
         self._config_files = config_files
 
         # Parse config files using the specified parser class
-        self._config_parser = config_parser_class(config_files, strict=strict_config)
+        self._config_parser = config_parser_class(
+            config_files, strict=strict_config
+        )
         self._config = self._config_parser.parse()
         # Backward compatibility: ensure _values is populated for custom parsers
         if not self._config_parser._values:
@@ -502,8 +504,10 @@ class Parser(AbstractParser, Base):
 
         # Check for bool actions
         if argument.action in (
-            Actions.STORE_TRUE, Actions.STORE_FALSE,
-            "store_true", "store_false",
+            Actions.STORE_TRUE,
+            Actions.STORE_FALSE,
+            "store_true",
+            "store_false",
         ):
             return ValueKind.BOOL
 
@@ -525,7 +529,8 @@ class Parser(AbstractParser, Base):
             kind = self._get_value_kind(argument)
             config_default = self._config_parser.get_value(name, kind)
             default = (
-                config_default if config_default is not None
+                config_default
+                if config_default is not None
                 else argument.default
             )
 
@@ -573,10 +578,13 @@ class Parser(AbstractParser, Base):
                 # Get default from config with type-aware loading
                 kind = self._get_value_kind(argument)
                 config_default = self._config_parser.get_value(
-                    name, kind, section=group_name,
+                    name,
+                    kind,
+                    section=group_name,
                 )
                 default = (
-                    config_default if config_default is not None
+                    config_default
+                    if config_default is not None
                     else group._defaults.get(name, argument.default)
                 )
 

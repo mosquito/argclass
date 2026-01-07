@@ -1,12 +1,11 @@
 """Type definitions, enums, and constants for argclass."""
 
 from enum import Enum, IntEnum
-from typing import Any, Callable, Optional, Tuple, Union
-
+from typing import Any, Callable, Tuple, Union, Literal
 
 # Type aliases
 ConverterType = Callable[[Any], Any]
-NargsType = Optional[Union[int, str, "Nargs"]]
+NargsType = Union[int, str, "Nargs", Literal["?", "*", "+"]]
 NoneType = type(None)
 UnionClass = Union[None, int].__class__
 
