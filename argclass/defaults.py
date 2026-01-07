@@ -1,11 +1,13 @@
 """Default value parsers for loading configuration from files."""
 
+import ast
 import configparser
 import json
 import os
 from abc import ABC, abstractmethod
+from enum import IntEnum
 from pathlib import Path
-from typing import Any, Dict, Iterable, Mapping, Tuple, Union
+from typing import Any, Dict, Iterable, Mapping, Optional, Tuple, Union
 
 try:
     import tomllib
@@ -18,6 +20,27 @@ except ImportError:  # pragma: no cover
         toml_load = tomli.load  # type: ignore[assignment]
     except ImportError:
         toml_load = None  # type: ignore[assignment]
+
+
+class ValueKind(IntEnum):
+    """Expected value type for config loading."""
+
+    STRING = 0    # Default, no conversion
+    SEQUENCE = 1  # list/tuple or something iterable
+    BOOL = 2      # boolean value
+
+
+class UnexpectedConfigValue(ValueError):
+    """Config value doesn't match expected type."""
+
+    def __init__(self, key: str, expected: ValueKind, value: Any):
+        self.key = key
+        self.expected = expected
+        self.value = value
+        super().__init__(
+            f"Config key '{key}' expected {expected.name}, "
+            f"got {type(value).__name__}: {value!r}"
+        )
 
 
 class AbstractDefaultsParser(ABC):
@@ -35,6 +58,7 @@ class AbstractDefaultsParser(ABC):
         self._paths = list(paths)
         self._strict = strict
         self._loaded_files: Tuple[Path, ...] = ()
+        self._values: Dict[str, Any] = {}
 
     @property
     def loaded_files(self) -> Tuple[Path, ...]:
@@ -61,6 +85,53 @@ class AbstractDefaultsParser(ABC):
         """
         raise NotImplementedError()
 
+    def get_value(
+        self,
+        key: str,
+        kind: ValueKind = ValueKind.STRING,
+        section: Optional[str] = None,
+    ) -> Any:
+        """Get value with type validation.
+
+        Args:
+            key: The config key name.
+            kind: Expected value type for validation.
+            section: Optional section/group name for nested values.
+
+        Returns:
+            The value, converted if necessary (e.g., INI literal_eval).
+
+        Raises:
+            UnexpectedConfigValue: If value doesn't match expected kind.
+        """
+        if section is not None:
+            source = self._values.get(section, {})
+            if not isinstance(source, dict):
+                return None
+        else:
+            source = self._values
+
+        value = source.get(key)
+        if value is None:
+            return None
+
+        # Subclass can convert (INI: literal_eval)
+        value = self._convert(key, value, kind)
+
+        # Validate
+        if kind == ValueKind.SEQUENCE:
+            if not isinstance(value, (list, tuple)):
+                raise UnexpectedConfigValue(key, kind, value)
+        elif kind == ValueKind.BOOL:
+            if not isinstance(value, bool):
+                raise UnexpectedConfigValue(key, kind, value)
+
+        return value
+
+    def _convert(self, key: str, value: Any, kind: ValueKind) -> Any:
+        """Override for format-specific conversion."""
+        return value
+
 
 class INIDefaultsParser(AbstractDefaultsParser):
     """Parse INI configuration files for default values.
@@ -70,7 +141,15 @@ class INIDefaultsParser(AbstractDefaultsParser):
 
     INI sections map to argument groups, and the [DEFAULT] section
     contains top-level argument defaults.
+
+    Values that look like Python literals (lists, bools) are converted
+    when requested via get_value() with appropriate ValueKind.
     """
+
+    # Values considered as True for boolean conversion
+    BOOL_TRUE_VALUES = frozenset((
+        "true", "yes", "1", "on", "enable", "enabled", "t", "y",
+    ))
 
     def parse(self) -> Mapping[str, Any]:
         parser = configparser.ConfigParser(
@@ -89,7 +168,24 @@ class INIDefaultsParser(AbstractDefaultsParser):
         for section in parser.sections():
             result[section] = dict(parser.items(section, raw=True))
 
+        self._values = result
         return result
+
+    def _convert(self, key: str, value: Any, kind: ValueKind) -> Any:
+        """Convert INI string values based on expected kind."""
+        if not isinstance(value, str):
+            return value
+
+        if kind == ValueKind.SEQUENCE:
+            try:
+                return ast.literal_eval(value)
+            except (ValueError, SyntaxError) as e:
+                raise UnexpectedConfigValue(key, kind, value) from e
+
+        if kind == ValueKind.BOOL:
+            return value.lower() in self.BOOL_TRUE_VALUES
+
+        return value
 
 
 class JSONDefaultsParser(AbstractDefaultsParser):
@@ -98,6 +194,8 @@ class JSONDefaultsParser(AbstractDefaultsParser):
     The JSON structure should be a flat or nested object where:
     - Top-level keys are argument names or group names
     - Group values are objects with argument names as keys
+
+    JSON natively supports lists and booleans, so no conversion needed.
     """
 
     def parse(self) -> Mapping[str, Any]:
@@ -116,6 +214,7 @@ class JSONDefaultsParser(AbstractDefaultsParser):
                     raise
 
         self._loaded_files = tuple(loaded_files)
+        self._values = result
         return result
 
 
@@ -127,6 +226,8 @@ class TOMLDefaultsParser(AbstractDefaultsParser):
     The TOML structure should be:
     - Top-level keys are argument names
     - Tables (sections) map to argument groups
+
+    TOML natively supports lists and booleans, so no conversion needed.
     """
 
     def parse(self) -> Mapping[str, Any]:
@@ -151,4 +252,5 @@ class TOMLDefaultsParser(AbstractDefaultsParser):
                     raise
 
         self._loaded_files = tuple(loaded_files)
+        self._values = result
         return result

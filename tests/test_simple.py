@@ -1525,7 +1525,7 @@ class TestAbstractParserCall:
     """Test AbstractParser.__call__ raises NotImplementedError."""
 
     def test_abstract_parser_call_raises(self):
-        from argclass._store import AbstractParser
+        from argclass.store import AbstractParser
 
         ap = AbstractParser()
         with pytest.raises(NotImplementedError):
@@ -1536,19 +1536,19 @@ class TestIsNargsProperty:
     """Test TypedArgument.is_nargs property."""
 
     def test_is_nargs_with_int_greater_than_one(self):
-        from argclass._store import TypedArgument
+        from argclass.store import TypedArgument
 
         typed_arg = TypedArgument(nargs=3)
         assert typed_arg.is_nargs is True
 
     def test_is_nargs_with_int_one(self):
-        from argclass._store import TypedArgument
+        from argclass.store import TypedArgument
 
         typed_arg = TypedArgument(nargs=1)
         assert typed_arg.is_nargs is False
 
     def test_is_nargs_with_none(self):
-        from argclass._store import TypedArgument
+        from argclass.store import TypedArgument
 
         typed_arg = TypedArgument(nargs=None)
         assert typed_arg.is_nargs is False
@@ -1559,7 +1559,7 @@ class TestConfigActionValidation:
 
     def test_config_action_invalid_type_raises(self):
         """Test ConfigAction raises when type is not MappingProxyType."""
-        from argclass._actions import ConfigAction
+        from argclass.actions import ConfigAction
 
         with pytest.raises(ValueError, match="type must be MappingProxyType"):
             ConfigAction(
@@ -1570,7 +1570,7 @@ class TestConfigActionValidation:
 
     def test_config_action_parse_file_not_implemented(self):
         """Test ConfigAction.parse_file raises NotImplementedError."""
-        from argclass._actions import ConfigAction
+        from argclass.actions import ConfigAction
         from types import MappingProxyType
         from pathlib import Path
 
@@ -1584,7 +1584,7 @@ class TestConfigActionValidation:
 
     def test_config_action_parse_logs_warning_on_error(self, tmp_path, caplog):
         """Test ConfigAction.parse logs warning on file parse error."""
-        from argclass._actions import JSONConfigAction
+        from argclass.actions import JSONConfigAction
         from types import MappingProxyType
 
         bad_json = tmp_path / "bad.json"
@@ -1608,8 +1608,8 @@ class TestTOMLUnavailable:
 
     def test_toml_config_action_raises_when_unavailable(self, tmp_path):
         """Test TOMLConfigAction raises when tomllib unavailable."""
-        import argclass._actions as actions_module
-        from argclass._actions import TOMLConfigAction
+        import argclass.actions as actions_module
+        from argclass.actions import TOMLConfigAction
         from types import MappingProxyType
 
         toml_file = tmp_path / "config.toml"
@@ -1631,8 +1631,8 @@ class TestTOMLUnavailable:
 
     def test_toml_defaults_parser_raises_when_unavailable(self, tmp_path):
         """Test TOMLDefaultsParser raises when tomllib unavailable."""
-        import argclass._defaults as defaults_module
-        from argclass._defaults import TOMLDefaultsParser
+        import argclass.defaults as defaults_module
+        from argclass.defaults import TOMLDefaultsParser
 
         toml_file = tmp_path / "config.toml"
         toml_file.write_text('[section]\nkey = "value"')
@@ -1653,7 +1653,7 @@ class TestJSONDefaultsParserStrictMode:
 
     def test_strict_raises_on_invalid_json(self, tmp_path):
         """Test JSONDefaultsParser in strict mode raises on invalid JSON."""
-        from argclass._defaults import JSONDefaultsParser
+        from argclass.defaults import JSONDefaultsParser
 
         bad_json = tmp_path / "bad.json"
         bad_json.write_text("{ invalid json }")
@@ -1664,7 +1664,7 @@ class TestJSONDefaultsParserStrictMode:
 
     def test_non_strict_ignores_invalid_json(self, tmp_path):
         """Test JSONDefaultsParser non-strict mode ignores invalid JSON."""
-        from argclass._defaults import JSONDefaultsParser
+        from argclass.defaults import JSONDefaultsParser
 
         bad_json = tmp_path / "bad.json"
         bad_json.write_text("{ invalid json }")
@@ -1675,7 +1675,7 @@ class TestJSONDefaultsParserStrictMode:
 
     def test_json_non_dict_skipped(self, tmp_path):
         """Test JSONDefaultsParser skips non-dict JSON data."""
-        from argclass._defaults import JSONDefaultsParser
+        from argclass.defaults import JSONDefaultsParser
 
         list_json = tmp_path / "list.json"
         list_json.write_text("[1, 2, 3]")
@@ -1691,7 +1691,7 @@ class TestTOMLDefaultsParserStrictMode:
 
     def test_strict_raises_on_os_error(self, tmp_path):
         """Test TOMLDefaultsParser in strict mode raises on OSError."""
-        from argclass._defaults import TOMLDefaultsParser
+        from argclass.defaults import TOMLDefaultsParser
         from pathlib import Path
 
         toml_file = tmp_path / "config.toml"
@@ -1713,7 +1713,7 @@ class TestTOMLDefaultsParserStrictMode:
 
     def test_non_strict_ignores_os_error(self, tmp_path):
         """Test TOMLDefaultsParser non-strict mode ignores OSError."""
-        from argclass._defaults import TOMLDefaultsParser
+        from argclass.defaults import TOMLDefaultsParser
         from pathlib import Path
 
         toml_file = tmp_path / "config.toml"
@@ -1734,8 +1734,8 @@ class TestTOMLDefaultsParserStrictMode:
 
     def test_toml_non_dict_skipped(self, tmp_path):
         """Test TOMLDefaultsParser skips non-dict TOML data."""
-        from argclass._defaults import TOMLDefaultsParser
-        import argclass._defaults as defaults_module
+        from argclass.defaults import TOMLDefaultsParser
+        import argclass.defaults as defaults_module
 
         toml_file = tmp_path / "config.toml"
         toml_file.write_text('[section]\nkey = "value"')
@@ -1761,7 +1761,7 @@ class TestAbstractDefaultsParserParse:
     """Test AbstractDefaultsParser.parse raises NotImplementedError."""
 
     def test_abstract_parse_raises(self):
-        from argclass._defaults import AbstractDefaultsParser
+        from argclass.defaults import AbstractDefaultsParser
 
         # Create a concrete subclass that calls super().parse()
         class TestParser(AbstractDefaultsParser):
@@ -1778,7 +1778,7 @@ class TestUnwrapOptionalComplexTypes:
 
     def test_complex_union_raises(self):
         """Test unwrap_optional raises on complex Union types."""
-        from argclass._utils import unwrap_optional
+        from argclass.utils import unwrap_optional
         from typing import Union
 
         with pytest.raises(TypeError, match="Complex types"):
@@ -1790,7 +1790,7 @@ class TestUnwrapContainerEdgeCases:
 
     def test_list_without_type_param(self):
         """Test _unwrap_container_type with bare List."""
-        from argclass._utils import _unwrap_container_type
+        from argclass.utils import _unwrap_container_type
         from typing import List
 
         result = _unwrap_container_type(List)
@@ -1798,7 +1798,7 @@ class TestUnwrapContainerEdgeCases:
 
     def test_list_with_optional_element(self):
         """Test _unwrap_container_type with List[Optional[int]]."""
-        from argclass._utils import _unwrap_container_type
+        from argclass.utils import _unwrap_container_type
         from typing import List, Optional
 
         result = _unwrap_container_type(List[Optional[int]])
@@ -1809,14 +1809,14 @@ class TestUnwrapLiteralNonLiteral:
     """Test unwrap_literal with non-Literal types."""
 
     def test_non_literal_returns_none(self):
-        from argclass._utils import unwrap_literal
+        from argclass.utils import unwrap_literal
 
         assert unwrap_literal(str) is None
         assert unwrap_literal(int) is None
 
     def test_literal_empty_args_returns_none(self):
         """Test unwrap_literal with empty args returns None."""
-        from argclass._utils import unwrap_literal
+        from argclass.utils import unwrap_literal
 
         # Create a mock Literal-like type with empty args
         class MockLiteral:
@@ -1825,8 +1825,8 @@ class TestUnwrapLiteralNonLiteral:
 
         # We need to mock get_origin and get_args
         with (
-            patch("argclass._utils.get_origin", return_value=Literal),
-            patch("argclass._utils.get_args", return_value=()),
+            patch("argclass.utils.get_origin", return_value=Literal),
+            patch("argclass.utils.get_args", return_value=()),
         ):
             result = unwrap_literal(MockLiteral)
             assert result is None
@@ -1837,7 +1837,7 @@ class TestReadConfigsUnreadablePath:
 
     def test_unreadable_path_skipped(self, tmp_path):
         """Test read_configs skips unreadable paths."""
-        from argclass._utils import read_configs
+        from argclass.utils import read_configs
 
         config_file = tmp_path / "config.ini"
         config_file.write_text("[section]\nkey=value")
@@ -1918,7 +1918,7 @@ class TestStoreRequiredArgument:
 
     def test_store_missing_required_raises(self):
         """Test Store raises on missing required argument."""
-        from argclass._store import Store
+        from argclass.store import Store
 
         class TestStore(Store):
             required_field: str
@@ -1933,7 +1933,7 @@ class TestStoreCopyMethod:
 
     def test_copy_with_overrides(self):
         """Test Store.copy creates new instance with overrides."""
-        from argclass._store import Store
+        from argclass.store import Store
 
         class TestStore(Store):
             name: str
@@ -1953,7 +1953,7 @@ class TestStoreRepr:
 
     def test_repr_format(self):
         """Test Store repr format."""
-        from argclass._store import Store
+        from argclass.store import Store
 
         class TestStore(Store):
             name: str
@@ -1972,14 +1972,14 @@ class TestArgumentBaseIsPositional:
 
     def test_positional_argument(self):
         """Test is_positional returns True for positional args."""
-        from argclass._store import TypedArgument
+        from argclass.store import TypedArgument
 
         arg = TypedArgument(aliases=["positional_name"])
         assert arg.is_positional is True
 
     def test_optional_argument(self):
         """Test is_positional returns False for flag args."""
-        from argclass._store import TypedArgument
+        from argclass.store import TypedArgument
 
         arg = TypedArgument(aliases=["--optional"])
         assert arg.is_positional is False
@@ -2098,7 +2098,7 @@ class TestTypedArgumentGetKwargs:
 
     def test_get_kwargs_converts_nargs_enum(self):
         """Test get_kwargs converts Nargs enum to value."""
-        from argclass._store import TypedArgument
+        from argclass.store import TypedArgument
         from argclass import Nargs
 
         arg = TypedArgument(nargs=Nargs.ONE_OR_MORE, type=str)
@@ -2108,7 +2108,7 @@ class TestTypedArgumentGetKwargs:
 
     def test_get_kwargs_converts_actions_enum(self):
         """Test get_kwargs converts Actions enum to value."""
-        from argclass._store import TypedArgument
+        from argclass.store import TypedArgument
         from argclass import Actions
 
         arg = TypedArgument(action=Actions.STORE_TRUE)

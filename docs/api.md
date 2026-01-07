@@ -428,6 +428,32 @@ Base class for implementing custom config file parsers.
    :show-inheritance:
 ```
 
+### ValueKind
+
+Enum specifying expected value types for config file loading.
+
+| Value | Description |
+|-------|-------------|
+| `STRING` | Default, no conversion |
+| `SEQUENCE` | Lists/tuples or any iterable container |
+| `BOOL` | Boolean values |
+
+```{eval-rst}
+.. autoclass:: argclass.ValueKind
+   :members:
+   :undoc-members:
+```
+
+### UnexpectedConfigValue
+
+Exception raised when a config value doesn't match the expected type.
+
+```{eval-rst}
+.. autoclass:: argclass.UnexpectedConfigValue
+   :members:
+   :show-inheritance:
+```
+
 ### ConfigArgument
 
 Base class for config file argument types.

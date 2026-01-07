@@ -90,6 +90,9 @@ Use `TOMLDefaultsParser`
 | **JSON** | Native arrays/objects | int, float, bool, null | `JSONDefaultsParser` |
 | **TOML** | Native arrays/tables | int, float, bool, datetime | `TOMLDefaultsParser` |
 
+All parsers validate that config values match expected types. If a value doesn't match
+(e.g., a string where a list is expected), `UnexpectedConfigValue` is raised.
+
 ### INI Complex Types
 
 All INI values are strings. For lists, use Python literal syntax:
@@ -192,17 +195,19 @@ Subclass `AbstractDefaultsParser` for other formats (e.g., YAML):
 
 ```python
 import argclass
+from typing import Any, Mapping
 
 class YAMLDefaultsParser(argclass.AbstractDefaultsParser):
-    def parse(self):
+    def parse(self) -> Mapping[str, Any]:
         import yaml
-        result = {}
+        result: dict[str, Any] = {}
         for path in self._filter_readable_paths():
             with path.open() as f:
                 data = yaml.safe_load(f)
                 if isinstance(data, dict):
                     result.update(data)
             self._loaded_files = (path,)
+        self._values = result  # Required for get_value() to work
         return result
 
 class Parser(argclass.Parser):
@@ -213,6 +218,51 @@ parser = Parser(
     config_parser_class=YAMLDefaultsParser,
 )
 ```
+
+#### Type-Aware Value Loading
+
+The `AbstractDefaultsParser` provides a `get_value()` method that handles type
+conversion and validation based on `ValueKind`:
+
+| ValueKind | Description | INI Behavior | JSON/TOML Behavior |
+|-----------|-------------|--------------|-------------------|
+| `STRING` | Default, no conversion | Return as-is | Return as-is |
+| `SEQUENCE` | Lists/tuples or any iterable | `ast.literal_eval` | Validate is list |
+| `BOOL` | Boolean values | String → bool | Validate is bool |
+
+For formats with native types (JSON, TOML, YAML), the base class validates
+that the value matches the expected kind. For string-based formats (INI),
+override `_convert()` to parse strings:
+
+```python
+import ast
+import argclass
+from typing import Any, Mapping
+
+class CustomParser(argclass.AbstractDefaultsParser):
+    def parse(self) -> Mapping[str, Any]:
+        result: dict[str, Any] = {}
+        # ... load data into result dict ...
+        self._values = result
+        return result
+
+    def _convert(
+        self, key: str, value: Any, kind: argclass.ValueKind,
+    ) -> Any:
+        """Convert string values based on expected kind."""
+        if not isinstance(value, str):
+            return value  # Already correct type
+
+        if kind == argclass.ValueKind.SEQUENCE:
+            return ast.literal_eval(value)
+        if kind == argclass.ValueKind.BOOL:
+            return value.lower() in ('true', 'yes', '1')
+
+        return value
+```
+
+If a value doesn't match the expected kind after conversion, `UnexpectedConfigValue`
+is raised automatically by the base class.
 
 ### Strict Mode
 
@@ -537,7 +587,12 @@ Path(config_path).unlink()
 
 | True values | False values |
 |-------------|--------------|
-| `true`, `yes`, `on`, `1` | `false`, `no`, `off`, `0` |
+| `true`, `yes`, `on`, `1`, `enable`, `enabled`, `t`, `y` | Any other value |
+
+:::{note}
+For INI files, boolean conversion is case-insensitive (`TRUE`, `True`, `true` all work).
+JSON and TOML use native boolean types (`true`/`false`).
+:::
 
 <!--- name: test_config_bool --->
 ```python

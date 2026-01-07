@@ -18,8 +18,8 @@ from typing import (
 
 from argparse import Action
 
-from ._store import ConfigArgument, INIConfig, TypedArgument
-from ._types import Actions, ConverterType, LogLevelEnum, Nargs, NargsType
+from .store import ConfigArgument, INIConfig, TypedArgument
+from .types import Actions, ConverterType, LogLevelEnum, Nargs, NargsType
 
 T = TypeVar("T")
 

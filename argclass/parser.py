@@ -24,12 +24,16 @@ from typing import (
     Union,
 )
 
-from ._actions import ConfigAction
-from ._defaults import AbstractDefaultsParser, INIDefaultsParser
-from ._secret import SecretString
-from ._store import AbstractGroup, AbstractParser, TypedArgument
-from ._types import Actions, Nargs
-from ._utils import (
+from .actions import ConfigAction
+from .defaults import (
+    AbstractDefaultsParser,
+    INIDefaultsParser,
+    ValueKind,
+)
+from .secret import SecretString
+from .store import AbstractGroup, AbstractParser, TypedArgument
+from .types import Actions, Nargs
+from .utils import (
     _unwrap_container_type,
     deep_getattr,
     merge_annotations,
@@ -76,7 +80,7 @@ class Meta(ABCMeta):
         attrs: Dict[str, Any],
     ) -> "Meta":
         # Import here to avoid circular import
-        from ._factory import EnumArgument
+        from .factory import EnumArgument
 
         # Create the class first to ensure annotations are available
         # Python 3.14+ (PEP 649) defers annotation evaluation, so
@@ -352,30 +356,11 @@ class Parser(AbstractParser, Base):
                 f"{kwargs.get('help', '')} (default: {argument.default})"
             ).strip()
 
-        # Parse nargs defaults from config (they come as strings)
-        # Only for nargs that produce lists: '*', '+', or int >= 1
-        # Not '?' which is optional single value
-        default = kwargs.get("default")
+        # Check if nargs produces a list
         nargs_is_list = (
             argument.nargs in (Nargs.ONE_OR_MORE, Nargs.ZERO_OR_MORE, "*", "+")
             or isinstance(argument.nargs, int) and argument.nargs >= 1
         )
-        if nargs_is_list and isinstance(default, str):
-            try:
-                parsed = ast.literal_eval(default)
-                if not isinstance(parsed, (list, tuple)):
-                    raise ValueError(
-                        f"Expected list for nargs argument, "
-                        f"got {type(parsed).__name__}"
-                    )
-                kwargs["default"] = list(
-                    map(argument.type or str, parsed),
-                )
-            except (ValueError, SyntaxError) as e:
-                raise ValueError(
-                    f"Invalid config value {default!r} for nargs argument "
-                    f"'{dest}': must be a Python list literal"
-                ) from e
 
         if argument.env_var is not None:
             default = kwargs.get("default")
@@ -444,9 +429,12 @@ class Parser(AbstractParser, Base):
         self._config_files = config_files
 
         # Parse config files using the specified parser class
-        config_parser = config_parser_class(config_files, strict=strict_config)
-        self._config = config_parser.parse()
-        filenames = config_parser.loaded_files
+        self._config_parser = config_parser_class(config_files, strict=strict_config)
+        self._config = self._config_parser.parse()
+        # Backward compatibility: ensure _values is populated for custom parsers
+        if not self._config_parser._values:
+            self._config_parser._values = dict(self._config)
+        filenames = self._config_parser.loaded_files
 
         self._epilog = kwargs.pop("epilog", "")
 
@@ -503,6 +491,24 @@ class Parser(AbstractParser, Base):
         parser, _ = self._make_parser()
         return parser
 
+    @staticmethod
+    def _get_value_kind(argument: TypedArgument) -> ValueKind:
+        """Determine ValueKind from argument for config loading."""
+        # Check for nargs that produce lists
+        if argument.nargs in (Nargs.ONE_OR_MORE, Nargs.ZERO_OR_MORE, "*", "+"):
+            return ValueKind.SEQUENCE
+        if isinstance(argument.nargs, int) and argument.nargs >= 1:
+            return ValueKind.SEQUENCE
+
+        # Check for bool actions
+        if argument.action in (
+            Actions.STORE_TRUE, Actions.STORE_FALSE,
+            "store_true", "store_false",
+        ):
+            return ValueKind.BOOL
+
+        return ValueKind.STRING
+
     def _fill_arguments(
         self,
         destinations: DestinationsType,
@@ -515,7 +521,14 @@ class Parser(AbstractParser, Base):
             if not aliases:
                 aliases.add(f"--{self.get_cli_name(name)}")
 
-            default = self._config.get(name, argument.default)
+            # Get default from config with type-aware loading
+            kind = self._get_value_kind(argument)
+            config_default = self._config_parser.get_value(name, kind)
+            default = (
+                config_default if config_default is not None
+                else argument.default
+            )
+
             argument = argument.copy(
                 aliases=aliases,
                 env_var=self.get_env_var(name, argument),
@@ -545,7 +558,6 @@ class Parser(AbstractParser, Base):
                 title=group._title,
                 description=group._description,
             )
-            config = self._config.get(group_name, {})
 
             for name, argument in group.__arguments__.items():
                 aliases = set(argument.aliases)
@@ -558,10 +570,16 @@ class Parser(AbstractParser, Base):
                 if not aliases:
                     aliases.add(f"--{self.get_cli_name(dest)}")
 
-                default = config.get(
-                    name,
-                    group._defaults.get(name, argument.default),
+                # Get default from config with type-aware loading
+                kind = self._get_value_kind(argument)
+                config_default = self._config_parser.get_value(
+                    name, kind, section=group_name,
                 )
+                default = (
+                    config_default if config_default is not None
+                    else group._defaults.get(name, argument.default)
+                )
+
                 argument = argument.copy(
                     default=default,
                     env_var=self.get_env_var(dest, argument),
@@ -693,7 +711,7 @@ class Parser(AbstractParser, Base):
         """
         Override this function if you want to equip your parser with an action.
 
-        By default this calls the current_subparser's __call__ method if
+        By default, this calls the current_subparser's __call__ method if
         there is a current_subparser, otherwise returns None.
 
         Example:

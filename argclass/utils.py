@@ -17,7 +17,7 @@ from typing import (
     get_origin,
 )
 
-from ._types import (
+from .types import (
     CONTAINER_TYPES,
     TEXT_TRUE_VALUES,
     NoneType,
