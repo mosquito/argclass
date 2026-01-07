@@ -107,7 +107,33 @@ assert app.level == "debug"
 Handle sensitive values that should be masked in logs and removed from
 environment after parsing.
 
-<!--- name: test_api_secret --->
+<!--
+    name: test_api_secret;
+    case: sanitize_secrets_on_parse
+-->
+```python
+import os
+import argclass
+
+os.environ["TEST_API_KEY"] = "secret123"
+
+class MyApp(argclass.Parser):
+    api_key: str = argclass.Secret(env_var="TEST_API_KEY")
+
+app = MyApp()
+# Use sanitize_secrets=True to auto-remove secret env vars during parsing
+app.parse_args([], sanitize_secrets=True)
+assert str(app.api_key) == "******"  # Masked in string representation
+assert app.api_key == "secret123"    # But actual value is accessible
+assert "TEST_API_KEY" not in os.environ  # Already removed
+```
+
+Alternatively, call `sanitize_env()` manually after parsing:
+
+<!--
+    name: test_api_secret;
+    case: sanitize_env_manual
+-->
 ```python
 import os
 import argclass
@@ -119,10 +145,10 @@ class MyApp(argclass.Parser):
 
 app = MyApp()
 app.parse_args([])
-assert str(app.api_key) == "******"  # Masked in string representation
-assert app.api_key == "secret123"    # But actual value is accessible
-app.sanitize_env()                   # Remove from environment
+app.sanitize_env()                   # Remove all used env vars
 assert "TEST_API_KEY" not in os.environ
+
+# Or use: app.sanitize_env(only_secrets=True) to keep non-secret env vars
 ```
 
 ```{eval-rst}

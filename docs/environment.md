@@ -196,6 +196,65 @@ assert "API_KEY" not in os.environ
 assert "DB_PASSWORD" not in os.environ
 ```
 
+### Automatic Sanitization During Parsing
+
+Use `sanitize_secrets=True` in `parse_args()` to automatically remove secret
+environment variables immediately after parsing:
+
+<!--- name: test_env_sanitize_on_parse --->
+```python
+import os
+import argclass
+
+os.environ["API_KEY"] = "secret_key"
+os.environ["APP_HOST"] = "localhost"
+
+class Parser(argclass.Parser):
+    api_key: str = argclass.Secret(env_var="API_KEY")
+    host: str = argclass.Argument(env_var="APP_HOST")
+
+parser = Parser()
+parser.parse_args([], sanitize_secrets=True)
+
+# Secret env var removed automatically
+assert "API_KEY" not in os.environ
+# Non-secret env var preserved
+assert os.environ["APP_HOST"] == "localhost"
+
+del os.environ["APP_HOST"]
+```
+
+### Selective Sanitization
+
+Use `sanitize_env(only_secrets=True)` to remove only secret environment
+variables while preserving non-secret ones:
+
+<!--- name: test_env_sanitize_only_secrets --->
+```python
+import os
+import argclass
+
+os.environ["API_KEY"] = "secret_key"
+os.environ["APP_HOST"] = "localhost"
+
+class Parser(argclass.Parser):
+    api_key: str = argclass.Secret(env_var="API_KEY")
+    host: str = argclass.Argument(env_var="APP_HOST")
+
+parser = Parser()
+parser.parse_args([])
+
+# Remove only secret env vars
+parser.sanitize_env(only_secrets=True)
+
+# Secret env var removed
+assert "API_KEY" not in os.environ
+# Non-secret env var preserved
+assert os.environ["APP_HOST"] == "localhost"
+
+del os.environ["APP_HOST"]
+```
+
 ## Boolean Environment Variables
 
 These values are recognized as `True`:

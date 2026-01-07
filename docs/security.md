@@ -6,7 +6,7 @@ data in CLI applications built with argclass.
 ## Quick Checklist
 
 - [ ] Use `argclass.Secret()` for sensitive arguments
-- [ ] Call `parser.sanitize_env()` after parsing
+- [ ] Sanitize secrets after parsing (use `parse_args(sanitize_secrets=True)` or call `parser.sanitize_env()`)
 - [ ] Use `{secret!r}` in f-strings (never `{secret}`)
 - [ ] Prefer environment variables over config files for secrets
 - [ ] If using config files for secrets, verify `chmod 600` permissions
@@ -18,9 +18,15 @@ data in CLI applications built with argclass.
 ### What `sanitize_env()` Protects Against
 
 `sanitize_env()` **only** prevents accidental secret leakage via environment
-variable inheritance to child processes. It removes secret-bearing environment
-variables from the current process after parsing, so that subprocesses spawned
-afterward do not inherit them.
+variable inheritance to child processes. It removes environment variables from
+the current process after parsing, so that subprocesses spawned afterward do not
+inherit them.
+
+There are two ways to sanitize:
+
+- `parse_args(sanitize_secrets=True)` - automatically removes only secret env vars during parsing
+- `sanitize_env()` - removes all used env vars after parsing
+- `sanitize_env(only_secrets=True)` - removes only secret env vars after parsing
 
 | Protected | Not Protected |
 |-----------|---------------|
@@ -49,6 +55,93 @@ If you need to run untrusted code, use proper isolation:
 - **Separate user accounts** with minimal privileges
 
 These are outside the scope of argclass.
+
+### Why Sanitization Is Not Enabled by Default
+
+Sanitization is explicitly opt-in (`sanitize_secrets=False` by default) because
+argclass cannot know how your application will be used:
+
+**Process lifecycle considerations:**
+
+- Your application may re-execute itself (e.g., for privilege escalation via
+  `sudo`, or restarting with different permissions)
+- Your application may `fork()` without `exec()`, expecting child processes
+  to inherit the full environment
+- Your application may be a wrapper that intentionally passes secrets to
+  child processes
+- Your application may need environment variables for later phases of execution
+
+**Principle of least surprise:**
+
+A library should not implicitly modify global process state. Removing environment
+variables is a side effect that could break legitimate use cases.
+
+For example, an application that re-executes itself with elevated privileges
+(via `sudo -E`) expects the environment to be preserved. If sanitization were
+automatic, the re-executed process would silently lose its secrets.
+
+**Explicit is better than implicit:**
+
+By requiring explicit opt-in, argclass ensures that:
+
+1. Developers consciously decide when sanitization is appropriate
+2. Code review can verify that sanitization matches the application's needs
+3. No unexpected behavior occurs in edge cases
+
+**Best practice:**
+
+Use `sanitize_secrets=True` for most applications—it removes only secret
+environment variables while preserving non-secret configuration:
+
+<!--
+    name: test_security_best_practice;
+    case: sanitize_secrets
+-->
+```python
+import os
+import argclass
+
+os.environ["SECRET_KEY"] = "secret"
+os.environ["APP_PORT"] = "8080"
+
+class Parser(argclass.Parser):
+    secret_key: str = argclass.Secret(env_var="SECRET_KEY")
+    port: int = argclass.Argument(env_var="APP_PORT")
+
+parser = Parser()
+parser.parse_args([], sanitize_secrets=True)  # Recommended for most cases
+
+assert "SECRET_KEY" not in os.environ  # Secret removed
+assert os.environ["APP_PORT"] == "8080"  # Non-secret preserved
+
+del os.environ["APP_PORT"]
+```
+
+Use `sanitize_env()` when you need to remove ALL configuration-related
+environment variables (both secrets and non-secrets):
+
+<!--
+    name: test_security_best_practice;
+    case: sanitize_env_all
+-->
+```python
+import os
+import argclass
+
+os.environ["SECRET_KEY"] = "secret"
+os.environ["APP_PORT"] = "8080"
+
+class Parser(argclass.Parser):
+    secret_key: str = argclass.Secret(env_var="SECRET_KEY")
+    port: int = argclass.Argument(env_var="APP_PORT")
+
+parser = Parser()
+parser.parse_args([])
+parser.sanitize_env()  # Removes all env vars used during parsing
+
+assert "SECRET_KEY" not in os.environ
+assert "APP_PORT" not in os.environ
+```
 
 ---
 
@@ -123,25 +216,38 @@ class Parser(argclass.Parser):
     database_url: str = argclass.Secret(env_var="DATABASE_URL")
 
 def main():
-    # Step 1: Parse arguments (reads from environment)
+    # Step 1: Parse arguments and sanitize secrets in one call
     parser = Parser()
-    parser.parse_args()
+    parser.parse_args(sanitize_secrets=True)
 
     # Step 2: Extract secrets into local variables if needed
     api_key = str(parser.api_key)
     db_url = str(parser.database_url)
 
-    # Step 3: Sanitize environment BEFORE spawning any subprocesses
-    parser.sanitize_env()
-
-    # Step 4: Use secrets in your application
+    # Step 3: Use secrets in your application
     connect_to_db(db_url)
 
-    # Step 5: Spawn trusted subprocesses (they won't inherit secrets)
+    # Step 4: Spawn trusted subprocesses (they won't inherit secrets)
     subprocess.run(["backup-tool", "--compress"])
 
 if __name__ == "__main__":
     main()
+```
+
+Alternatively, sanitize manually after parsing:
+
+```python
+def main():
+    parser = Parser()
+    parser.parse_args()
+
+    # Sanitize only secrets, keep other env vars
+    parser.sanitize_env(only_secrets=True)
+
+    # Or sanitize all used env vars
+    # parser.sanitize_env()
+
+    subprocess.run(["backup-tool", "--compress"])
 ```
 
 ## Other Secret Leakage Channels
