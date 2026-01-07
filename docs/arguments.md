@@ -93,6 +93,67 @@ assert parser.numbers == {1, 2, 3}
 assert parser.tags == frozenset(["web", "api"])
 ```
 
+### Literal Types
+
+Use `Literal[...]` to restrict an argument to specific values. This is a
+type-safe alternative to `choices` - the allowed values are defined in the
+type annotation itself, making them visible to static type checkers.
+
+<!--- name: test_args_literal_basic --->
+```python
+import argclass
+from typing import Literal
+
+class Parser(argclass.Parser):
+    mode: Literal["ro", "rw"] = "ro"
+    level: Literal[1, 2, 3] = 1
+
+parser = Parser()
+parser.parse_args(["--mode", "rw", "--level", "2"])
+
+assert parser.mode == "rw"
+assert parser.level == 2
+```
+
+Literal types work with `Optional` for arguments that may not be provided:
+
+<!--- name: test_args_literal_optional --->
+```python
+import argclass
+from typing import Literal, Optional
+
+class Parser(argclass.Parser):
+    env: Optional[Literal["dev", "staging", "prod"]]
+
+parser = Parser()
+parser.parse_args([])
+assert parser.env is None
+
+parser.parse_args(["--env", "prod"])
+assert parser.env == "prod"
+```
+
+You can also use Literal types in argument groups:
+
+<!--- name: test_args_literal_group --->
+```python
+import argclass
+from typing import Literal
+
+class StorageGroup(argclass.Group):
+    type: Literal["s3", "posix"]
+    path: str = "/data"
+
+class Parser(argclass.Parser):
+    storage = StorageGroup()
+
+parser = Parser()
+parser.parse_args(["--storage-type", "s3"])
+
+assert parser.storage.type == "s3"
+assert parser.storage.path == "/data"
+```
+
 ## Using Argument()
 
 Use `argclass.Argument()` when you need more control: short aliases like `-n`,
