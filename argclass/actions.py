@@ -12,7 +12,7 @@ try:
     import tomllib
 
     toml_load = tomllib.load
-except ImportError:
+except ImportError:  # pragma: no cover
     try:
         import tomli  # type: ignore[import-not-found]
 
@@ -20,7 +20,7 @@ except ImportError:
     except ImportError:
         toml_load = None  # type: ignore[assignment]
 
-from ._utils import read_configs
+from .utils import read_ini_configs
 
 
 class ConfigAction(Action):
@@ -89,7 +89,7 @@ class INIConfigAction(ConfigAction):
     """Action for loading INI configuration files."""
 
     def parse(self, *files: Path) -> Mapping[str, Any]:
-        result, filenames = read_configs(*files)
+        result, filenames = read_ini_configs(*files)
         return result
 
 

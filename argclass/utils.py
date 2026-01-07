@@ -17,7 +17,7 @@ from typing import (
     get_origin,
 )
 
-from ._types import (
+from .types import (
     CONTAINER_TYPES,
     TEXT_TRUE_VALUES,
     NoneType,
@@ -25,7 +25,7 @@ from ._types import (
 )
 
 
-def read_configs(
+def read_ini_configs(
     *paths: Union[str, Path],
     **kwargs: Any,
 ) -> Tuple[Mapping[str, Any], Tuple[Path, ...]]:
@@ -171,4 +171,4 @@ def unwrap_literal(typespec: Any) -> Optional[Tuple[type, Tuple[Any, ...]]]:
     # All values should have the same type for argparse choices to work
     value_type = type(args[0])
 
-    return (value_type, args)
+    return value_type, args

@@ -7,19 +7,21 @@ argument parsers declaratively using classes with type annotations.
 
 from enum import EnumMeta
 
-from ._actions import (
+from .actions import (
     ConfigAction,
     INIConfigAction,
     JSONConfigAction,
     TOMLConfigAction,
 )
-from ._defaults import (
+from .defaults import (
     AbstractDefaultsParser,
     INIDefaultsParser,
     JSONDefaultsParser,
     TOMLDefaultsParser,
+    UnexpectedConfigValue,
+    ValueKind,
 )
-from ._factory import (
+from .factory import (
     Argument,
     ArgumentSequence,
     ArgumentSingle,
@@ -28,9 +30,9 @@ from ._factory import (
     LogLevel,
     Secret,
 )
-from ._parser import Base, Destination, Group, Meta, Parser
-from ._secret import SecretString
-from ._store import (
+from .parser import Base, Destination, Group, Meta, Parser
+from .secret import SecretString
+from .store import (
     AbstractGroup,
     AbstractParser,
     ArgumentBase,
@@ -42,8 +44,11 @@ from ._store import (
     StoreMeta,
     TypedArgument,
 )
-from ._types import Actions, ConverterType, LogLevelEnum, Nargs, NargsType
-from ._utils import parse_bool, read_configs
+from .types import Actions, ConverterType, LogLevelEnum, Nargs, NargsType
+from .utils import parse_bool, read_ini_configs
+
+# Alias for backward compatibility
+read_configs = read_ini_configs
 
 # For backward compatibility
 EnumType = EnumMeta
@@ -82,6 +87,8 @@ __all__ = [
     "INIDefaultsParser",
     "JSONDefaultsParser",
     "TOMLDefaultsParser",
+    "ValueKind",
+    "UnexpectedConfigValue",
     # Factory functions
     "Argument",
     "ArgumentSingle",
@@ -91,6 +98,6 @@ __all__ = [
     "Config",
     "LogLevel",
     # Utilities
-    "read_configs",
+    "read_ini_configs",
     "parse_bool",
 ]

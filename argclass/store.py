@@ -5,14 +5,14 @@ from argparse import Action
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, Optional, Tuple, Type, Union
 
-from ._actions import (
+from .actions import (
     ConfigAction,
     INIConfigAction,
     JSONConfigAction,
     TOMLConfigAction,
 )
-from ._types import Actions, ConverterType, Nargs
-from ._utils import merge_annotations
+from .types import Actions, ConverterType, Nargs
+from .utils import merge_annotations
 
 
 class StoreMeta(type):
