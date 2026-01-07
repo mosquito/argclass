@@ -269,13 +269,13 @@ def test_print_log_level(capsys: pytest.CaptureFixture):
 
 def test_optional_type():
     class Parser(argclass.Parser):
-        flag: bool
+        flag: bool = False
         optional: Optional[bool]
 
     parser = Parser()
     parser.parse_args([])
     assert parser.optional is None
-    assert not parser.flag
+    assert parser.flag is False
 
     parser.parse_args(["--flag"])
     assert parser.flag
@@ -660,6 +660,8 @@ def test_nargs_config_list(tmp_path):
 
 
 def test_nargs_config_set(tmp_path):
+    """Config uses list syntax, converter transforms to frozenset."""
+
     class Parser(argclass.Parser):
         nargs: FrozenSet[int] = argclass.Argument(
             type=int,
@@ -672,7 +674,7 @@ def test_nargs_config_set(tmp_path):
 
     with open(conf_file, "w") as fp:
         fp.write("[DEFAULT]\n")
-        fp.write("nargs = {1, 2, 3, 4}\n")
+        fp.write("nargs = [1, 2, 3, 4]\n")
 
     parser = Parser(config_files=[conf_file])
     parser.parse_args([])
@@ -1400,3 +1402,819 @@ def test_literal_with_explicit_choices_override():
     # Original literal values should not work since choices were overridden
     with pytest.raises(SystemExit):
         parser.parse_args(["--mode", "a"])
+
+
+class TestBoolDefaultValidation:
+    """Test bool type with invalid default values."""
+
+    def test_bool_with_invalid_default_raises(self):
+        """Bool field with non-True/False default should raise TypeError."""
+        with pytest.raises(TypeError, match="Can not set default"):
+
+            class Parser(argclass.Parser):
+                flag: bool = "invalid"
+
+            Parser()
+
+    def test_optional_bool_type(self):
+        """Test Optional[bool] creates proper argument."""
+
+        class Parser(argclass.Parser):
+            flag: Optional[bool]
+
+        parser = Parser()
+        parser.parse_args(["--flag", "true"])
+        assert parser.flag is True
+
+        parser2 = Parser()
+        parser2.parse_args([])
+        assert parser2.flag is None
+
+    def test_bool_argument_with_default_true(self):
+        """Test bool with Argument() and default=True."""
+
+        class Parser(argclass.Parser):
+            feature: bool = argclass.Argument(default=True)
+
+        parser = Parser()
+        parser.parse_args([])
+        assert parser.feature is True
+
+        parser2 = Parser()
+        parser2.parse_args(["--feature"])
+        assert parser2.feature is False
+
+    def test_optional_type_with_non_none_default(self):
+        """Test Optional type with a non-None default value."""
+
+        class Parser(argclass.Parser):
+            value: Optional[str] = argclass.Argument(default="preset")
+
+        parser = Parser()
+        parser.parse_args([])
+        assert parser.value == "preset"
+
+    def test_bool_argument_invalid_default_raises(self):
+        """Test bool with Argument() and invalid default raises TypeError."""
+        with pytest.raises(TypeError, match="Invalid default"):
+
+            class Parser(argclass.Parser):
+                flag: bool = argclass.Argument(default=1)
+
+            Parser()
+
+
+class TestParserCallBehavior:
+    """Test Parser.__call__ behavior."""
+
+    def test_parser_call_returns_none_without_subparser(self):
+        class Parser(argclass.Parser):
+            name: str = "test"
+
+        parser = Parser()
+        parser.parse_args([])
+        result = parser()
+        assert result is None
+
+
+class TestContainerTypeInference:
+    """Test container type inference with Argument()."""
+
+    def test_set_argument_infers_nargs(self):
+        """Test set type with Argument() gets nargs auto-set."""
+
+        class Parser(argclass.Parser):
+            items: Set[int] = argclass.Argument()
+
+        parser = Parser()
+        parser.parse_args(["--items", "1", "2", "3"])
+        assert parser.items == {1, 2, 3}
+
+    def test_frozenset_argument_infers_converter(self):
+        """Test frozenset type with Argument() gets converter auto-set."""
+
+        class Parser(argclass.Parser):
+            tags: FrozenSet[str] = argclass.Argument()
+
+        parser = Parser()
+        parser.parse_args(["--tags", "a", "b", "c"])
+        assert parser.tags == frozenset(["a", "b", "c"])
+
+
+class TestSubparserChain:
+    """Test subparser parent chain traversal."""
+
+    def test_get_chain_with_subparsers(self):
+        class SubParser(argclass.Parser):
+            value: str = "sub"
+
+        class Parser(argclass.Parser):
+            sub = SubParser()
+
+        parser = Parser()
+        parser.parse_args(["sub"])
+
+        sub = parser.sub
+        chain = list(sub._get_chain())
+        assert len(chain) == 2
+        assert chain[0] is sub
+        assert chain[1] is parser
+
+
+class TestAbstractParserCall:
+    """Test AbstractParser.__call__ raises NotImplementedError."""
+
+    def test_abstract_parser_call_raises(self):
+        from argclass._store import AbstractParser
+
+        ap = AbstractParser()
+        with pytest.raises(NotImplementedError):
+            ap()
+
+
+class TestIsNargsProperty:
+    """Test TypedArgument.is_nargs property."""
+
+    def test_is_nargs_with_int_greater_than_one(self):
+        from argclass._store import TypedArgument
+
+        typed_arg = TypedArgument(nargs=3)
+        assert typed_arg.is_nargs is True
+
+    def test_is_nargs_with_int_one(self):
+        from argclass._store import TypedArgument
+
+        typed_arg = TypedArgument(nargs=1)
+        assert typed_arg.is_nargs is False
+
+    def test_is_nargs_with_none(self):
+        from argclass._store import TypedArgument
+
+        typed_arg = TypedArgument(nargs=None)
+        assert typed_arg.is_nargs is False
+
+
+class TestConfigActionValidation:
+    """Test ConfigAction validation and error handling."""
+
+    def test_config_action_invalid_type_raises(self):
+        """Test ConfigAction raises when type is not MappingProxyType."""
+        from argclass._actions import ConfigAction
+
+        with pytest.raises(ValueError, match="type must be MappingProxyType"):
+            ConfigAction(
+                option_strings=["--config"],
+                dest="config",
+                type="invalid",
+            )
+
+    def test_config_action_parse_file_not_implemented(self):
+        """Test ConfigAction.parse_file raises NotImplementedError."""
+        from argclass._actions import ConfigAction
+        from types import MappingProxyType
+        from pathlib import Path
+
+        action = ConfigAction(
+            option_strings=["--config"],
+            dest="config",
+            type=MappingProxyType({}),
+        )
+        with pytest.raises(NotImplementedError):
+            action.parse_file(Path("test.conf"))
+
+    def test_config_action_parse_logs_warning_on_error(self, tmp_path, caplog):
+        """Test ConfigAction.parse logs warning on file parse error."""
+        from argclass._actions import JSONConfigAction
+        from types import MappingProxyType
+
+        bad_json = tmp_path / "bad.json"
+        bad_json.write_text("{ invalid json }")
+
+        action = JSONConfigAction(
+            option_strings=["--config"],
+            dest="config",
+            type=MappingProxyType({}),
+        )
+
+        with caplog.at_level(logging.WARNING):
+            result = action.parse(bad_json)
+
+        assert result == {}
+        assert "Failed to parse config file" in caplog.text
+
+
+class TestTOMLUnavailable:
+    """Test behavior when TOML support is unavailable."""
+
+    def test_toml_config_action_raises_when_unavailable(self, tmp_path):
+        """Test TOMLConfigAction raises when tomllib unavailable."""
+        import argclass._actions as actions_module
+        from argclass._actions import TOMLConfigAction
+        from types import MappingProxyType
+
+        toml_file = tmp_path / "config.toml"
+        toml_file.write_text('[section]\nkey = "value"')
+
+        original = actions_module.toml_load
+        actions_module.toml_load = None
+
+        try:
+            action = TOMLConfigAction(
+                option_strings=["--config"],
+                dest="config",
+                type=MappingProxyType({}),
+            )
+            with pytest.raises(RuntimeError, match="TOML support requires"):
+                action.parse_file(toml_file)
+        finally:
+            actions_module.toml_load = original
+
+    def test_toml_defaults_parser_raises_when_unavailable(self, tmp_path):
+        """Test TOMLDefaultsParser raises when tomllib unavailable."""
+        import argclass._defaults as defaults_module
+        from argclass._defaults import TOMLDefaultsParser
+
+        toml_file = tmp_path / "config.toml"
+        toml_file.write_text('[section]\nkey = "value"')
+
+        original = defaults_module.toml_load
+        defaults_module.toml_load = None
+
+        try:
+            parser = TOMLDefaultsParser([toml_file])
+            with pytest.raises(RuntimeError, match="TOML support requires"):
+                parser.parse()
+        finally:
+            defaults_module.toml_load = original
+
+
+class TestJSONDefaultsParserStrictMode:
+    """Test JSONDefaultsParser strict mode behavior."""
+
+    def test_strict_raises_on_invalid_json(self, tmp_path):
+        """Test JSONDefaultsParser in strict mode raises on invalid JSON."""
+        from argclass._defaults import JSONDefaultsParser
+
+        bad_json = tmp_path / "bad.json"
+        bad_json.write_text("{ invalid json }")
+
+        parser = JSONDefaultsParser([bad_json], strict=True)
+        with pytest.raises(json.JSONDecodeError):
+            parser.parse()
+
+    def test_non_strict_ignores_invalid_json(self, tmp_path):
+        """Test JSONDefaultsParser non-strict mode ignores invalid JSON."""
+        from argclass._defaults import JSONDefaultsParser
+
+        bad_json = tmp_path / "bad.json"
+        bad_json.write_text("{ invalid json }")
+
+        parser = JSONDefaultsParser([bad_json], strict=False)
+        result = parser.parse()
+        assert result == {}
+
+    def test_json_non_dict_skipped(self, tmp_path):
+        """Test JSONDefaultsParser skips non-dict JSON data."""
+        from argclass._defaults import JSONDefaultsParser
+
+        list_json = tmp_path / "list.json"
+        list_json.write_text("[1, 2, 3]")
+
+        parser = JSONDefaultsParser([list_json])
+        result = parser.parse()
+        assert result == {}
+        assert parser.loaded_files == ()
+
+
+class TestTOMLDefaultsParserStrictMode:
+    """Test TOMLDefaultsParser strict mode behavior."""
+
+    def test_strict_raises_on_os_error(self, tmp_path):
+        """Test TOMLDefaultsParser in strict mode raises on OSError."""
+        from argclass._defaults import TOMLDefaultsParser
+        from pathlib import Path
+
+        toml_file = tmp_path / "config.toml"
+        toml_file.write_text('[section]\nkey = "value"')
+
+        parser = TOMLDefaultsParser([toml_file], strict=True)
+
+        # Mock Path.open to raise OSError
+        original_open = Path.open
+
+        def mock_open(self, *args, **kwargs):
+            if str(self).endswith(".toml"):
+                raise OSError("mocked error")
+            return original_open(self, *args, **kwargs)
+
+        with patch.object(Path, "open", mock_open):
+            with pytest.raises(OSError):
+                parser.parse()
+
+    def test_non_strict_ignores_os_error(self, tmp_path):
+        """Test TOMLDefaultsParser non-strict mode ignores OSError."""
+        from argclass._defaults import TOMLDefaultsParser
+        from pathlib import Path
+
+        toml_file = tmp_path / "config.toml"
+        toml_file.write_text('[section]\nkey = "value"')
+
+        parser = TOMLDefaultsParser([toml_file], strict=False)
+
+        original_open = Path.open
+
+        def mock_open(self, *args, **kwargs):
+            if str(self).endswith(".toml"):
+                raise OSError("mocked error")
+            return original_open(self, *args, **kwargs)
+
+        with patch.object(Path, "open", mock_open):
+            result = parser.parse()
+            assert result == {}
+
+    def test_toml_non_dict_skipped(self, tmp_path):
+        """Test TOMLDefaultsParser skips non-dict TOML data."""
+        from argclass._defaults import TOMLDefaultsParser
+        import argclass._defaults as defaults_module
+
+        toml_file = tmp_path / "config.toml"
+        toml_file.write_text('[section]\nkey = "value"')
+
+        parser = TOMLDefaultsParser([toml_file])
+
+        # Mock toml_load to return a non-dict
+        original_load = defaults_module.toml_load
+
+        def mock_load(fp):
+            return ["not", "a", "dict"]
+
+        defaults_module.toml_load = mock_load
+        try:
+            result = parser.parse()
+            assert result == {}
+            assert parser.loaded_files == ()
+        finally:
+            defaults_module.toml_load = original_load
+
+
+class TestAbstractDefaultsParserParse:
+    """Test AbstractDefaultsParser.parse raises NotImplementedError."""
+
+    def test_abstract_parse_raises(self):
+        from argclass._defaults import AbstractDefaultsParser
+
+        # Create a concrete subclass that calls super().parse()
+        class TestParser(AbstractDefaultsParser):
+            def parse(self):
+                return super().parse()
+
+        parser = TestParser([])
+        with pytest.raises(NotImplementedError):
+            parser.parse()
+
+
+class TestUnwrapOptionalComplexTypes:
+    """Test unwrap_optional with complex Union types."""
+
+    def test_complex_union_raises(self):
+        """Test unwrap_optional raises on complex Union types."""
+        from argclass._utils import unwrap_optional
+        from typing import Union
+
+        with pytest.raises(TypeError, match="Complex types"):
+            unwrap_optional(Union[str, int, None])
+
+
+class TestUnwrapContainerEdgeCases:
+    """Test _unwrap_container_type edge cases."""
+
+    def test_list_without_type_param(self):
+        """Test _unwrap_container_type with bare List."""
+        from argclass._utils import _unwrap_container_type
+        from typing import List
+
+        result = _unwrap_container_type(List)
+        assert result == (list, str)
+
+    def test_list_with_optional_element(self):
+        """Test _unwrap_container_type with List[Optional[int]]."""
+        from argclass._utils import _unwrap_container_type
+        from typing import List, Optional
+
+        result = _unwrap_container_type(List[Optional[int]])
+        assert result == (list, int)
+
+
+class TestUnwrapLiteralNonLiteral:
+    """Test unwrap_literal with non-Literal types."""
+
+    def test_non_literal_returns_none(self):
+        from argclass._utils import unwrap_literal
+
+        assert unwrap_literal(str) is None
+        assert unwrap_literal(int) is None
+
+    def test_literal_empty_args_returns_none(self):
+        """Test unwrap_literal with empty args returns None."""
+        from argclass._utils import unwrap_literal
+
+        # Create a mock Literal-like type with empty args
+        class MockLiteral:
+            __origin__ = Literal
+            __args__ = ()
+
+        # We need to mock get_origin and get_args
+        with (
+            patch("argclass._utils.get_origin", return_value=Literal),
+            patch("argclass._utils.get_args", return_value=()),
+        ):
+            result = unwrap_literal(MockLiteral)
+            assert result is None
+
+
+class TestReadConfigsUnreadablePath:
+    """Test read_configs with unreadable paths."""
+
+    def test_unreadable_path_skipped(self, tmp_path):
+        """Test read_configs skips unreadable paths."""
+        from argclass._utils import read_configs
+
+        config_file = tmp_path / "config.ini"
+        config_file.write_text("[section]\nkey=value")
+
+        os.chmod(config_file, 0o000)
+
+        try:
+            result, paths = read_configs(config_file)
+            assert result == {}
+            assert paths == ()
+        finally:
+            os.chmod(config_file, 0o644)
+
+
+class TestMainModule:
+    """Test __main__.py module."""
+
+    def test_main_function_exists(self):
+        """Test that main function can be imported."""
+        from argclass.__main__ import main, Parser, GreetCommand
+
+        assert callable(main)
+        assert issubclass(Parser, argclass.Parser)
+        assert issubclass(GreetCommand, argclass.Parser)
+
+    def test_greet_command(self, capsys):
+        """Test GreetCommand __call__ method."""
+        from argclass.__main__ import GreetCommand
+
+        cmd = GreetCommand()
+        cmd.parse_args(["World"])
+
+        result = cmd()
+        assert result == 0
+
+        captured = capsys.readouterr()
+        assert "Hello, World!" in captured.out
+
+    def test_main_with_help(self):
+        """Test main module with --help exits."""
+        from argclass.__main__ import Parser
+
+        parser = Parser(prog="test-argclass")
+
+        with pytest.raises(SystemExit) as exc_info:
+            parser.parse_args(["--help"])
+
+        assert exc_info.value.code == 0
+
+    def test_main_function_runs(self, monkeypatch):
+        """Test main() function runs and calls exit."""
+        from argclass import __main__
+        import sys
+
+        # Mock sys.argv with greet subcommand
+        monkeypatch.setattr(sys, "argv", ["argclass", "greet", "Test"])
+
+        with pytest.raises(SystemExit) as exc_info:
+            __main__.main()
+
+        assert exc_info.value.code == 0
+
+    def test_main_module_name_main(self, monkeypatch):
+        """Test if __name__ == '__main__' block."""
+        import sys
+        import runpy
+
+        monkeypatch.setattr(sys, "argv", ["argclass", "--help"])
+
+        with pytest.raises(SystemExit) as exc_info:
+            runpy.run_module("argclass", run_name="__main__")
+
+        assert exc_info.value.code == 0
+
+
+class TestStoreRequiredArgument:
+    """Test Store required argument validation."""
+
+    def test_store_missing_required_raises(self):
+        """Test Store raises on missing required argument."""
+        from argclass._store import Store
+
+        class TestStore(Store):
+            required_field: str
+
+        match = "required argument.*must be passed"
+        with pytest.raises(TypeError, match=match):
+            TestStore()
+
+
+class TestStoreCopyMethod:
+    """Test Store.copy method."""
+
+    def test_copy_with_overrides(self):
+        """Test Store.copy creates new instance with overrides."""
+        from argclass._store import Store
+
+        class TestStore(Store):
+            name: str
+            value: int = 10
+
+        original = TestStore(name="test")
+        copied = original.copy(name="new", value=20)
+
+        assert copied.name == "new"
+        assert copied.value == 20
+        assert original.name == "test"
+        assert original.value == 10
+
+
+class TestStoreRepr:
+    """Test Store.__repr__ method."""
+
+    def test_repr_format(self):
+        """Test Store repr format."""
+        from argclass._store import Store
+
+        class TestStore(Store):
+            name: str
+            count: int = 5
+
+        store = TestStore(name="test")
+        repr_str = repr(store)
+
+        assert "TestStore" in repr_str
+        assert "name='test'" in repr_str
+        assert "count=5" in repr_str
+
+
+class TestArgumentBaseIsPositional:
+    """Test ArgumentBase.is_positional property."""
+
+    def test_positional_argument(self):
+        """Test is_positional returns True for positional args."""
+        from argclass._store import TypedArgument
+
+        arg = TypedArgument(aliases=["positional_name"])
+        assert arg.is_positional is True
+
+    def test_optional_argument(self):
+        """Test is_positional returns False for flag args."""
+        from argclass._store import TypedArgument
+
+        arg = TypedArgument(aliases=["--optional"])
+        assert arg.is_positional is False
+
+
+class TestParserConfigFilesEpilog:
+    """Test Parser epilog generation with config files."""
+
+    def test_config_files_adds_epilog(self, tmp_path):
+        """Test that config_files adds epilog to help."""
+        config_file = tmp_path / "config.ini"
+        config_file.write_text("[DEFAULT]\nname=test")
+
+        class Parser(argclass.Parser):
+            name: str = "default"
+
+        parser = Parser(config_files=[config_file])
+
+        assert "Default values will based on" in parser._epilog
+        assert "configuration files" in parser._epilog
+
+
+class TestParserPrintHelp:
+    """Test Parser.print_help method."""
+
+    def test_print_help(self, capsys):
+        """Test print_help outputs help text."""
+
+        class Parser(argclass.Parser):
+            name: str = "test"
+
+        parser = Parser()
+        parser.print_help()
+
+        captured = capsys.readouterr()
+        assert "--name" in captured.out
+
+
+class TestParserSanitizeEnvOnlySecrets:
+    """Test sanitize_env with only_secrets parameter."""
+
+    def test_sanitize_env_only_secrets(self, monkeypatch):
+        """Test sanitize_env only removes secret env vars."""
+        monkeypatch.setenv("TEST_SECRET", "secret_value")
+        monkeypatch.setenv("TEST_NORMAL", "normal_value")
+
+        class Parser(argclass.Parser):
+            secret: str = argclass.Secret(env_var="TEST_SECRET")
+            normal: str = argclass.Argument(env_var="TEST_NORMAL")
+
+        parser = Parser()
+        parser.parse_args([])
+
+        assert os.environ.get("TEST_SECRET") == "secret_value"
+        assert os.environ.get("TEST_NORMAL") == "normal_value"
+
+        parser.sanitize_env(only_secrets=True)
+
+        assert os.environ.get("TEST_SECRET") is None
+        assert os.environ.get("TEST_NORMAL") == "normal_value"
+
+
+class TestParserSanitizeSecretsOnParse:
+    """Test parse_args with sanitize_secrets parameter."""
+
+    def test_parse_args_sanitize_secrets(self, monkeypatch):
+        """Test parse_args with sanitize_secrets removes secret env vars."""
+        monkeypatch.setenv("TEST_SECRET2", "secret_value")
+
+        class Parser(argclass.Parser):
+            secret: str = argclass.Secret(env_var="TEST_SECRET2")
+
+        parser = Parser()
+        parser.parse_args([], sanitize_secrets=True)
+
+        assert os.environ.get("TEST_SECRET2") is None
+
+
+class TestGroupWithDefaults:
+    """Test Group with defaults parameter."""
+
+    def test_group_defaults(self):
+        """Test Group respects defaults parameter."""
+
+        class MyGroup(argclass.Group):
+            host: str
+            port: int
+
+        class Parser(argclass.Parser):
+            server = MyGroup(defaults={"host": "localhost", "port": 8080})
+
+        parser = Parser()
+        parser.parse_args([])
+
+        assert parser.server.host == "localhost"
+        assert parser.server.port == 8080
+
+
+class TestBaseUnparsedAttribute:
+    """Test Base.__getattribute__ for unparsed attributes."""
+
+    def test_unparsed_attribute_raises(self):
+        """Test accessing unparsed required attribute raises."""
+
+        class Parser(argclass.Parser):
+            required_arg: str
+
+        parser = Parser()
+
+        with pytest.raises(AttributeError, match="was not parsed"):
+            _ = parser.required_arg
+
+
+class TestTypedArgumentGetKwargs:
+    """Test TypedArgument.get_kwargs method."""
+
+    def test_get_kwargs_converts_nargs_enum(self):
+        """Test get_kwargs converts Nargs enum to value."""
+        from argclass._store import TypedArgument
+        from argclass import Nargs
+
+        arg = TypedArgument(nargs=Nargs.ONE_OR_MORE, type=str)
+        kwargs = arg.get_kwargs()
+
+        assert kwargs["nargs"] == "+"
+
+    def test_get_kwargs_converts_actions_enum(self):
+        """Test get_kwargs converts Actions enum to value."""
+        from argclass._store import TypedArgument
+        from argclass import Actions
+
+        arg = TypedArgument(action=Actions.STORE_TRUE)
+        kwargs = arg.get_kwargs()
+
+        assert kwargs["action"] == "store_true"
+        assert "type" not in kwargs
+
+
+class TestConfigNargsDefaults:
+    """Test config file defaults for nargs arguments (list, set, etc.)."""
+
+    def test_config_list_literal_syntax(self, tmp_path):
+        """Config with Python list literal should be parsed."""
+        config = tmp_path / "config.ini"
+        config.write_text('[DEFAULT]\nnames = ["alice", "bob"]\n')
+
+        class Parser(argclass.Parser):
+            names: list[str] = []
+
+        parser = Parser(config_files=[config])
+        parser.parse_args([])
+
+        assert parser.names == ["alice", "bob"]
+
+    def test_config_list_int_literal(self, tmp_path):
+        """Config with Python list literal of ints should be parsed."""
+        config = tmp_path / "config.ini"
+        config.write_text("[DEFAULT]\nnumbers = [1, 2, 3]\n")
+
+        class Parser(argclass.Parser):
+            numbers: list[int] = []
+
+        parser = Parser(config_files=[config])
+        parser.parse_args([])
+
+        assert parser.numbers == [1, 2, 3]
+
+    def test_config_set_literal_syntax(self, tmp_path):
+        """Config with Python set literal should be parsed."""
+        config = tmp_path / "config.ini"
+        config.write_text('[DEFAULT]\ntags = ["web", "api"]\n')
+
+        class Parser(argclass.Parser):
+            tags: set[str] = set()
+
+        parser = Parser(config_files=[config])
+        parser.parse_args([])
+
+        assert parser.tags == {"web", "api"}
+
+    def test_config_string_for_list_fails(self, tmp_path):
+        """Config plain string for list type should fail, not split chars."""
+        config = tmp_path / "config.ini"
+        config.write_text("[DEFAULT]\nnames = alice\n")
+
+        class Parser(argclass.Parser):
+            names: list[str] = []
+
+        parser = Parser(config_files=[config])
+
+        with pytest.raises((ValueError, SystemExit)):
+            parser.parse_args([])
+
+    def test_config_string_for_set_fails(self, tmp_path):
+        """Config plain string for set type should fail, not split chars."""
+        config = tmp_path / "config.ini"
+        config.write_text("[DEFAULT]\ntags = web\n")
+
+        class Parser(argclass.Parser):
+            tags: set[str] = set()
+
+        parser = Parser(config_files=[config])
+
+        with pytest.raises((ValueError, SystemExit)):
+            parser.parse_args([])
+
+
+class TestRequiredBool:
+    """Test required bool field behavior."""
+
+    def test_bool_without_default_raises_error(self):
+        """Bool field without default should raise TypeError."""
+        with pytest.raises(TypeError, match="must have an explicit default"):
+
+            class Parser(argclass.Parser):
+                flag: bool
+
+    def test_bool_with_explicit_false_default_works(self):
+        """Bool field with explicit False default should work without args."""
+
+        class Parser(argclass.Parser):
+            flag: bool = False
+
+        parser = Parser()
+        parser.parse_args([])
+
+        assert parser.flag is False
+
+    def test_bool_with_explicit_true_default_works(self):
+        """Bool field with explicit True default should work without args."""
+
+        class Parser(argclass.Parser):
+            flag: bool = True
+
+        parser = Parser()
+        parser.parse_args([])
+
+        assert parser.flag is True

@@ -12,7 +12,7 @@ try:
     import tomllib
 
     toml_load = tomllib.load
-except ImportError:
+except ImportError:  # pragma: no cover
     try:
         import tomli  # type: ignore[import-not-found]
 

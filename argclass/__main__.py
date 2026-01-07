@@ -18,6 +18,10 @@ class Parser(argclass.Parser):
     secret_key: str = argclass.Secret(help="Secret API key")
     greet = GreetCommand()
 
+    def __call__(self) -> int:
+        self.print_help()
+        return 0
+
 
 def main() -> None:
     parser = Parser(

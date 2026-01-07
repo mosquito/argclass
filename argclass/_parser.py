@@ -54,7 +54,7 @@ def _make_action_true_argument(
             kw["default"] = True
         else:
             raise TypeError(f"Can not set default {default!r} for bool")
-    elif kind == Optional[bool]:
+    else:  # kind == Optional[bool], only other case from _type_is_bool
         kw["action"] = Actions.STORE
         kw["type"] = parse_bool
         kw["default"] = None
@@ -100,8 +100,6 @@ class Meta(ABCMeta):
                 argument = deep_getattr(key, attrs, *bases)
             except KeyError:
                 argument = None
-                if kind is bool:
-                    argument = False
 
             if not isinstance(
                 argument,
@@ -115,10 +113,31 @@ class Meta(ABCMeta):
                 if isinstance(kind, EnumMeta):
                     argument = EnumArgument(kind, default=argument)
                 elif _type_is_bool(kind):
-                    # For inherited bools, Ellipsis means use default False
-                    if argument is Ellipsis:
-                        argument = False
-                    argument = _make_action_true_argument(kind, argument)
+                    # Plain bool fields must have explicit default (True/False)
+                    # because store_true/store_false can't be "required".
+                    # Optional[bool] is allowed without default (tri-state).
+                    # For inherited fields, reuse the existing TypedArgument.
+                    inherited_arg = None
+                    for b in bases:
+                        base_args = getattr(b, "__arguments__", {})
+                        if key in base_args:
+                            inherited_arg = base_args[key]
+                            break
+
+                    if inherited_arg is not None:
+                        argument = inherited_arg
+                    elif (
+                        kind is bool
+                        and (argument is None or argument is Ellipsis)
+                    ):
+                        raise TypeError(
+                            f"Bool field '{key}' must have an explicit default "
+                            f"(True or False). Use 'flag: bool = False' or "
+                            f"'flag: bool = True', or Optional[bool] for "
+                            f"tri-state."
+                        )
+                    else:
+                        argument = _make_action_true_argument(kind, argument)
                 else:
                     optional_type = unwrap_optional(kind)
                     if optional_type is not None:
@@ -186,6 +205,10 @@ class Meta(ABCMeta):
                                 action=Actions.STORE_FALSE,
                                 default=True,
                                 type=None,
+                            )
+                        else:
+                            raise TypeError(
+                                f"Invalid default {default!r} for bool"
                             )
                     # Handle Literal types
                     elif (lit_info := unwrap_literal(kind)) is not None:
@@ -329,11 +352,41 @@ class Parser(AbstractParser, Base):
                 f"{kwargs.get('help', '')} (default: {argument.default})"
             ).strip()
 
+        # Parse nargs defaults from config (they come as strings)
+        # Only for nargs that produce lists: '*', '+', or int >= 1
+        # Not '?' which is optional single value
+        default = kwargs.get("default")
+        nargs_is_list = (
+            argument.nargs in (Nargs.ONE_OR_MORE, Nargs.ZERO_OR_MORE, "*", "+")
+            or isinstance(argument.nargs, int) and argument.nargs >= 1
+        )
+        if nargs_is_list and isinstance(default, str):
+            try:
+                parsed = ast.literal_eval(default)
+                if not isinstance(parsed, (list, tuple)):
+                    raise ValueError(
+                        f"Expected list for nargs argument, "
+                        f"got {type(parsed).__name__}"
+                    )
+                kwargs["default"] = list(
+                    map(argument.type or str, parsed),
+                )
+            except (ValueError, SyntaxError) as e:
+                raise ValueError(
+                    f"Invalid config value {default!r} for nargs argument "
+                    f"'{dest}': must be a Python list literal"
+                ) from e
+
         if argument.env_var is not None:
             default = kwargs.get("default")
             kwargs["default"] = os.getenv(argument.env_var, default)
 
-            if kwargs["default"] and argument.is_nargs:
+            # Parse env var string for nargs (only if still a string)
+            if (
+                isinstance(kwargs["default"], str)
+                and kwargs["default"]
+                and nargs_is_list
+            ):
                 kwargs["default"] = list(
                     map(
                         argument.type or str,

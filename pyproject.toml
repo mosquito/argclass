@@ -90,6 +90,19 @@ include = ["argclass"]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.coverage.run]
+branch = true
+source = ["argclass"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "@overload",
+    "raise NotImplementedError",
+]
+show_missing = true
+
 [tool.mypy]
 check_untyped_defs = true
 disallow_any_generics = false
