@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import (
     Any,
     Dict,
+    Literal,
     Mapping,
     Optional,
     Tuple,
@@ -148,3 +149,26 @@ def _unwrap_container_type(typespec: Any) -> Optional[Tuple[type, type]]:
         element_type = optional_inner
 
     return (origin, element_type)  # type: ignore
+
+
+def unwrap_literal(typespec: Any) -> Optional[Tuple[type, Tuple[Any, ...]]]:
+    """
+    Unwrap Literal[value1, value2, ...] and return (value_type, choices).
+
+    For Literal["a", "b", "c"], returns (str, ("a", "b", "c")).
+    For Literal[1, 2, 3], returns (int, (1, 2, 3)).
+    Returns None if not a Literal type.
+    """
+    origin = get_origin(typespec)
+    if origin is not Literal:
+        return None
+
+    args = get_args(typespec)
+    if not args:
+        return None
+
+    # Determine the common type of all literal values
+    # All values should have the same type for argparse choices to work
+    value_type = type(args[0])
+
+    return (value_type, args)

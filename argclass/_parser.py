@@ -34,6 +34,7 @@ from ._utils import (
     deep_getattr,
     merge_annotations,
     parse_bool,
+    unwrap_literal,
     unwrap_optional,
 )
 
@@ -124,10 +125,19 @@ class Meta(ABCMeta):
                         is_required = False
                         kind = optional_type
 
+                    # Handle Literal types like Literal["a", "b", "c"]
+                    literal_info = unwrap_literal(kind)
+                    if literal_info is not None:
+                        value_type, choices = literal_info
+                        argument = TypedArgument(
+                            type=value_type,
+                            choices=choices,
+                            default=argument,
+                            required=is_required,
+                        )
                     # Handle container types like list[str], List[int], etc.
-                    container_info = _unwrap_container_type(kind)
-                    if container_info is not None:
-                        container_type, element_type = container_info
+                    elif (ctr_info := _unwrap_container_type(kind)) is not None:
+                        container_type, element_type = ctr_info
                         # Use nargs="+" for required, "*" for optional
                         if is_required:
                             nargs: Union[str, Nargs] = Nargs.ONE_OR_MORE
@@ -177,6 +187,12 @@ class Meta(ABCMeta):
                                 default=True,
                                 type=None,
                             )
+                    # Handle Literal types
+                    elif (lit_info := unwrap_literal(kind)) is not None:
+                        value_type, choices = lit_info
+                        argument.type = value_type
+                        if argument.choices is None:
+                            argument.choices = choices
                     # Then check for container types
                     elif (
                         container_info := _unwrap_container_type(kind)

@@ -4,7 +4,7 @@ import os
 import re
 import uuid
 from enum import IntEnum
-from typing import FrozenSet, List, Optional, Set, Tuple
+from typing import FrozenSet, List, Literal, Optional, Set, Tuple
 from unittest.mock import patch
 
 import pytest
@@ -1225,3 +1225,127 @@ def test_set_int_with_single_converter_function():
 
     assert isinstance(parser.numbers, set)
     assert parser.numbers == {1, 2, 3}
+
+
+# ============================================================================
+# Literal Type Tests
+# ============================================================================
+
+
+def test_literal_str():
+    """Test Literal["a", "b", "c"] with string choices."""
+
+    class Parser(argclass.Parser):
+        mode: Literal["debug", "release", "test"]
+
+    parser = Parser()
+    parser.parse_args(["--mode", "debug"])
+    assert parser.mode == "debug"
+
+    parser.parse_args(["--mode", "release"])
+    assert parser.mode == "release"
+
+    parser.parse_args(["--mode", "test"])
+    assert parser.mode == "test"
+
+
+def test_literal_str_invalid_choice():
+    """Test that invalid choice raises error."""
+
+    class Parser(argclass.Parser):
+        mode: Literal["debug", "release"]
+
+    parser = Parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--mode", "invalid"])
+
+
+def test_literal_int():
+    """Test Literal[1, 2, 3] with int choices."""
+
+    class Parser(argclass.Parser):
+        level: Literal[1, 2, 3]
+
+    parser = Parser()
+    parser.parse_args(["--level", "1"])
+    assert parser.level == 1
+
+    parser.parse_args(["--level", "2"])
+    assert parser.level == 2
+
+
+def test_literal_with_default():
+    """Test Literal type with default value."""
+
+    class Parser(argclass.Parser):
+        mode: Literal["debug", "release"] = "debug"
+
+    parser = Parser()
+    parser.parse_args([])
+    assert parser.mode == "debug"
+
+    parser.parse_args(["--mode", "release"])
+    assert parser.mode == "release"
+
+
+def test_literal_optional():
+    """Test Optional[Literal[...]] - should be optional."""
+
+    class Parser(argclass.Parser):
+        mode: Optional[Literal["a", "b", "c"]]
+
+    parser = Parser()
+    parser.parse_args([])
+    assert parser.mode is None
+
+    parser.parse_args(["--mode", "a"])
+    assert parser.mode == "a"
+
+
+def test_literal_in_group():
+    """Test Literal type in argument group."""
+
+    class StorageGroup(argclass.Group):
+        type: Literal["s3", "posix"]
+        path: str = "/data"
+
+    class Parser(argclass.Parser):
+        storage = StorageGroup()
+
+    parser = Parser()
+    parser.parse_args(["--storage-type", "s3"])
+    assert parser.storage.type == "s3"
+
+    parser.parse_args(["--storage-type", "posix"])
+    assert parser.storage.type == "posix"
+
+
+def test_literal_with_explicit_argument():
+    """Test Literal type with explicit Argument."""
+
+    class Parser(argclass.Parser):
+        env: Literal["dev", "staging", "prod"] = argclass.Argument(
+            help="Deployment environment",
+        )
+
+    parser = Parser()
+    parser.parse_args(["--env", "prod"])
+    assert parser.env == "prod"
+
+
+def test_literal_with_explicit_choices_override():
+    """Test that explicit choices in Argument are preserved."""
+
+    class Parser(argclass.Parser):
+        # Explicit choices should not be overridden by Literal
+        mode: Literal["a", "b"] = argclass.Argument(
+            choices=("x", "y", "z"),
+        )
+
+    parser = Parser()
+    parser.parse_args(["--mode", "x"])
+    assert parser.mode == "x"
+
+    # Original literal values should not work since choices were overridden
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--mode", "a"])
