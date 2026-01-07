@@ -45,7 +45,7 @@ $ python server.py --host 0.0.0.0 --port 9000 --debug
 | Config files | Built-in | No | No |
 | Environment variables | Built-in | No | Plugin |
 | Secret masking | Built-in | No | No |
-| Dependencies | None | stdlib | Many |
+| Dependencies | stdlib | stdlib | Many |
 
 ## Examples
 
