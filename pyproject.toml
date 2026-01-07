@@ -1,6 +1,6 @@
 [project]
 name = "argclass"
-version = "1.4.2"
+version = "1.4.3"
 description = "Declarative CLI parser with type hints, config files, and environment variables - zero dependencies"
 authors = [{ name = "Dmitry Orlov", email = "me@mosquito.su" }]
 keywords = [

@@ -3,7 +3,7 @@
 import ast
 import os
 from abc import ABCMeta
-from argparse import Action, ArgumentParser
+from argparse import Action, ArgumentError, ArgumentParser
 from collections import defaultdict
 from enum import EnumMeta
 from pathlib import Path
@@ -602,7 +602,11 @@ class Parser(AbstractParser, Base):
                     if argument.converter is not None:
                         if argument.nargs and parsed_value is None:
                             parsed_value = []
-                        parsed_value = argument.converter(parsed_value)
+                        try:
+                            parsed_value = argument.converter(parsed_value)
+                        except Exception as e:
+                            msg = f"failed to convert {parsed_value!r}: {e}"
+                            raise ArgumentError(action, msg) from e
 
                 # Ensure current_subparsers is always a tuple, not None
                 if name == "current_subparsers" and parsed_value is None:

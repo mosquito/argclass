@@ -1,5 +1,6 @@
 """Factory functions for creating arguments."""
 
+from enum import Enum
 from pathlib import Path
 from typing import (
     Any,
@@ -318,11 +319,48 @@ def Argument(
     )
 
 
+E = TypeVar("E", bound=Enum)
+
+
+# Overload: with default value -> returns EnumType
+@overload
 def EnumArgument(
-    enum_class: Type,
+    enum_class: Type[E],
+    *aliases: str,
+    default: E,
+    action: Union[Actions, Type[Action]] = ...,
+    env_var: Optional[str] = ...,
+    help: Optional[str] = ...,
+    metavar: Optional[str] = ...,
+    nargs: NargsType = ...,
+    required: Optional[bool] = ...,
+    use_value: bool = ...,
+    lowercase: bool = ...,
+) -> E: ...
+
+
+# Overload: without default value -> returns Optional[EnumType]
+@overload
+def EnumArgument(
+    enum_class: Type[E],
+    *aliases: str,
+    action: Union[Actions, Type[Action]] = ...,
+    default: None = ...,
+    env_var: Optional[str] = ...,
+    help: Optional[str] = ...,
+    metavar: Optional[str] = ...,
+    nargs: NargsType = ...,
+    required: Optional[bool] = ...,
+    use_value: bool = ...,
+    lowercase: bool = ...,
+) -> Optional[E]: ...
+
+
+def EnumArgument(
+    enum_class: Type[E],
     *aliases: str,
     action: Union[Actions, Type[Action]] = Actions.default(),
-    default: Optional[Any] = None,
+    default: Optional[E] = None,
     env_var: Optional[str] = None,
     help: Optional[str] = None,
     metavar: Optional[str] = None,
@@ -355,7 +393,13 @@ def EnumArgument(
     else:
         choices = tuple(e.name for e in enum_class)
 
+    if not isinstance(default, enum_class) and default is not None:
+        raise TypeError("Default value must be an instance of the enum class")
+
     def converter(x: Any) -> Any:
+        # Handle None - return as-is for optional arguments
+        if x is None:
+            return None
         # Handle existing enum members
         if isinstance(x, enum_class):
             return x.value if use_value else x
@@ -514,5 +558,5 @@ LogLevel = EnumArgument(
     LogLevelEnum,
     use_value=True,
     lowercase=True,
-    default="info",
+    default=LogLevelEnum.INFO,
 )

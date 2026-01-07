@@ -3,6 +3,7 @@ import logging
 import os
 import re
 import uuid
+from argparse import ArgumentError
 from enum import IntEnum
 from typing import FrozenSet, List, Literal, Optional, Set, Tuple
 from unittest.mock import patch
@@ -842,6 +843,56 @@ def test_enum():
 
     with pytest.raises(SystemExit):
         parser.parse_args(["--option=3"])
+
+
+def test_enum_without_default():
+    """Test EnumArgument without default returns None when not provided."""
+
+    class Options(IntEnum):
+        ONE = 1
+        TWO = 2
+
+    class Parser(argclass.Parser):
+        option: Optional[Options] = argclass.EnumArgument(Options)
+
+    parser = Parser()
+    parser.parse_args([])
+    assert parser.option is None
+
+    parser.parse_args(["--option=ONE"])
+    assert parser.option is Options.ONE
+
+
+def test_enum_invalid_default_type():
+    """Test EnumArgument raises TypeError for invalid default type."""
+
+    class Options(IntEnum):
+        ONE = 1
+        TWO = 2
+
+    with pytest.raises(
+        TypeError, match="must be an instance of the enum class"
+    ):
+        argclass.EnumArgument(Options, default="ONE")
+
+
+def test_converter_exception_details():
+    """Test that converter exceptions include argument name and value."""
+
+    def bad_converter(x):
+        raise ValueError(f"cannot convert {x}")
+
+    class Parser(argclass.Parser):
+        value: str = argclass.Argument(converter=bad_converter)
+
+    parser = Parser()
+    with pytest.raises(ArgumentError) as exc_info:
+        parser.parse_args(["--value", "test"])
+
+    error_msg = str(exc_info.value)
+    assert "value" in error_msg
+    assert "test" in error_msg
+    assert "cannot convert" in error_msg
 
 
 def test_group_required_inheritance():
