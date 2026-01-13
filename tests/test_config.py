@@ -1212,3 +1212,19 @@ class TestConfigTypeConversion:
         # Converter returned None, so argument default (42) is used
         # This is because None config values are treated as "no config"
         assert parser.value == 42
+
+    def test_config_group_single_value_function_converter(self, tmp_path: Path):
+        """Test group with function converter on single value from config."""
+        config_file = tmp_path / "config.ini"
+        config_file.write_text("[server]\nname = example\n")
+
+        class ServerGroup(argclass.Group):
+            name: str = argclass.Argument(type=str.upper)
+
+        class Parser(argclass.Parser):
+            server = ServerGroup()
+
+        parser = Parser(config_files=[config_file])
+        parser.parse_args([])
+
+        assert parser.server.name == "EXAMPLE"
