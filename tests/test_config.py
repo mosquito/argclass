@@ -932,8 +932,7 @@ class TestConfigTypeConversion:
         """Test type converter is applied to list in group from config."""
         config_file = tmp_path / "config.ini"
         config_file.write_text(
-            "[sync]\n"
-            "mirrors = ['http://a.com', 'http://b.com']\n"
+            "[sync]\nmirrors = ['http://a.com', 'http://b.com']\n"
         )
 
         class SyncGroup(argclass.Group):
@@ -956,8 +955,7 @@ class TestConfigTypeConversion:
 
         config_file = tmp_path / "config.ini"
         config_file.write_text(
-            "[DEFAULT]\n"
-            "paths = ['/tmp/a', '/tmp/b', '/tmp/c']\n"
+            "[DEFAULT]\npaths = ['/tmp/a', '/tmp/b', '/tmp/c']\n"
         )
 
         class Parser(argclass.Parser):
@@ -1075,7 +1073,7 @@ class TestConfigTypeConversion:
     def test_toml_config_list_type_conversion(self, tmp_path: Path):
         """Test TOML config with native list and type converter."""
         config_file = tmp_path / "config.toml"
-        config_file.write_text('values = [1, 2, 3]\n')
+        config_file.write_text("values = [1, 2, 3]\n")
 
         class Parser(argclass.Parser):
             values: list = argclass.Argument(
@@ -1095,9 +1093,7 @@ class TestConfigTypeConversion:
         """Test TOML config type conversion in groups."""
         config_file = tmp_path / "config.toml"
         config_file.write_text(
-            "[server]\n"
-            'hosts = ["localhost", "127.0.0.1"]\n'
-            "port = 8080\n"
+            '[server]\nhosts = ["localhost", "127.0.0.1"]\nport = 8080\n'
         )
 
         class ServerGroup(argclass.Group):
@@ -1152,6 +1148,7 @@ class TestConfigTypeConversion:
         class Endpoint:
             def __init__(self, url: str):
                 from urllib.parse import urlparse
+
                 parsed = urlparse(url)
                 self.scheme = parsed.scheme
                 self.host = parsed.hostname
