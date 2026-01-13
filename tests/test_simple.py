@@ -912,7 +912,9 @@ def test_enum_string_default_lowercase():
 
     class Parser(argclass.Parser):
         option: Options = argclass.EnumArgument(
-            Options, default="first", lowercase=True,
+            Options,
+            default="first",
+            lowercase=True,
         )
 
     parser = Parser()
