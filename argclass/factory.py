@@ -318,12 +318,12 @@ def Argument(
 E = TypeVar("E", bound=Enum)
 
 
-# Overload: with default value -> returns EnumType
+# Overload: with default value (enum member or string) -> returns EnumType
 @overload
 def EnumArgument(
     enum_class: Type[E],
     *aliases: str,
-    default: E,
+    default: Union[E, str],
     action: Union[Actions, Type[Action]] = ...,
     env_var: Optional[str] = ...,
     help: Optional[str] = ...,
@@ -356,7 +356,7 @@ def EnumArgument(
     enum_class: Type[E],
     *aliases: str,
     action: Union[Actions, Type[Action]] = Actions.default(),
-    default: Optional[E] = None,
+    default: Union[E, str, None] = None,
     env_var: Optional[str] = None,
     help: Optional[str] = None,
     metavar: Optional[str] = None,
@@ -372,7 +372,7 @@ def EnumArgument(
         enum_class: The Enum class to use for choices and conversion.
         aliases: Command-line aliases (e.g., "-l", "--level").
         action: How to handle the argument.
-        default: Default value (as string name, not enum member).
+        default: Default value as enum member or string name.
         env_var: Environment variable to read default from.
         help: Help text for --help output.
         metavar: Placeholder name in help text.
@@ -389,8 +389,25 @@ def EnumArgument(
     else:
         choices = tuple(e.name for e in enum_class)
 
-    if not isinstance(default, enum_class) and default is not None:
-        raise TypeError("Default value must be an instance of the enum class")
+    if default is not None:
+        if isinstance(default, enum_class):
+            pass  # Valid enum member
+        elif isinstance(default, str):
+            # Validate string is a valid enum member name
+            check_name = default.upper() if lowercase else default
+            if check_name not in [e.name for e in enum_class]:
+                valid = ", ".join(e.name for e in enum_class)
+                raise ValueError(
+                    f"Default {default!r} is not a valid {enum_class.__name__} "
+                    f"member. Valid values: {valid}"
+                )
+            # Convert string default to enum member
+            default = enum_class[check_name]
+        else:
+            raise TypeError(
+                f"Default must be {enum_class.__name__} member or string, "
+                f"got {type(default).__name__}"
+            )
 
     def converter(x: Any) -> Any:
         # Handle None - return as-is for optional arguments

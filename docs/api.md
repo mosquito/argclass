@@ -502,6 +502,60 @@ Internal storage for argument metadata.
 .. autofunction:: argclass.ArgumentSequence
 ```
 
+### EnumArgument
+
+Create arguments from Enum classes with automatic choice validation.
+
+<!--- name: test_api_enum_argument --->
+```python
+import argclass
+from enum import IntEnum
+
+class Priority(IntEnum):
+    LOW = 1
+    MEDIUM = 2
+    HIGH = 3
+
+class MyApp(argclass.Parser):
+    # Default can be enum member or string name
+    priority: Priority = argclass.EnumArgument(
+        Priority, default="MEDIUM"
+    )
+
+app = MyApp()
+app.parse_args([])
+assert app.priority == Priority.MEDIUM
+
+app.parse_args(["--priority", "HIGH"])
+assert app.priority == Priority.HIGH
+```
+
+Use `lowercase=True` for case-insensitive input:
+
+<!--- name: test_api_enum_argument_lowercase --->
+```python
+import argclass
+from enum import IntEnum
+
+class Level(IntEnum):
+    DEBUG = 10
+    INFO = 20
+    WARNING = 30
+
+class MyApp(argclass.Parser):
+    level: Level = argclass.EnumArgument(
+        Level, default="info", lowercase=True
+    )
+
+app = MyApp()
+app.parse_args([])
+assert app.level == Level.INFO
+
+# Accepts lowercase input
+app.parse_args(["--level", "debug"])
+assert app.level == Level.DEBUG
+```
+
 ```{eval-rst}
 .. autofunction:: argclass.EnumArgument
 ```

@@ -872,10 +872,52 @@ def test_enum_invalid_default_type():
         ONE = 1
         TWO = 2
 
-    with pytest.raises(
-        TypeError, match="must be an instance of the enum class"
-    ):
-        argclass.EnumArgument(Options, default="ONE")
+    # Invalid type (not enum member or string)
+    with pytest.raises(TypeError, match="must be .* member or string"):
+        argclass.EnumArgument(Options, default=123)
+
+
+def test_enum_invalid_string_default():
+    """Test EnumArgument raises ValueError for invalid string default."""
+
+    class Options(IntEnum):
+        ONE = 1
+        TWO = 2
+
+    with pytest.raises(ValueError, match="not a valid .* member"):
+        argclass.EnumArgument(Options, default="INVALID")
+
+
+def test_enum_string_default():
+    """Test EnumArgument accepts valid string default."""
+
+    class Options(IntEnum):
+        ONE = 1
+        TWO = 2
+
+    class Parser(argclass.Parser):
+        option: Options = argclass.EnumArgument(Options, default="ONE")
+
+    parser = Parser()
+    parser.parse_args([])
+    assert parser.option == Options.ONE
+
+
+def test_enum_string_default_lowercase():
+    """Test EnumArgument accepts string default with lowercase."""
+
+    class Options(IntEnum):
+        FIRST = 1
+        SECOND = 2
+
+    class Parser(argclass.Parser):
+        option: Options = argclass.EnumArgument(
+            Options, default="first", lowercase=True,
+        )
+
+    parser = Parser()
+    parser.parse_args([])
+    assert parser.option == Options.FIRST
 
 
 def test_converter_exception_details():
