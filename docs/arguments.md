@@ -394,6 +394,110 @@ assert parser.log_level == "debug"
 assert parser.format == "yaml"
 ```
 
+## Enum Arguments
+
+For type-safe choices, use `EnumArgument` with Python's `Enum` classes. This
+provides compile-time safety and IDE autocompletion while automatically
+generating valid choices.
+
+<!--- name: test_args_enum_basic --->
+```python
+import argclass
+from enum import Enum
+
+class Color(Enum):
+    RED = "red"
+    GREEN = "green"
+    BLUE = "blue"
+
+class Parser(argclass.Parser):
+    color: Color = argclass.EnumArgument(Color, default="RED")
+
+parser = Parser()
+parser.parse_args([])
+assert parser.color == Color.RED
+
+parser.parse_args(["--color", "BLUE"])
+assert parser.color == Color.BLUE
+```
+
+The default can be either an enum member or a string name:
+
+<!--- name: test_args_enum_default_forms --->
+```python
+import argclass
+from enum import IntEnum
+
+class Priority(IntEnum):
+    LOW = 1
+    MEDIUM = 2
+    HIGH = 3
+
+class Parser(argclass.Parser):
+    # String default - validated at class definition time
+    level1: Priority = argclass.EnumArgument(Priority, default="MEDIUM")
+    # Enum member default
+    level2: Priority = argclass.EnumArgument(Priority, default=Priority.HIGH)
+
+parser = Parser()
+parser.parse_args([])
+assert parser.level1 == Priority.MEDIUM
+assert parser.level2 == Priority.HIGH
+```
+
+### Lowercase Choices
+
+Use `lowercase=True` for user-friendly lowercase input:
+
+<!--- name: test_args_enum_lowercase --->
+```python
+import argclass
+from enum import Enum
+
+class Environment(Enum):
+    DEVELOPMENT = "dev"
+    STAGING = "stg"
+    PRODUCTION = "prod"
+
+class Parser(argclass.Parser):
+    env: Environment = argclass.EnumArgument(
+        Environment, default="development", lowercase=True
+    )
+
+parser = Parser()
+parser.parse_args(["--env", "production"])
+assert parser.env == Environment.PRODUCTION
+```
+
+### Using Enum Values
+
+By default, `EnumArgument` returns the enum member. Use `use_value=True` to
+get the enum's value instead:
+
+<!--- name: test_args_enum_use_value --->
+```python
+import argclass
+from enum import IntEnum
+
+class LogLevel(IntEnum):
+    DEBUG = 10
+    INFO = 20
+    WARNING = 30
+
+class Parser(argclass.Parser):
+    # Returns enum member
+    level: LogLevel = argclass.EnumArgument(LogLevel, default="INFO")
+    # Returns enum value (int)
+    level_int: int = argclass.EnumArgument(
+        LogLevel, default="INFO", use_value=True
+    )
+
+parser = Parser()
+parser.parse_args([])
+assert parser.level == LogLevel.INFO
+assert parser.level_int == 20  # The integer value
+```
+
 ## Type vs Converter
 
 These two parameters serve different purposes in the parsing pipeline:
