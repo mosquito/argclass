@@ -105,6 +105,63 @@ hosts = ["primary.example.com", "backup.example.com"]
 
 These are parsed using `ast.literal_eval` when the argument type requires it.
 
+### Type Conversion
+
+Type converters specified with `type=` are automatically applied to values
+loaded from config files. This ensures config values are converted the same
+way as CLI arguments:
+
+<!--- name: test_config_type_conversion_doc --->
+```python
+import argclass
+from pathlib import Path
+from tempfile import NamedTemporaryFile
+
+class Parser(argclass.Parser):
+    # type=Path converts config string to Path object
+    data_dir: Path = argclass.Argument(type=Path)
+
+    # type applies to each list item
+    ports: list = argclass.Argument(
+        nargs=argclass.Nargs.ONE_OR_MORE,
+        type=int,
+    )
+
+CONFIG_CONTENT = """
+[DEFAULT]
+data_dir = /var/data
+ports = ["8080", "8081", "8082"]
+"""
+
+with NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as f:
+    f.write(CONFIG_CONTENT)
+    config_path = f.name
+
+parser = Parser(config_files=[config_path])
+parser.parse_args([])
+
+assert isinstance(parser.data_dir, Path)
+assert parser.data_dir == Path("/var/data")
+assert parser.ports == [8080, 8081, 8082]
+assert all(isinstance(p, int) for p in parser.ports)
+
+Path(config_path).unlink()
+```
+
+**Type vs Converter:**
+
+| Parameter | Applied to | Use Case |
+|-----------|-----------|----------|
+| `type` | Each value (CLI or config) | Convert int, float, Path, URL |
+| `converter` | Final result after parsing | Convert list→set, aggregate |
+
+**Error handling:** Type conversion errors propagate immediately:
+
+```python
+# Config: port = "not_a_number"
+# Raises: ValueError: invalid literal for int() with base 10
+```
+
 ### Using JSON
 
 <!--- name: test_config_json_defaults --->

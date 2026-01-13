@@ -528,6 +528,22 @@ class Parser(AbstractParser, Base):
             # Get default from config with type-aware loading
             kind = self._get_value_kind(argument)
             config_default = self._config_parser.get_value(name, kind)
+
+            # Apply type converter to config values
+            if config_default is not None and argument.type is not None:
+                if isinstance(config_default, (list, tuple)):
+                    config_default = [argument.type(x) for x in config_default]
+                else:
+                    # Check if already correct type (only for types)
+                    type_func = argument.type
+                    try:
+                        is_correct_type = isinstance(config_default, type_func)
+                    except TypeError:
+                        # type_func is a function, not a type
+                        is_correct_type = False
+                    if not is_correct_type:
+                        config_default = type_func(config_default)
+
             default = (
                 config_default
                 if config_default is not None
@@ -582,6 +598,22 @@ class Parser(AbstractParser, Base):
                     kind,
                     section=group_name,
                 )
+
+                # Apply type converter to config values
+                if config_default is not None and argument.type is not None:
+                    type_func = argument.type
+                    if isinstance(config_default, (list, tuple)):
+                        config_default = [type_func(x) for x in config_default]
+                    else:
+                        # Check if already correct type (only for types)
+                        val = config_default
+                        try:
+                            already_correct = isinstance(val, type_func)
+                        except TypeError:
+                            already_correct = False
+                        if not already_correct:
+                            config_default = type_func(val)
+
                 default = (
                     config_default
                     if config_default is not None

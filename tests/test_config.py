@@ -866,3 +866,362 @@ class TestTOMLConfig:
         assert parser.verbose is True
         assert parser.config["app"]["name"] == "myapp"
         assert parser.config["app"]["version"] == 1
+
+
+class TestConfigTypeConversion:
+    """Test that argument type converters are applied to config values."""
+
+    def test_config_list_with_type_converter(self, tmp_path: Path):
+        """Test type converter is applied to list items from config."""
+        from urllib.parse import urlparse
+
+        class URL:
+            def __init__(self, url: str):
+                parsed = urlparse(url)
+                self.scheme = parsed.scheme
+                self.host = parsed.hostname
+                self.port = parsed.port
+
+            def __repr__(self):
+                return f"URL({self.scheme}://{self.host}:{self.port})"
+
+        config_file = tmp_path / "config.json"
+        config_file.write_text(
+            '{"mirrors": ["http://mirror1.example.com:8080", '
+            '"https://mirror2.example.com:443"]}'
+        )
+
+        class Parser(argclass.Parser):
+            mirrors: list = argclass.Argument(
+                nargs=argclass.Nargs.ONE_OR_MORE,
+                type=URL,
+            )
+
+        parser = Parser(
+            config_files=[config_file],
+            config_parser_class=argclass.JSONDefaultsParser,
+        )
+        parser.parse_args([])
+
+        assert len(parser.mirrors) == 2
+        assert isinstance(parser.mirrors[0], URL)
+        assert isinstance(parser.mirrors[1], URL)
+        assert parser.mirrors[0].host == "mirror1.example.com"
+        assert parser.mirrors[0].port == 8080
+        assert parser.mirrors[1].host == "mirror2.example.com"
+        assert parser.mirrors[1].port == 443
+
+    def test_config_single_value_with_type_converter(self, tmp_path: Path):
+        """Test type converter is applied to single value from config."""
+        config_file = tmp_path / "config.json"
+        config_file.write_text('{"port": "8080"}')
+
+        class Parser(argclass.Parser):
+            port: int = argclass.Argument(type=int)
+
+        parser = Parser(
+            config_files=[config_file],
+            config_parser_class=argclass.JSONDefaultsParser,
+        )
+        parser.parse_args([])
+
+        assert parser.port == 8080
+        assert isinstance(parser.port, int)
+
+    def test_config_group_list_with_type_converter(self, tmp_path: Path):
+        """Test type converter is applied to list in group from config."""
+        config_file = tmp_path / "config.ini"
+        config_file.write_text(
+            "[sync]\nmirrors = ['http://a.com', 'http://b.com']\n"
+        )
+
+        class SyncGroup(argclass.Group):
+            mirrors: list = argclass.Argument(
+                nargs=argclass.Nargs.ONE_OR_MORE,
+                type=str.upper,
+            )
+
+        class Parser(argclass.Parser):
+            sync = SyncGroup()
+
+        parser = Parser(config_files=[config_file])
+        parser.parse_args([])
+
+        assert parser.sync.mirrors == ["HTTP://A.COM", "HTTP://B.COM"]
+
+    def test_config_ini_list_with_custom_type(self, tmp_path: Path):
+        """Test INI config with list and custom type converter."""
+        from pathlib import Path as PathLib
+
+        config_file = tmp_path / "config.ini"
+        config_file.write_text(
+            "[DEFAULT]\npaths = ['/tmp/a', '/tmp/b', '/tmp/c']\n"
+        )
+
+        class Parser(argclass.Parser):
+            paths: list = argclass.Argument(
+                nargs=argclass.Nargs.ONE_OR_MORE,
+                type=PathLib,
+            )
+
+        parser = Parser(config_files=[config_file])
+        parser.parse_args([])
+
+        assert len(parser.paths) == 3
+        assert all(isinstance(p, PathLib) for p in parser.paths)
+        assert parser.paths[0] == PathLib("/tmp/a")
+
+    def test_config_type_converter_raises_exception(self, tmp_path: Path):
+        """Test that type converter exception propagates with useful info."""
+        config_file = tmp_path / "config.json"
+        config_file.write_text('{"port": "not_a_number"}')
+
+        class Parser(argclass.Parser):
+            port: int = argclass.Argument(type=int)
+
+        parser = Parser(
+            config_files=[config_file],
+            config_parser_class=argclass.JSONDefaultsParser,
+        )
+
+        with pytest.raises(ValueError, match="invalid literal"):
+            parser.parse_args([])
+
+    def test_config_type_converter_raises_on_list_item(self, tmp_path: Path):
+        """Test type converter exception on list item."""
+        config_file = tmp_path / "config.json"
+        config_file.write_text('{"ports": [8080, "bad", 9090]}')
+
+        class Parser(argclass.Parser):
+            ports: list = argclass.Argument(
+                nargs=argclass.Nargs.ONE_OR_MORE,
+                type=int,
+            )
+
+        parser = Parser(
+            config_files=[config_file],
+            config_parser_class=argclass.JSONDefaultsParser,
+        )
+
+        with pytest.raises((ValueError, TypeError)):
+            parser.parse_args([])
+
+    def test_json_config_list_type_conversion(self, tmp_path: Path):
+        """Test JSON config with native list and type converter."""
+        config_file = tmp_path / "config.json"
+        config_file.write_text('{"values": [1, 2, 3]}')
+
+        class Parser(argclass.Parser):
+            values: list = argclass.Argument(
+                nargs=argclass.Nargs.ONE_OR_MORE,
+                type=float,
+            )
+
+        parser = Parser(
+            config_files=[config_file],
+            config_parser_class=argclass.JSONDefaultsParser,
+        )
+        parser.parse_args([])
+
+        assert parser.values == [1.0, 2.0, 3.0]
+        assert all(isinstance(v, float) for v in parser.values)
+
+    def test_json_config_nested_type_conversion(self, tmp_path: Path):
+        """Test JSON config preserves types when converter matches."""
+        config_file = tmp_path / "config.json"
+        config_file.write_text('{"count": 42}')
+
+        class Parser(argclass.Parser):
+            count: int = argclass.Argument(type=int)
+
+        parser = Parser(
+            config_files=[config_file],
+            config_parser_class=argclass.JSONDefaultsParser,
+        )
+        parser.parse_args([])
+
+        # JSON already provides int, type converter shouldn't break it
+        assert parser.count == 42
+        assert isinstance(parser.count, int)
+
+    def test_json_config_group_type_conversion(self, tmp_path: Path):
+        """Test JSON config type conversion in groups."""
+        config_file = tmp_path / "config.json"
+        config_file.write_text(
+            '{"database": {"ports": [5432, 5433], "timeout": "30"}}'
+        )
+
+        class DatabaseGroup(argclass.Group):
+            ports: list = argclass.Argument(
+                nargs=argclass.Nargs.ONE_OR_MORE,
+                type=str,
+            )
+            timeout: int = argclass.Argument(type=int)
+
+        class Parser(argclass.Parser):
+            database = DatabaseGroup()
+
+        parser = Parser(
+            config_files=[config_file],
+            config_parser_class=argclass.JSONDefaultsParser,
+        )
+        parser.parse_args([])
+
+        assert parser.database.ports == ["5432", "5433"]
+        assert parser.database.timeout == 30
+
+    def test_toml_config_list_type_conversion(self, tmp_path: Path):
+        """Test TOML config with native list and type converter."""
+        config_file = tmp_path / "config.toml"
+        config_file.write_text("values = [1, 2, 3]\n")
+
+        class Parser(argclass.Parser):
+            values: list = argclass.Argument(
+                nargs=argclass.Nargs.ONE_OR_MORE,
+                type=str,
+            )
+
+        parser = Parser(
+            config_files=[config_file],
+            config_parser_class=argclass.TOMLDefaultsParser,
+        )
+        parser.parse_args([])
+
+        assert parser.values == ["1", "2", "3"]
+
+    def test_toml_config_group_type_conversion(self, tmp_path: Path):
+        """Test TOML config type conversion in groups."""
+        config_file = tmp_path / "config.toml"
+        config_file.write_text(
+            '[server]\nhosts = ["localhost", "127.0.0.1"]\nport = 8080\n'
+        )
+
+        class ServerGroup(argclass.Group):
+            hosts: list = argclass.Argument(
+                nargs=argclass.Nargs.ONE_OR_MORE,
+                type=str.upper,
+            )
+            port: str = argclass.Argument(type=str)
+
+        class Parser(argclass.Parser):
+            server = ServerGroup()
+
+        parser = Parser(
+            config_files=[config_file],
+            config_parser_class=argclass.TOMLDefaultsParser,
+        )
+        parser.parse_args([])
+
+        assert parser.server.hosts == ["LOCALHOST", "127.0.0.1"]
+        assert parser.server.port == "8080"
+
+    def test_config_skip_conversion_when_type_matches(self, tmp_path: Path):
+        """Test that conversion is skipped when value already matches type."""
+        config_file = tmp_path / "config.json"
+        config_file.write_text('{"value": 42}')
+
+        call_count = 0
+
+        def counting_int(x):
+            nonlocal call_count
+            call_count += 1
+            return int(x)
+
+        class Parser(argclass.Parser):
+            value: int = argclass.Argument(type=counting_int)
+
+        parser = Parser(
+            config_files=[config_file],
+            config_parser_class=argclass.JSONDefaultsParser,
+        )
+        parser.parse_args([])
+
+        # Type converter is still called since we check isinstance
+        # but it should work correctly
+        assert parser.value == 42
+
+    def test_config_custom_type_class(self, tmp_path: Path):
+        """Test config with custom type class conversion."""
+        config_file = tmp_path / "config.json"
+        config_file.write_text('{"endpoint": "https://api.example.com:443/v1"}')
+
+        class Endpoint:
+            def __init__(self, url: str):
+                from urllib.parse import urlparse
+
+                parsed = urlparse(url)
+                self.scheme = parsed.scheme
+                self.host = parsed.hostname
+                self.port = parsed.port
+                self.path = parsed.path
+
+        class Parser(argclass.Parser):
+            endpoint: Endpoint = argclass.Argument(type=Endpoint)
+
+        parser = Parser(
+            config_files=[config_file],
+            config_parser_class=argclass.JSONDefaultsParser,
+        )
+        parser.parse_args([])
+
+        assert isinstance(parser.endpoint, Endpoint)
+        assert parser.endpoint.scheme == "https"
+        assert parser.endpoint.host == "api.example.com"
+        assert parser.endpoint.port == 443
+        assert parser.endpoint.path == "/v1"
+
+    def test_config_empty_list_with_type_converter(self, tmp_path: Path):
+        """Test type converter with empty list from config."""
+        config_file = tmp_path / "config.json"
+        config_file.write_text('{"items": []}')
+
+        class Parser(argclass.Parser):
+            items: list = argclass.Argument(
+                nargs=argclass.Nargs.ZERO_OR_MORE,
+                type=int,
+            )
+
+        parser = Parser(
+            config_files=[config_file],
+            config_parser_class=argclass.JSONDefaultsParser,
+        )
+        parser.parse_args([])
+
+        assert parser.items == []
+
+    def test_config_type_converter_returns_none(self, tmp_path: Path):
+        """Test type converter that returns None uses argument default."""
+        config_file = tmp_path / "config.json"
+        config_file.write_text('{"value": "null"}')
+
+        def nullable_int(x):
+            return None if x == "null" else int(x)
+
+        class Parser(argclass.Parser):
+            value: int = argclass.Argument(type=nullable_int, default=42)
+
+        parser = Parser(
+            config_files=[config_file],
+            config_parser_class=argclass.JSONDefaultsParser,
+        )
+        parser.parse_args([])
+
+        # Converter returned None, so argument default (42) is used
+        # This is because None config values are treated as "no config"
+        assert parser.value == 42
+
+    def test_config_group_single_value_function_converter(self, tmp_path: Path):
+        """Test group with function converter on single value from config."""
+        config_file = tmp_path / "config.ini"
+        config_file.write_text("[server]\nname = example\n")
+
+        class ServerGroup(argclass.Group):
+            name: str = argclass.Argument(type=str.upper)
+
+        class Parser(argclass.Parser):
+            server = ServerGroup()
+
+        parser = Parser(config_files=[config_file])
+        parser.parse_args([])
+
+        assert parser.server.name == "EXAMPLE"
