@@ -56,10 +56,8 @@ class ArgumentDefinitionError(ArgclassError):
     invalid configuration (conflicting options, invalid types, etc.).
 
     Attributes:
-        aliases: The argument aliases (e.g., ``("-v", "--verbose")``) that
-            caused the conflict, if applicable.
-        kwargs: The keyword arguments that were passed to argparse when
-            the error occurred.
+        aliases: The conflicting aliases, e.g., ``("-v", "--verbose")``.
+        kwargs: The kwargs passed to argparse when the error occurred.
 
     Example::
 
@@ -164,8 +162,7 @@ class ConfigurationError(ArgclassError):
 
     Attributes:
         file_path: Path to the configuration file that caused the error.
-        section: The configuration section (e.g., INI section name) where
-            the error occurred.
+        section: The config section (e.g., INI section) where error occurred.
 
     Example::
 

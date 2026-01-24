@@ -81,7 +81,7 @@ default-groups = [
 ]
 
 [tool.hatch.build.targets.sdist]
-include = ["argclass"]
+include = ["argclass", "tests"]
 
 [tool.hatch.build.targets.wheel]
 include = ["argclass"]
