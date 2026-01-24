@@ -3,7 +3,6 @@ import logging
 import os
 import re
 import uuid
-from argparse import ArgumentError
 from enum import IntEnum
 from typing import FrozenSet, List, Literal, Optional, Set, Tuple
 from unittest.mock import patch
@@ -832,19 +831,19 @@ def test_enum():
     with pytest.raises(SystemExit):
         parser.parse_args(["--option=3"])
 
-    class Parser(argclass.Parser):
+    class Parser2(argclass.Parser):
         option: Options
 
-    parser = Parser()
+    parser2 = Parser2()
 
-    parser.parse_args(["--option=ONE"])
-    assert parser.option is Options.ONE
+    parser2.parse_args(["--option=ONE"])
+    assert parser2.option is Options.ONE
 
-    parser.parse_args(["--option=TWO"])
-    assert parser.option is Options.TWO
+    parser2.parse_args(["--option=TWO"])
+    assert parser2.option is Options.TWO
 
     with pytest.raises(SystemExit):
-        parser.parse_args(["--option=3"])
+        parser2.parse_args(["--option=3"])
 
 
 def test_enum_without_default():
@@ -866,25 +865,27 @@ def test_enum_without_default():
 
 
 def test_enum_invalid_default_type():
-    """Test EnumArgument raises TypeError for invalid default type."""
+    """Test EnumArgument raises EnumValueError for invalid default type."""
 
     class Options(IntEnum):
         ONE = 1
         TWO = 2
 
     # Invalid type (not enum member or string)
-    with pytest.raises(TypeError, match="must be .* member or string"):
-        argclass.EnumArgument(Options, default=123)
+    with pytest.raises(
+        argclass.EnumValueError, match="must be .* member or string"
+    ):
+        argclass.EnumArgument(Options, default=123)  # type: ignore[call-overload]
 
 
 def test_enum_invalid_string_default():
-    """Test EnumArgument raises ValueError for invalid string default."""
+    """Test EnumArgument raises EnumValueError for invalid string default."""
 
     class Options(IntEnum):
         ONE = 1
         TWO = 2
 
-    with pytest.raises(ValueError, match="not a valid .* member"):
+    with pytest.raises(argclass.EnumValueError, match="not a valid .* member"):
         argclass.EnumArgument(Options, default="INVALID")
 
 
@@ -932,7 +933,7 @@ def test_converter_exception_details():
         value: str = argclass.Argument(converter=bad_converter)
 
     parser = Parser()
-    with pytest.raises(ArgumentError) as exc_info:
+    with pytest.raises(argclass.TypeConversionError) as exc_info:
         parser.parse_args(["--value", "test"])
 
     error_msg = str(exc_info.value)
@@ -965,9 +966,9 @@ def test_group_required_inheritance():
     class Parser2(argclass.Parser):
         group = ImplicitSubGroup()
 
-    parser = Parser2()
+    parser2 = Parser2()
     with pytest.raises(SystemExit):
-        parser.parse_args([])
+        parser2.parse_args([])
 
 
 def test_json_action(tmp_path):
@@ -1456,7 +1457,7 @@ class TestBoolDefaultValidation:
         with pytest.raises(TypeError, match="Can not set default"):
 
             class Parser(argclass.Parser):
-                flag: bool = "invalid"
+                flag: bool = "invalid"  # type: ignore[assignment]
 
             Parser()
 
@@ -1609,7 +1610,7 @@ class TestConfigActionValidation:
             ConfigAction(
                 option_strings=["--config"],
                 dest="config",
-                type="invalid",
+                type="invalid",  # type: ignore[arg-type]
             )
 
     def test_config_action_parse_file_not_implemented(self):
@@ -1660,7 +1661,7 @@ class TestTOMLUnavailable:
         toml_file.write_text('[section]\nkey = "value"')
 
         original = actions_module.toml_load
-        actions_module.toml_load = None
+        actions_module.toml_load = None  # type: ignore[assignment]
 
         try:
             action = TOMLConfigAction(
@@ -1682,7 +1683,7 @@ class TestTOMLUnavailable:
         toml_file.write_text('[section]\nkey = "value"')
 
         original = defaults_module.toml_load
-        defaults_module.toml_load = None
+        defaults_module.toml_load = None  # type: ignore[assignment]
 
         try:
             parser = TOMLDefaultsParser([toml_file])
@@ -1792,7 +1793,7 @@ class TestTOMLDefaultsParserStrictMode:
         def mock_load(fp):
             return ["not", "a", "dict"]
 
-        defaults_module.toml_load = mock_load
+        defaults_module.toml_load = mock_load  # type: ignore[assignment]
         try:
             result = parser.parse()
             assert result == {}
@@ -1809,12 +1810,12 @@ class TestAbstractDefaultsParserParse:
 
         # Create a concrete subclass that calls super().parse()
         class TestParser(AbstractDefaultsParser):
-            def parse(self):
-                return super().parse()
+            def parse(self):  # type: ignore[override]
+                return super().parse()  # type: ignore[safe-super]
 
         parser = TestParser([])
         with pytest.raises(NotImplementedError):
-            parser.parse()
+            parser.parse()  # type: ignore[no-untyped-call]
 
 
 class TestUnwrapOptionalComplexTypes:
@@ -1825,7 +1826,7 @@ class TestUnwrapOptionalComplexTypes:
         from argclass.utils import unwrap_optional
         from typing import Union
 
-        with pytest.raises(TypeError, match="Complex types"):
+        with pytest.raises(argclass.ComplexTypeError, match="Union types"):
             unwrap_optional(Union[str, int, None])
 
 
@@ -2214,7 +2215,7 @@ class TestConfigNargsDefaults:
 
         parser = Parser(config_files=[config])
 
-        with pytest.raises((ValueError, SystemExit)):
+        with pytest.raises(argclass.UnexpectedConfigValue):
             parser.parse_args([])
 
     def test_config_string_for_set_fails(self, tmp_path):
@@ -2227,7 +2228,7 @@ class TestConfigNargsDefaults:
 
         parser = Parser(config_files=[config])
 
-        with pytest.raises((ValueError, SystemExit)):
+        with pytest.raises(argclass.UnexpectedConfigValue):
             parser.parse_args([])
 
 

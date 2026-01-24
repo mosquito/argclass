@@ -17,6 +17,7 @@ from typing import (
     get_origin,
 )
 
+from .exceptions import ComplexTypeError
 from .types import (
     CONTAINER_TYPES,
     TEXT_TRUE_VALUES,
@@ -91,9 +92,7 @@ def _is_union_type(typespec: Any) -> bool:
     if typespec.__class__ == UnionClass:
         return True
     # PEP 604: float | None creates types.UnionType in Python 3.10+
-    if hasattr(types, "UnionType") and isinstance(typespec, types.UnionType):
-        return True
-    return False
+    return hasattr(types, "UnionType") and isinstance(typespec, types.UnionType)
 
 
 def unwrap_optional(typespec: Any) -> Optional[Any]:
@@ -104,9 +103,12 @@ def unwrap_optional(typespec: Any) -> Optional[Any]:
     union_args = [a for a in typespec.__args__ if a is not NoneType]
 
     if len(union_args) != 1:
-        raise TypeError(
-            "Complex types mustn't be used in short form. You have to "
-            "specify argclass.Argument with converter or type function.",
+        raise ComplexTypeError(
+            "Union types with multiple non-None members "
+            "cannot be used directly",
+            typespec=typespec,
+            hint="Use argclass.Argument() with an explicit "
+            "converter or type function",
         )
 
     return union_args[0]
@@ -135,9 +137,12 @@ def _unwrap_container_type(typespec: Any) -> Optional[Tuple[type, type]]:
     origin = get_origin(typespec)
     args = get_args(typespec)
 
+    # We know origin is not None because _is_container_type checks this
+    assert origin is not None
+
     if not args:
         # list without type parameter - use str as default
-        return (origin, str)  # type: ignore
+        return (origin, str)
 
     # For tuple, we handle specially - just use the first type for now
     # (full tuple handling would need nargs=N for Tuple[int, str, bool])
@@ -148,7 +153,7 @@ def _unwrap_container_type(typespec: Any) -> Optional[Tuple[type, type]]:
     if optional_inner is not None:
         element_type = optional_inner
 
-    return (origin, element_type)  # type: ignore
+    return (origin, element_type)
 
 
 def unwrap_literal(typespec: Any) -> Optional[Tuple[type, Tuple[Any, ...]]]:

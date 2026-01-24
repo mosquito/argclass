@@ -21,6 +21,14 @@ from .defaults import (
     UnexpectedConfigValue,
     ValueKind,
 )
+from .exceptions import (
+    ArgclassError,
+    ArgumentDefinitionError,
+    ComplexTypeError,
+    ConfigurationError,
+    EnumValueError,
+    TypeConversionError,
+)
 from .factory import (
     Argument,
     ArgumentSequence,
@@ -44,7 +52,14 @@ from .store import (
     StoreMeta,
     TypedArgument,
 )
-from .types import Actions, ConverterType, LogLevelEnum, Nargs, NargsType
+from .types import (
+    Actions,
+    ConverterType,
+    LogLevelEnum,
+    MetavarType,
+    Nargs,
+    NargsType,
+)
 from .utils import parse_bool, read_ini_configs
 
 # Alias for backward compatibility
@@ -54,11 +69,20 @@ read_configs = read_ini_configs
 EnumType = EnumMeta
 
 __all__ = [
+    # Exceptions
+    "ArgclassError",
+    "ArgumentDefinitionError",
+    "ComplexTypeError",
+    "ConfigurationError",
+    "EnumValueError",
+    "TypeConversionError",
+    "UnexpectedConfigValue",
     # Types and enums
     "Actions",
     "Nargs",
     "LogLevelEnum",
     "ConverterType",
+    "MetavarType",
     "NargsType",
     # Classes
     "SecretString",

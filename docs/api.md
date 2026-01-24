@@ -356,10 +356,9 @@ Number of arguments constants.
 
 | Value | Meaning |
 |-------|---------|
-| `OPTIONAL` (`?`) | Zero or one argument |
+| `ZERO_OR_ONE` (`?`) | Zero or one argument |
 | `ZERO_OR_MORE` (`*`) | Zero or more arguments |
 | `ONE_OR_MORE` (`+`) | One or more arguments |
-| `REMAINDER` | All remaining arguments |
 
 ```{eval-rst}
 .. autoclass:: argclass.Nargs
@@ -400,6 +399,79 @@ Read and merge multiple configuration files.
 
 ```{eval-rst}
 .. autofunction:: argclass.read_configs
+```
+
+---
+
+## Exceptions
+
+argclass provides a hierarchy of typed exceptions for debugging configuration
+and parsing errors. All exceptions include structured context attributes.
+
+### ArgclassError
+
+Base exception for all argclass errors. Provides `field_name` and `hint`
+attributes for debugging context.
+
+```{eval-rst}
+.. autoclass:: argclass.ArgclassError
+   :members:
+   :show-inheritance:
+```
+
+### ArgumentDefinitionError
+
+Raised when an argument cannot be added to the parser due to invalid
+configuration, such as conflicting option strings or invalid argparse kwargs.
+
+```{eval-rst}
+.. autoclass:: argclass.ArgumentDefinitionError
+   :members:
+   :show-inheritance:
+```
+
+### TypeConversionError
+
+Raised when a value cannot be converted to the expected type. Includes the
+original `value` and `target_type` for debugging.
+
+```{eval-rst}
+.. autoclass:: argclass.TypeConversionError
+   :members:
+   :show-inheritance:
+```
+
+### ConfigurationError
+
+Raised when a configuration file cannot be parsed or contains values that
+don't match expected types. Includes `file_path` and `section` attributes.
+
+```{eval-rst}
+.. autoclass:: argclass.ConfigurationError
+   :members:
+   :show-inheritance:
+```
+
+### EnumValueError
+
+Raised when an enum default or parsed value is not a valid member of the
+specified enum class. Includes `enum_class` and `valid_values` for diagnostics.
+
+```{eval-rst}
+.. autoclass:: argclass.EnumValueError
+   :members:
+   :show-inheritance:
+```
+
+### ComplexTypeError
+
+Raised when a type annotation is too complex to be automatically handled
+(e.g., `Union[str, int]`) and requires an explicit converter.
+
+```{eval-rst}
+.. autoclass:: argclass.ComplexTypeError
+   :members:
+   :show-inheritance:
 ```
 
 ---

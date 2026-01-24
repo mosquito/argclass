@@ -1,6 +1,6 @@
 [project]
 name = "argclass"
-version = "1.5.2"
+version = "1.6.0"
 description = "Declarative CLI parser with type hints, config files, and environment variables - zero dependencies"
 authors = [{ name = "Dmitry Orlov", email = "me@mosquito.su" }]
 keywords = [
@@ -81,7 +81,7 @@ default-groups = [
 ]
 
 [tool.hatch.build.targets.sdist]
-include = ["argclass"]
+include = ["argclass", "tests"]
 
 [tool.hatch.build.targets.wheel]
 include = ["argclass"]
@@ -117,4 +117,9 @@ strict_optional = true
 warn_redundant_casts = true
 warn_unused_configs = true
 warn_unused_ignores = false
-files = "argclass"
+files = ["argclass", "tests"]
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+disallow_incomplete_defs = false

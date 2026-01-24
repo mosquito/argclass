@@ -70,7 +70,7 @@ def test_current_subparsers():
         commit: Optional[CommitCommand] = CommitCommand()
         push: Optional[PushCommand] = PushCommand()
 
-    state = {}
+    state: dict = {}
 
     @singledispatch
     def handle_subparser(subparser: Any) -> None:
@@ -136,11 +136,13 @@ def test_nested_subparsers() -> None:
         ]
     )
 
+    assert args.sub is not None
     assert args.sub.val == "lol"
+    assert args.sub.subsub is not None
     assert args.sub.subsub.str_value == "kek"
     assert args.sub.subsub.group.value == 2
     with pytest.raises(AttributeError):
-        print(args.sub2.val)
+        print(args.sub2.val)  # type: ignore[union-attr]
 
 
 def test_call() -> None:
