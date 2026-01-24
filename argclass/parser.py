@@ -3,7 +3,7 @@
 import ast
 import os
 from abc import ABCMeta
-from argparse import Action, ArgumentError, ArgumentParser
+from argparse import Action, ArgumentParser
 from collections import defaultdict
 from enum import EnumMeta
 from pathlib import Path
@@ -30,6 +30,7 @@ from .defaults import (
     INIDefaultsParser,
     ValueKind,
 )
+from .exceptions import ArgumentDefinitionError, TypeConversionError
 from .secret import SecretString
 from .store import AbstractGroup, AbstractParser, TypedArgument
 from .types import Actions, Nargs
@@ -399,11 +400,41 @@ class Parser(AbstractParser, Base):
         ):
             kwargs["default"] = parse_bool(default)
 
+        # Safety net: env vars are read above, so default may have changed.
+        # If we now have a default, remove the required flag.
+        # Note: positional arguments don't support "required" in argparse.
+        # Check actual aliases (not argument.aliases which may be empty).
+        is_optional = any(a.startswith("-") for a in aliases)
+
+        # Positional arguments don't support "required" in argparse
+        if not is_optional and "required" in kwargs:
+            raise ArgumentDefinitionError(
+                "positional arguments do not support 'required' parameter",
+                field_name=dest,
+                aliases=tuple(aliases),
+                hint="Remove 'required' from positional argument, or add '--' "
+                "prefix to make it optional",
+            )
+
         default = kwargs.get("default")
-        if default is not None and default is not ...:
+        if (
+            is_optional
+            and default is not None
+            and default is not ...
+            and "required" in kwargs
+        ):
             kwargs["required"] = False
 
-        return dest, parser.add_argument(*aliases, **kwargs)
+        try:
+            return dest, parser.add_argument(*aliases, **kwargs)
+        except Exception as e:
+            raise ArgumentDefinitionError(
+                str(e),
+                field_name=dest,
+                aliases=tuple(aliases),
+                kwargs=kwargs,
+                hint="Check that argument options are compatible with argparse",
+            ) from e
 
     @staticmethod
     def get_cli_name(name: str) -> str:
@@ -556,7 +587,9 @@ class Parser(AbstractParser, Base):
                 default=default,
             )
 
-            if default is not None and default is not ... and argument.required:
+            # Check if this will be an optional argument (has -- prefix)
+            is_optional = any(a.startswith("-") for a in aliases)
+            if is_optional and argument.has_default and argument.required:
                 argument = argument.copy(required=False)
 
             dest, action = self._add_argument(parser, argument, name, *aliases)
@@ -624,6 +657,12 @@ class Parser(AbstractParser, Base):
                     default=default,
                     env_var=self.get_env_var(dest, argument),
                 )
+
+                # Check if this will be an optional argument (has -- prefix)
+                is_optional = any(a.startswith("-") for a in aliases)
+                if is_optional and argument.has_default and argument.required:
+                    argument = argument.copy(required=False)
+
                 dest, action = self._add_argument(
                     group_parser,
                     argument,
@@ -716,8 +755,13 @@ class Parser(AbstractParser, Base):
                         try:
                             parsed_value = argument.converter(parsed_value)
                         except Exception as e:
-                            msg = f"failed to convert {parsed_value!r}: {e}"
-                            raise ArgumentError(action, msg) from e
+                            raise TypeConversionError(
+                                f"converter {argument.converter!r} failed: {e}",
+                                field_name=name,
+                                value=parsed_value,
+                                hint="Check that the converter function handles "
+                                "this value type",
+                            ) from e
 
                 # Ensure current_subparsers is always a tuple, not None
                 if name == "current_subparsers" and parsed_value is None:

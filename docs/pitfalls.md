@@ -242,3 +242,153 @@ Use `cli.current_subparsers` to check which subcommand was selected, or
 implement `__call__` on each subcommand and call `cli()` to dispatch
 automatically to the selected command.
 :::
+
+---
+
+## Exception-Raising Patterns
+
+These patterns will raise specific argclass exceptions at parser definition
+or parsing time.
+
+### ComplexTypeError: Unsupported Union Types
+
+Union types like `str | int` cannot be automatically converted because argclass
+doesn't know which type to try first. You must provide an explicit converter.
+
+| Pattern | Result |
+|---------|--------|
+| `field: str \| int` | `ComplexTypeError` at definition time |
+| `field: str \| None` | OK — `None` is handled specially |
+| `field: list[str] \| None` | OK — `None` is handled specially |
+
+<!--- name: test_pitfall_complex_type --->
+```python
+import argclass
+
+# This works - Optional types are supported
+class WorkingParser(argclass.Parser):
+    name: str | None  # OK: Union with None
+
+parser = WorkingParser()
+parser.parse_args([])
+assert parser.name is None
+```
+
+To fix union types, provide an explicit converter:
+
+```python
+import argclass
+
+def flexible_int(value: str) -> int | str:
+    try:
+        return int(value)
+    except ValueError:
+        return value
+
+class Parser(argclass.Parser):
+    count: int | str = argclass.Argument(type=flexible_int, default=0)
+```
+
+### EnumValueError: Invalid Enum Defaults
+
+When using `EnumArgument`, the default must be a valid enum member or its
+string name. Providing an invalid default raises `EnumValueError`.
+
+<!--- name: test_pitfall_enum_valid --->
+```python
+import argclass
+from enum import Enum
+
+class Color(Enum):
+    RED = "red"
+    GREEN = "green"
+    BLUE = "blue"
+
+# Correct: default is a valid enum member name
+class Parser(argclass.Parser):
+    color: Color = argclass.EnumArgument(Color, default="RED")
+
+parser = Parser()
+parser.parse_args([])
+assert parser.color == Color.RED
+```
+
+### ArgumentDefinitionError: Conflicting Aliases
+
+If you define an alias that conflicts with another argument or a reserved
+argparse option, `ArgumentDefinitionError` is raised.
+
+<!--- name: test_pitfall_alias_ok --->
+```python
+import argclass
+
+# This works - no conflicts
+class Parser(argclass.Parser):
+    verbose: bool = argclass.Argument("-v", default=False)
+    output: str = argclass.Argument("-o", default="out.txt")
+
+parser = Parser()
+parser.parse_args(["-v", "-o", "result.txt"])
+assert parser.verbose is True
+assert parser.output == "result.txt"
+```
+
+### TypeConversionError: Converter Failures
+
+When a custom converter raises an exception, argclass wraps it in
+`TypeConversionError` with context about what value failed and the target type.
+
+<!--- name: test_pitfall_converter --->
+```python
+import argclass
+
+def positive_int(value: str) -> int:
+    num = int(value)
+    if num <= 0:
+        raise ValueError(f"{value} must be positive")
+    return num
+
+class Parser(argclass.Parser):
+    count: int = argclass.Argument(type=positive_int, default=1)
+
+parser = Parser()
+parser.parse_args(["--count", "5"])
+assert parser.count == 5
+```
+
+### ConfigurationError: Invalid Config Files
+
+When loading config files with `config_files` parameter, malformed files or
+type mismatches raise `ConfigurationError`.
+
+| Issue | Result |
+|-------|--------|
+| Malformed INI/JSON/TOML | `ConfigurationError` with file path |
+| Value doesn't match type | `ConfigurationError` with field and section |
+| Missing file | Silently ignored (unless `strict_config=True`) |
+
+<!--- name: test_pitfall_config_ok --->
+```python
+import argclass
+from pathlib import Path
+from tempfile import NamedTemporaryFile
+
+class Parser(argclass.Parser):
+    host: str = "localhost"
+    port: int = 8080
+
+# Create a valid config file
+with NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+    f.write('{"host": "example.com", "port": 9000}')
+    config_path = f.name
+
+parser = Parser(
+    config_files=[config_path],
+    config_parser_class=argclass.JSONDefaultsParser,
+)
+parser.parse_args([])
+assert parser.host == "example.com"
+assert parser.port == 9000
+
+Path(config_path).unlink()
+```

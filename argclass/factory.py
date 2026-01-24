@@ -17,6 +17,7 @@ from typing import (
 
 from argparse import Action
 
+from .exceptions import EnumValueError
 from .store import ConfigArgument, INIConfig, TypedArgument
 from .types import Actions, ConverterType, LogLevelEnum, Nargs, NargsType
 
@@ -281,6 +282,23 @@ def Argument(
                 required=required,
                 secret=secret,
             )
+        elif nargs == "?" or nargs == Nargs.ZERO_OR_ONE:
+            # nargs="?" needs special handling - creates TypedArgument directly
+            return TypedArgument(
+                action=action,
+                aliases=aliases,
+                choices=choices,
+                const=const,
+                converter=converter,
+                default=default,
+                env_var=env_var,
+                help=help,
+                metavar=metavar,
+                nargs=nargs,
+                required=required,
+                secret=secret,
+                type=type,
+            )
         else:
             return ArgumentSingle(
                 *aliases,
@@ -395,18 +413,23 @@ def EnumArgument(
         elif isinstance(default, str):
             # Validate string is a valid enum member name
             check_name = default.upper() if lowercase else default
-            if check_name not in [e.name for e in enum_class]:
-                valid = ", ".join(e.name for e in enum_class)
-                raise ValueError(
-                    f"Default {default!r} is not a valid {enum_class.__name__} "
-                    f"member. Valid values: {valid}"
+            valid_names = tuple(e.name for e in enum_class)
+            if check_name not in valid_names:
+                raise EnumValueError(
+                    f"default {default!r} is not a valid {enum_class.__name__} "
+                    f"member",
+                    enum_class=enum_class,
+                    valid_values=valid_names,
                 )
             # Convert string default to enum member
             default = enum_class[check_name]
         else:
-            raise TypeError(
-                f"Default must be {enum_class.__name__} member or string, "
-                f"got {type(default).__name__}"
+            raise EnumValueError(
+                f"default must be {enum_class.__name__} member or string, "
+                f"got {type(default).__name__}",
+                enum_class=enum_class,
+                valid_values=tuple(e.name for e in enum_class),
+                hint="Pass an enum member or its string name",
             )
 
     def converter(x: Any) -> Any:

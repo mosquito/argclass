@@ -17,6 +17,7 @@ from typing import (
     get_origin,
 )
 
+from .exceptions import ComplexTypeError
 from .types import (
     CONTAINER_TYPES,
     TEXT_TRUE_VALUES,
@@ -91,9 +92,7 @@ def _is_union_type(typespec: Any) -> bool:
     if typespec.__class__ == UnionClass:
         return True
     # PEP 604: float | None creates types.UnionType in Python 3.10+
-    if hasattr(types, "UnionType") and isinstance(typespec, types.UnionType):
-        return True
-    return False
+    return hasattr(types, "UnionType") and isinstance(typespec, types.UnionType)
 
 
 def unwrap_optional(typespec: Any) -> Optional[Any]:
@@ -104,9 +103,10 @@ def unwrap_optional(typespec: Any) -> Optional[Any]:
     union_args = [a for a in typespec.__args__ if a is not NoneType]
 
     if len(union_args) != 1:
-        raise TypeError(
-            "Complex types mustn't be used in short form. You have to "
-            "specify argclass.Argument with converter or type function.",
+        raise ComplexTypeError(
+            "Union types with multiple non-None members cannot be used directly",
+            typespec=typespec,
+            hint="Use argclass.Argument() with an explicit converter or type function",
         )
 
     return union_args[0]

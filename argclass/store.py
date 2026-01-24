@@ -157,6 +157,14 @@ class TypedArgument(ArgumentBase):
             return self.nargs > 1
         return True
 
+    @property
+    def has_default(self) -> bool:
+        """Check if the argument has a meaningful default value.
+
+        Returns False if default is None or Ellipsis (the "no default" sentinel).
+        """
+        return self.default is not None and self.default is not ...
+
 
 class ConfigArgument(TypedArgument):
     """Argument for configuration file loading."""

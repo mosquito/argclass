@@ -9,6 +9,8 @@ from enum import IntEnum
 from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping, Optional, Tuple, Union
 
+from .exceptions import ConfigurationError
+
 try:
     import tomllib
 
@@ -30,16 +32,17 @@ class ValueKind(IntEnum):
     BOOL = 2  # boolean value
 
 
-class UnexpectedConfigValue(ValueError):
+class UnexpectedConfigValue(ConfigurationError):
     """Config value doesn't match expected type."""
 
     def __init__(self, key: str, expected: ValueKind, value: Any):
         self.value = repr(value)
         self.expected = expected
-        self.key = key
+        self.key = key  # Backward compatibility alias
         super().__init__(
-            f"Config key '{key}' expected {expected.name!r}, "
-            f"got {type(value)!r}: {self.value}"
+            f"expected {expected.name}, got {type(value).__name__}: {self.value}",
+            field_name=key,
+            hint=f"Provide a value of type {expected.name}",
         )
 
 

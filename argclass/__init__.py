@@ -21,6 +21,14 @@ from .defaults import (
     UnexpectedConfigValue,
     ValueKind,
 )
+from .exceptions import (
+    ArgclassError,
+    ArgumentDefinitionError,
+    ComplexTypeError,
+    ConfigurationError,
+    EnumValueError,
+    TypeConversionError,
+)
 from .factory import (
     Argument,
     ArgumentSequence,
@@ -54,6 +62,14 @@ read_configs = read_ini_configs
 EnumType = EnumMeta
 
 __all__ = [
+    # Exceptions
+    "ArgclassError",
+    "ArgumentDefinitionError",
+    "ComplexTypeError",
+    "ConfigurationError",
+    "EnumValueError",
+    "TypeConversionError",
+    "UnexpectedConfigValue",
     # Types and enums
     "Actions",
     "Nargs",

@@ -3,7 +3,6 @@ import logging
 import os
 import re
 import uuid
-from argparse import ArgumentError
 from enum import IntEnum
 from typing import FrozenSet, List, Literal, Optional, Set, Tuple
 from unittest.mock import patch
@@ -866,25 +865,25 @@ def test_enum_without_default():
 
 
 def test_enum_invalid_default_type():
-    """Test EnumArgument raises TypeError for invalid default type."""
+    """Test EnumArgument raises EnumValueError for invalid default type."""
 
     class Options(IntEnum):
         ONE = 1
         TWO = 2
 
     # Invalid type (not enum member or string)
-    with pytest.raises(TypeError, match="must be .* member or string"):
+    with pytest.raises(argclass.EnumValueError, match="must be .* member or string"):
         argclass.EnumArgument(Options, default=123)
 
 
 def test_enum_invalid_string_default():
-    """Test EnumArgument raises ValueError for invalid string default."""
+    """Test EnumArgument raises EnumValueError for invalid string default."""
 
     class Options(IntEnum):
         ONE = 1
         TWO = 2
 
-    with pytest.raises(ValueError, match="not a valid .* member"):
+    with pytest.raises(argclass.EnumValueError, match="not a valid .* member"):
         argclass.EnumArgument(Options, default="INVALID")
 
 
@@ -932,7 +931,7 @@ def test_converter_exception_details():
         value: str = argclass.Argument(converter=bad_converter)
 
     parser = Parser()
-    with pytest.raises(ArgumentError) as exc_info:
+    with pytest.raises(argclass.TypeConversionError) as exc_info:
         parser.parse_args(["--value", "test"])
 
     error_msg = str(exc_info.value)
@@ -1825,7 +1824,7 @@ class TestUnwrapOptionalComplexTypes:
         from argclass.utils import unwrap_optional
         from typing import Union
 
-        with pytest.raises(TypeError, match="Complex types"):
+        with pytest.raises(argclass.ComplexTypeError, match="Union types"):
             unwrap_optional(Union[str, int, None])
 
 
@@ -2214,7 +2213,7 @@ class TestConfigNargsDefaults:
 
         parser = Parser(config_files=[config])
 
-        with pytest.raises((ValueError, SystemExit)):
+        with pytest.raises(argclass.UnexpectedConfigValue):
             parser.parse_args([])
 
     def test_config_string_for_set_fails(self, tmp_path):
@@ -2227,7 +2226,7 @@ class TestConfigNargsDefaults:
 
         parser = Parser(config_files=[config])
 
-        with pytest.raises((ValueError, SystemExit)):
+        with pytest.raises(argclass.UnexpectedConfigValue):
             parser.parse_args([])
 
 
