@@ -100,7 +100,7 @@ class TestEnumValueErrors:
             HIGH = 3
 
         with pytest.raises(argclass.EnumValueError) as exc_info:
-            argclass.EnumArgument(Priority, default=42)
+            argclass.EnumArgument(Priority, default=42)  # type: ignore[call-overload]
 
         error_msg = str(exc_info.value)
         assert "int" in error_msg
@@ -180,9 +180,7 @@ class TestTypeConversionErrors:
             return json.loads(value)
 
         class Parser(argclass.Parser):
-            config: dict = argclass.Argument(
-                converter=parse_json, default="{}"
-            )
+            config: dict = argclass.Argument(converter=parse_json, default="{}")
 
         parser = Parser()
         with pytest.raises(argclass.TypeConversionError) as exc_info:
@@ -225,7 +223,7 @@ class TestBoolFieldErrors:
         with pytest.raises(TypeError, match="yes"):
 
             class Parser(argclass.Parser):
-                flag: bool = "yes"  # String instead of bool
+                flag: bool = "yes"  # type: ignore[assignment]
 
     def test_bool_error_suggests_optional(self):
         """Bool error should mention Optional[bool] as alternative."""

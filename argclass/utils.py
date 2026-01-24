@@ -104,9 +104,11 @@ def unwrap_optional(typespec: Any) -> Optional[Any]:
 
     if len(union_args) != 1:
         raise ComplexTypeError(
-            "Union types with multiple non-None members cannot be used directly",
+            "Union types with multiple non-None members "
+            "cannot be used directly",
             typespec=typespec,
-            hint="Use argclass.Argument() with an explicit converter or type function",
+            hint="Use argclass.Argument() with an explicit "
+            "converter or type function",
         )
 
     return union_args[0]
@@ -135,9 +137,12 @@ def _unwrap_container_type(typespec: Any) -> Optional[Tuple[type, type]]:
     origin = get_origin(typespec)
     args = get_args(typespec)
 
+    # We know origin is not None because _is_container_type checks this
+    assert origin is not None
+
     if not args:
         # list without type parameter - use str as default
-        return (origin, str)  # type: ignore
+        return (origin, str)
 
     # For tuple, we handle specially - just use the first type for now
     # (full tuple handling would need nargs=N for Tuple[int, str, bool])
@@ -148,7 +153,7 @@ def _unwrap_container_type(typespec: Any) -> Optional[Tuple[type, type]]:
     if optional_inner is not None:
         element_type = optional_inner
 
-    return (origin, element_type)  # type: ignore
+    return (origin, element_type)
 
 
 def unwrap_literal(typespec: Any) -> Optional[Tuple[type, Tuple[Any, ...]]]:

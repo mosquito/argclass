@@ -1,6 +1,5 @@
 """Synthetic tests for exception formatting to achieve full coverage."""
 
-import pytest
 from argclass.exceptions import (
     ArgclassError,
     ArgumentDefinitionError,
@@ -56,7 +55,9 @@ class TestArgumentDefinitionErrorFormatting:
 
     def test_message_with_field_name(self):
         """Message with field_name."""
-        exc = ArgumentDefinitionError("conflicting option", field_name="verbose")
+        exc = ArgumentDefinitionError(
+            "conflicting option", field_name="verbose"
+        )
         assert str(exc) == "[verbose] conflicting option"
 
     def test_message_with_aliases(self):
@@ -135,13 +136,17 @@ class TestTypeConversionErrorFormatting:
 
     def test_message_with_target_type_no_name(self):
         """Target type without __name__ uses str()."""
+
         # Use an object instance that doesn't have __name__
         class CustomType:
             def __str__(self):
                 return "CustomTypeStr"
 
         target = CustomType()  # Instance doesn't have __name__
-        exc = TypeConversionError("conversion failed", target_type=target)
+        exc = TypeConversionError(
+            "conversion failed",
+            target_type=target,  # type: ignore[arg-type]
+        )
         assert "expected type: CustomTypeStr" in str(exc)
 
     def test_message_with_hint(self):
@@ -176,7 +181,7 @@ class TestTypeConversionErrorFormatting:
         assert exc.message == "msg"
         assert exc.field_name == "f"
         assert exc.value == "v"
-        assert exc.target_type == str
+        assert exc.target_type is str
         assert exc.hint == "h"
 
 

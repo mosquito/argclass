@@ -759,8 +759,8 @@ class Parser(AbstractParser, Base):
                                 f"converter {argument.converter!r} failed: {e}",
                                 field_name=name,
                                 value=parsed_value,
-                                hint="Check that the converter function handles "
-                                "this value type",
+                                hint="Check that the converter function "
+                                "handles this value type",
                             ) from e
 
                 # Ensure current_subparsers is always a tuple, not None

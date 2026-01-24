@@ -1,4 +1,5 @@
-"""Tests for edge cases in positional arguments, required flag handling, and exceptions."""
+"""Tests for edge cases in positional arguments, required flag handling,
+and exceptions."""
 
 import pytest
 from typing import Optional, List
@@ -85,10 +86,13 @@ class TestIsPositionalProperty:
 
 
 class TestPositionalArgumentWithRequired:
-    """Test positional arguments with required flag (argparse doesn't support this)."""
+    """Test positional arguments with required flag
+    (argparse doesn't support this)."""
 
     def test_positional_with_required_true_raises(self):
-        """Positional args with required=True should raise ArgumentDefinitionError."""
+        """Positional args with required=True should raise
+        ArgumentDefinitionError."""
+
         class Parser(argclass.Parser):
             name: str = argclass.Argument("name", required=True)
 
@@ -100,6 +104,7 @@ class TestPositionalArgumentWithRequired:
 
     def test_positional_with_required_false_raises(self):
         """Positional args with required=False should also raise error."""
+
         class Parser(argclass.Parser):
             name: str = argclass.Argument("name", required=False)
 
@@ -114,6 +119,7 @@ class TestPositionalArgumentWithNargs:
 
     def test_positional_nargs_question_without_value(self):
         """Positional with nargs='?' uses None when not provided."""
+
         class Parser(argclass.Parser):
             name: Optional[str] = argclass.Argument("name", nargs="?")
 
@@ -123,6 +129,7 @@ class TestPositionalArgumentWithNargs:
 
     def test_positional_nargs_question_with_value(self):
         """Positional with nargs='?' uses provided value."""
+
         class Parser(argclass.Parser):
             name: Optional[str] = argclass.Argument("name", nargs="?")
 
@@ -131,7 +138,9 @@ class TestPositionalArgumentWithNargs:
         assert parser.name == "hello"
 
     def test_positional_nargs_question_with_default(self):
-        """Positional with nargs='?' and default uses default when not provided."""
+        """Positional with nargs='?' and default uses default
+        when not provided."""
+
         class Parser(argclass.Parser):
             name: str = argclass.Argument("name", nargs="?", default="world")
 
@@ -141,6 +150,7 @@ class TestPositionalArgumentWithNargs:
 
     def test_positional_nargs_star_without_values(self):
         """Positional with nargs='*' returns empty list when not provided."""
+
         class Parser(argclass.Parser):
             files: List[str] = argclass.Argument("files", nargs="*")
 
@@ -150,6 +160,7 @@ class TestPositionalArgumentWithNargs:
 
     def test_positional_nargs_star_with_values(self):
         """Positional with nargs='*' collects all values."""
+
         class Parser(argclass.Parser):
             files: List[str] = argclass.Argument("files", nargs="*")
 
@@ -159,6 +170,7 @@ class TestPositionalArgumentWithNargs:
 
     def test_positional_nargs_plus_requires_value(self):
         """Positional with nargs='+' requires at least one value."""
+
         class Parser(argclass.Parser):
             files: List[str] = argclass.Argument("files", nargs="+")
 
@@ -168,6 +180,7 @@ class TestPositionalArgumentWithNargs:
 
     def test_positional_nargs_plus_with_values(self):
         """Positional with nargs='+' collects all values."""
+
         class Parser(argclass.Parser):
             files: List[str] = argclass.Argument("files", nargs="+")
 
@@ -177,6 +190,7 @@ class TestPositionalArgumentWithNargs:
 
     def test_positional_nargs_fixed(self):
         """Positional with nargs=2 requires exactly 2 values."""
+
         class Parser(argclass.Parser):
             coords: List[int] = argclass.Argument("coords", type=int, nargs=2)
 
@@ -186,6 +200,7 @@ class TestPositionalArgumentWithNargs:
 
     def test_positional_nargs_fixed_wrong_count(self):
         """Positional with nargs=2 fails with wrong count."""
+
         class Parser(argclass.Parser):
             coords: List[int] = argclass.Argument("coords", type=int, nargs=2)
 
@@ -199,6 +214,7 @@ class TestPositionalWithDefault:
 
     def test_positional_with_default_is_optional(self):
         """Positional with default can be omitted."""
+
         class Parser(argclass.Parser):
             name: str = argclass.Argument("name", nargs="?", default="world")
 
@@ -208,6 +224,7 @@ class TestPositionalWithDefault:
 
     def test_positional_with_default_can_be_overridden(self):
         """Positional with default can still accept values."""
+
         class Parser(argclass.Parser):
             name: str = argclass.Argument("name", nargs="?", default="world")
 
@@ -244,6 +261,7 @@ class TestRequiredFlagAutoRemoval:
 
     def test_required_removed_with_zero_default(self):
         """required=True is auto-removed when default=0."""
+
         class Parser(argclass.Parser):
             count: int = argclass.Argument(default=0, required=True)
 
@@ -253,6 +271,7 @@ class TestRequiredFlagAutoRemoval:
 
     def test_required_removed_with_empty_string_default(self):
         """required=True is auto-removed when default=''."""
+
         class Parser(argclass.Parser):
             name: str = argclass.Argument(default="", required=True)
 
@@ -292,6 +311,7 @@ class TestGroupRequiredRemoval:
 
     def test_group_member_required_removed_with_default(self):
         """Group member required=True is removed when default provided."""
+
         class ServerGroup(argclass.Group):
             port: int = argclass.Argument(required=True)
 
@@ -329,6 +349,7 @@ class TestOptionalNargsQuestionWithConst:
 
     def test_flag_not_present_uses_default(self):
         """When flag is not provided, default value is used."""
+
         class Parser(argclass.Parser):
             output: Optional[str] = argclass.Argument(
                 "--output",
@@ -343,6 +364,7 @@ class TestOptionalNargsQuestionWithConst:
 
     def test_flag_present_without_value_uses_const(self):
         """When flag is present without value, const is used."""
+
         class Parser(argclass.Parser):
             output: Optional[str] = argclass.Argument(
                 "--output",
@@ -357,6 +379,7 @@ class TestOptionalNargsQuestionWithConst:
 
     def test_flag_present_with_value_uses_value(self):
         """When flag is present with value, that value is used."""
+
         class Parser(argclass.Parser):
             output: Optional[str] = argclass.Argument(
                 "--output",
@@ -371,6 +394,7 @@ class TestOptionalNargsQuestionWithConst:
 
     def test_flag_with_equals_syntax(self):
         """Flag with --flag=value syntax works correctly."""
+
         class Parser(argclass.Parser):
             output: Optional[str] = argclass.Argument(
                 "--output",
@@ -385,9 +409,11 @@ class TestOptionalNargsQuestionWithConst:
 
     def test_short_flag_without_value_uses_const(self):
         """Short flag without value uses const."""
+
         class Parser(argclass.Parser):
             output: Optional[str] = argclass.Argument(
-                "-o", "--output",
+                "-o",
+                "--output",
                 nargs="?",
                 const="stdout",
                 default="file.txt",
@@ -399,6 +425,7 @@ class TestOptionalNargsQuestionWithConst:
 
     def test_flag_followed_by_another_flag_uses_const(self):
         """Flag followed by another flag uses const for first flag."""
+
         class Parser(argclass.Parser):
             output: Optional[str] = argclass.Argument(
                 "--output",
@@ -415,9 +442,9 @@ class TestOptionalNargsQuestionWithConst:
 
     def test_nargs_question_with_type_converter(self):
         """Type converter is applied to the value."""
+
         class Parser(argclass.Parser):
-            # Use Optional[str] to avoid argclass type inference overriding nargs
-            count: Optional[str] = argclass.Argument(
+            count: int = argclass.Argument(
                 "--count",
                 nargs="?",
                 type=int,
@@ -432,9 +459,9 @@ class TestOptionalNargsQuestionWithConst:
 
     def test_nargs_question_const_used_when_flag_alone(self):
         """Const value is used when flag is present without value."""
+
         class Parser(argclass.Parser):
-            # Use Optional[str] to avoid argclass type inference overriding nargs
-            count: Optional[str] = argclass.Argument(
+            count: int = argclass.Argument(
                 "--count",
                 nargs="?",
                 type=int,
@@ -553,6 +580,7 @@ class TestNargsOneVsNone:
 
     def test_nargs_none_returns_scalar(self):
         """Without nargs, single value is returned as scalar."""
+
         class Parser(argclass.Parser):
             value: str = argclass.Argument("--value")
 
@@ -563,6 +591,7 @@ class TestNargsOneVsNone:
 
     def test_nargs_one_returns_list(self):
         """With nargs=1, single value is returned as list."""
+
         class Parser(argclass.Parser):
             value: List[str] = argclass.Argument("--value", nargs=1)
 
@@ -572,9 +601,13 @@ class TestNargsOneVsNone:
         assert isinstance(parser.value, list)
 
     def test_nargs_one_with_default_scalar(self):
-        """nargs=1 with scalar default - default used as-is when not provided."""
+        """nargs=1 with scalar default - default used as-is
+        when not provided."""
+
         class Parser(argclass.Parser):
-            value: List[str] = argclass.Argument("--value", nargs=1, default=["default"])
+            value: List[str] = argclass.Argument(
+                "--value", nargs=1, default=["default"]
+            )
 
         parser = Parser()
         parser.parse_args([])
@@ -607,7 +640,9 @@ class TestNargsWithConfig:
         config.write_text('[DEFAULT]\nfiles = ["a.txt", "b.txt"]\n')
 
         class Parser(argclass.Parser):
-            files: List[str] = argclass.Argument("--files", nargs="*", default=[])
+            files: List[str] = argclass.Argument(
+                "--files", nargs="*", default=[]
+            )
 
         parser = Parser(config_files=[str(config)])
         parser.parse_args([])
@@ -631,7 +666,9 @@ class TestNargsWithConfig:
         config.write_text('[DEFAULT]\nfiles = ["from_config.txt"]\n')
 
         class Parser(argclass.Parser):
-            files: List[str] = argclass.Argument("--files", nargs="*", default=[])
+            files: List[str] = argclass.Argument(
+                "--files", nargs="*", default=[]
+            )
 
         parser = Parser(config_files=[str(config)])
         parser.parse_args(["--files", "from_cli.txt"])

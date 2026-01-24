@@ -6,6 +6,7 @@ from typing import Any, Callable, Tuple, Union, Literal
 # Type aliases
 ConverterType = Callable[[Any], Any]
 NargsType = Union[int, str, "Nargs", Literal["?", "*", "+"]]
+MetavarType = Union[str, Tuple[str, ...]]
 NoneType = type(None)
 UnionClass = Union[None, int].__class__
 

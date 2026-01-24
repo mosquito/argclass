@@ -147,7 +147,9 @@ class TypeConversionError(ArgclassError):
         if self.value is not None:
             parts.append(f"(got {self.value!r})")
         if self.target_type is not None:
-            type_name = getattr(self.target_type, "__name__", str(self.target_type))
+            type_name = getattr(
+                self.target_type, "__name__", str(self.target_type)
+            )
             parts.append(f"expected type: {type_name}")
         if self.hint:
             parts.append(f"Hint: {self.hint}")

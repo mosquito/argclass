@@ -19,7 +19,7 @@ import json
 import logging
 from enum import IntEnum
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
 from unittest.mock import patch
 
 import pytest
@@ -290,7 +290,7 @@ class InfractlParser(argclass.Parser):
 
 
 @pytest.fixture
-def ini_config(tmp_path):
+def ini_config(tmp_path: Path) -> Path:
     """Create test INI config file."""
     config = tmp_path / "infractl.ini"
     config.write_text(
@@ -315,7 +315,7 @@ format = json
 
 
 @pytest.fixture
-def json_config(tmp_path):
+def json_config(tmp_path: Path) -> Path:
     """Create test JSON config file."""
     config = tmp_path / "infractl.json"
     config.write_text(
@@ -351,7 +351,7 @@ class TestParserConstruction:
         assert "arguments" in r
         assert "subparsers" in r
 
-    def test_help_text_generation(self, capsys):
+    def test_help_text_generation(self, capsys: pytest.CaptureFixture[str]):
         """Test help text is generated correctly."""
         parser = InfractlParser()
         with pytest.raises(SystemExit):
@@ -368,9 +368,9 @@ class TestParserConstruction:
         parser = InfractlParser()
         parser.parse_args(["server", "start"])
         assert parser.server is not None
-        assert parser.server.start is not None
+        assert parser.server.start is not None  # type: ignore[union-attr]
 
-    def test_nested_subparser_help(self, capsys):
+    def test_nested_subparser_help(self, capsys: pytest.CaptureFixture[str]):
         """Test nested subparser help text."""
         parser = ServerCommand()
         with pytest.raises(SystemExit):
@@ -392,7 +392,9 @@ class TestReusableGroups:
         assert parser.connection.timeout == 30
         assert parser.connection.ssl is False
 
-    def test_group_prefix_in_option_names(self, capsys):
+    def test_group_prefix_in_option_names(
+        self, capsys: pytest.CaptureFixture[str]
+    ):
         """Test group prefix appears in option names."""
         parser = ServerCommand()
         with pytest.raises(SystemExit):
@@ -449,9 +451,7 @@ class TestReusableGroups:
     def test_output_group_multiple_flags(self):
         """Test OutputGroup with multiple flags."""
         parser = UserCommand()
-        parser.parse_args(
-            ["--output-format=yaml", "--output-verbose", "list"]
-        )
+        parser.parse_args(["--output-format=yaml", "--output-verbose", "list"])
         assert parser.output.format == "yaml"
         assert parser.output.verbose is True
         assert parser.output.quiet is False
@@ -495,18 +495,18 @@ class TestSubparsers:
         """Test nested subparsers (e.g., server start)."""
         parser = InfractlParser()
         parser.parse_args(["server", "start", "--daemon", "--workers=8"])
-        assert parser.server.start.daemon is True
-        assert parser.server.start.workers == 8
+        assert parser.server.start.daemon is True  # type: ignore[union-attr]
+        assert parser.server.start.workers == 8  # type: ignore[union-attr]
 
     def test_current_subparser_property(self):
-        """Test current_subparser property returns deepest selected subparser."""
+        """Test current_subparser returns deepest selected subparser."""
         parser = InfractlParser()
         parser.parse_args(["server", "start"])
         # current_subparser returns the deepest selected subparser
-        assert parser.current_subparser is parser.server.start
+        assert parser.current_subparser is parser.server.start  # type: ignore[union-attr]
 
         # Check nested current_subparser
-        assert parser.server.current_subparser is parser.server.start
+        assert parser.server.current_subparser is parser.server.start  # type: ignore[union-attr]
 
     def test_current_subparser_none_when_not_used(self):
         """Test current_subparser is None when no subparser used."""
@@ -527,55 +527,58 @@ class TestSubparsers:
                 "orders",
             ]
         )
-        assert parser.database.backup.output == Path("/tmp/backup.sql")
-        assert parser.database.backup.compress is True  # Default is True
-        assert parser.database.backup.tables == ["users", "orders"]
+        db = parser.database
+        assert db.backup.output == Path("/tmp/backup.sql")  # type: ignore[union-attr]
+        assert db.backup.compress is True  # type: ignore[union-attr]
+        assert db.backup.tables == ["users", "orders"]  # type: ignore[union-attr]
 
     def test_unselected_subparser_raises_attribute_error(self):
-        """Test accessing unselected subparser's attributes raises AttributeError."""
+        """Test accessing unselected subparser's attrs raises error."""
         parser = InfractlParser()
         parser.parse_args(["server", "start"])
         # Accessing nested subparser attribute that wasn't selected
         with pytest.raises(AttributeError):
-            _ = parser.server.stop.force  # stop was not selected, start was
+            _ = parser.server.stop.force  # type: ignore[union-attr]
 
     def test_all_server_nested_commands(self):
         """Test all nested server commands work."""
         parser = ServerCommand()
 
         parser.parse_args(["start", "--daemon"])
-        assert parser.start.daemon is True
+        assert parser.start.daemon is True  # type: ignore[union-attr]
 
         parser = ServerCommand()
         parser.parse_args(["stop", "--force"])
-        assert parser.stop.force is True
+        assert parser.stop.force is True  # type: ignore[union-attr]
 
         parser = ServerCommand()
         parser.parse_args(["status", "--detailed"])
-        assert parser.status.detailed is True
+        assert parser.status.detailed is True  # type: ignore[union-attr]
 
         parser = ServerCommand()
         parser.parse_args(["restart", "--graceful", "--delay=10"])
-        assert parser.restart.graceful is False  # --graceful toggles default True
-        assert parser.restart.delay == 10
+        # --graceful toggles default True
+        assert parser.restart.graceful is False  # type: ignore[union-attr]
+        assert parser.restart.delay == 10  # type: ignore[union-attr]
 
     def test_all_database_nested_commands(self):
         """Test all nested database commands work."""
         parser = DatabaseCommand()
         parser.parse_args(["backup", "--compress"])
-        assert parser.backup.compress is False  # --compress toggles default True
+        # --compress toggles default True
+        assert parser.backup.compress is False  # type: ignore[union-attr]
 
         parser = DatabaseCommand()
         parser.parse_args(
             ["restore", "--input-file=/tmp/backup.sql", "--drop-existing"]
         )
-        assert parser.restore.input_file == Path("/tmp/backup.sql")
-        assert parser.restore.drop_existing is True
+        assert parser.restore.input_file == Path("/tmp/backup.sql")  # type: ignore[union-attr]
+        assert parser.restore.drop_existing is True  # type: ignore[union-attr]
 
         parser = DatabaseCommand()
         parser.parse_args(["migrate", "--target=v2.0", "--dry-run"])
-        assert parser.migrate.target == "v2.0"
-        assert parser.migrate.dry_run is True
+        assert parser.migrate.target == "v2.0"  # type: ignore[union-attr]
+        assert parser.migrate.dry_run is True  # type: ignore[union-attr]
 
     def test_all_user_nested_commands(self):
         """Test all nested user commands work."""
@@ -591,35 +594,35 @@ class TestSubparsers:
                 "admins",
             ]
         )
-        assert parser.create.username == "john"
-        assert parser.create.email == "john@example.com"
-        assert parser.create.admin is True
-        assert parser.create.groups == ["developers", "admins"]
+        assert parser.create.username == "john"  # type: ignore[union-attr]
+        assert parser.create.email == "john@example.com"  # type: ignore[union-attr]
+        assert parser.create.admin is True  # type: ignore[union-attr]
+        assert parser.create.groups == ["developers", "admins"]  # type: ignore[union-attr]
 
         parser = UserCommand()
         parser.parse_args(["delete", "--username=john", "--force"])
-        assert parser.delete.username == "john"
-        assert parser.delete.force is True
+        assert parser.delete.username == "john"  # type: ignore[union-attr]
+        assert parser.delete.force is True  # type: ignore[union-attr]
 
         parser = UserCommand()
         parser.parse_args(["list", "--filter=admin", "--limit=50"])
-        assert parser.list.filter == "admin"
-        assert parser.list.limit == 50
+        assert parser.list.filter == "admin"  # type: ignore[union-attr]
+        assert parser.list.limit == 50  # type: ignore[union-attr]
 
     def test_all_config_nested_commands(self):
         """Test all nested config commands work."""
         parser = ConfigCommand()
         parser.parse_args(["show", "--section=database"])
-        assert parser.show.section == "database"
+        assert parser.show.section == "database"  # type: ignore[union-attr]
 
         parser = ConfigCommand()
         parser.parse_args(["set", "--key=debug", "--value=true"])
-        assert parser.set.key == "debug"
-        assert parser.set.value == "true"
+        assert parser.set.key == "debug"  # type: ignore[union-attr]
+        assert parser.set.value == "true"  # type: ignore[union-attr]
 
         parser = ConfigCommand()
         parser.parse_args(["get", "--key=timeout"])
-        assert parser.get.key == "timeout"
+        assert parser.get.key == "timeout"  # type: ignore[union-attr]
 
     def test_deep_nesting_chain(self):
         """Test parser chain with deep nesting."""
@@ -627,9 +630,9 @@ class TestSubparsers:
         parser.parse_args(["server", "start"])
 
         # Get chain from deepest parser
-        chain = list(parser.server.start._get_chain())
+        chain = list(parser.server.start._get_chain())  # type: ignore[union-attr]
         assert len(chain) == 3
-        assert chain[0] is parser.server.start
+        assert chain[0] is parser.server.start  # type: ignore[union-attr]
         assert chain[1] is parser.server
         assert chain[2] is parser
 
@@ -643,7 +646,7 @@ class TestConfigurationPriority:
         parser.parse_args(["start"])
         assert parser.connection.host == "localhost"
 
-    def test_config_overrides_default(self, ini_config):
+    def test_config_overrides_default(self, ini_config: Path):
         """Test config file overrides default value."""
 
         class Parser(argclass.Parser):
@@ -662,7 +665,9 @@ class TestConfigurationPriority:
         parser.parse_args([])
         assert parser.host == "config.example.com"
 
-    def test_env_overrides_config(self, tmp_path, monkeypatch):
+    def test_env_overrides_config(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
         """Test env var overrides config file."""
         config_file = tmp_path / "config.ini"
         config_file.write_text("[DEFAULT]\nhost = config.example.com\n")
@@ -672,13 +677,13 @@ class TestConfigurationPriority:
         class Parser(argclass.Parser):
             host: str = "localhost"
 
-        parser = Parser(
-            config_files=[config_file], auto_env_var_prefix="TEST_"
-        )
+        parser = Parser(config_files=[config_file], auto_env_var_prefix="TEST_")
         parser.parse_args([])
         assert parser.host == "env.example.com"
 
-    def test_cli_overrides_env(self, tmp_path, monkeypatch):
+    def test_cli_overrides_env(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
         """Test CLI argument overrides env var."""
         config_file = tmp_path / "config.ini"
         config_file.write_text("[DEFAULT]\nhost = config.example.com\n")
@@ -688,13 +693,13 @@ class TestConfigurationPriority:
         class Parser(argclass.Parser):
             host: str = "localhost"
 
-        parser = Parser(
-            config_files=[config_file], auto_env_var_prefix="TEST_"
-        )
+        parser = Parser(config_files=[config_file], auto_env_var_prefix="TEST_")
         parser.parse_args(["--host=cli.example.com"])
         assert parser.host == "cli.example.com"
 
-    def test_full_priority_chain(self, tmp_path, monkeypatch):
+    def test_full_priority_chain(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
         """Test full priority chain: Default < Config < Env < CLI."""
         # Create config file
         config_file = tmp_path / "config.ini"
@@ -716,17 +721,17 @@ class TestConfigurationPriority:
             env_only: str = "default"
             cli_only: str = "default"
 
-        parser = Parser(
-            config_files=[config_file], auto_env_var_prefix="TEST_"
-        )
+        parser = Parser(config_files=[config_file], auto_env_var_prefix="TEST_")
         parser.parse_args(["--cli-only=cli"])
 
         assert parser.default_only == "config"  # config overrides default
-        assert parser.config_only == "config"   # config is highest
-        assert parser.env_only == "env"         # env overrides config
-        assert parser.cli_only == "cli"         # CLI overrides env
+        assert parser.config_only == "config"  # config is highest
+        assert parser.env_only == "env"  # env overrides config
+        assert parser.cli_only == "cli"  # CLI overrides env
 
-    def test_priority_with_groups(self, tmp_path, monkeypatch):
+    def test_priority_with_groups(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
         """Test priority chain with groups."""
         config_file = tmp_path / "config.ini"
         config_file.write_text("[connection]\nhost = config.example.com\n")
@@ -736,13 +741,13 @@ class TestConfigurationPriority:
         class Parser(argclass.Parser):
             connection: ConnectionGroup = ConnectionGroup()
 
-        parser = Parser(
-            config_files=[config_file], auto_env_var_prefix="TEST_"
-        )
+        parser = Parser(config_files=[config_file], auto_env_var_prefix="TEST_")
         parser.parse_args(["--connection-host=cli.example.com"])
         assert parser.connection.host == "cli.example.com"
 
-    def test_partial_override_in_priority(self, tmp_path, monkeypatch):
+    def test_partial_override_in_priority(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
         """Test partial overrides in priority chain."""
         config_file = tmp_path / "config.ini"
         config_file.write_text(
@@ -756,16 +761,16 @@ class TestConfigurationPriority:
             host: str = "localhost"
             port: int = 8080
 
-        parser = Parser(
-            config_files=[config_file], auto_env_var_prefix="TEST_"
-        )
+        parser = Parser(config_files=[config_file], auto_env_var_prefix="TEST_")
         parser.parse_args([])
 
         # host from env, port from config
         assert parser.host == "env.example.com"
         assert parser.port == 9000
 
-    def test_bool_priority_chain(self, tmp_path, monkeypatch):
+    def test_bool_priority_chain(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
         """Test bool type through priority chain."""
         config_file = tmp_path / "config.ini"
         config_file.write_text("[DEFAULT]\ndebug = true\n")
@@ -780,9 +785,7 @@ class TestConfigurationPriority:
 
         # Env should override config
         monkeypatch.setenv("TEST_DEBUG", "false")
-        parser = Parser(
-            config_files=[config_file], auto_env_var_prefix="TEST_"
-        )
+        parser = Parser(config_files=[config_file], auto_env_var_prefix="TEST_")
         parser.parse_args([])
         assert parser.debug is False
 
@@ -790,7 +793,7 @@ class TestConfigurationPriority:
 class TestSecretArguments:
     """Test secret argument handling."""
 
-    def test_secret_masking_in_repr(self, monkeypatch):
+    def test_secret_masking_in_repr(self, monkeypatch: pytest.MonkeyPatch):
         """Test secret values are masked in repr."""
         monkeypatch.setenv("INFRACTL_API_KEY", "super-secret-key")
 
@@ -800,7 +803,7 @@ class TestSecretArguments:
         # repr should show masked value
         assert repr(parser.api_key) == repr(argclass.SecretString.PLACEHOLDER)
 
-    def test_secret_value_accessible(self, monkeypatch):
+    def test_secret_value_accessible(self, monkeypatch: pytest.MonkeyPatch):
         """Test secret actual value is accessible."""
         monkeypatch.setenv("INFRACTL_API_KEY", "super-secret-key")
 
@@ -810,7 +813,7 @@ class TestSecretArguments:
         # Actual value should be accessible via str.__str__
         assert str.__str__(parser.api_key) == "super-secret-key"
 
-    def test_secret_from_env_var(self, monkeypatch):
+    def test_secret_from_env_var(self, monkeypatch: pytest.MonkeyPatch):
         """Test secret value from environment variable."""
         monkeypatch.setenv("INFRACTL_API_KEY", "env-api-key")
 
@@ -826,7 +829,7 @@ class TestSecretArguments:
 
         assert str.__str__(parser.api_key) == "cli-api-key"
 
-    def test_sanitize_env_removes_secret(self, monkeypatch):
+    def test_sanitize_env_removes_secret(self, monkeypatch: pytest.MonkeyPatch):
         """Test sanitize_env removes secret env vars."""
         with patch("os.environ", new={}):
             import os
@@ -843,7 +846,11 @@ class TestSecretArguments:
             parser.sanitize_env(only_secrets=True)
             assert os.environ.get("TEST_SECRET") is None
 
-    def test_secret_not_in_help(self, capsys, monkeypatch):
+    def test_secret_not_in_help(
+        self,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ):
         """Test secret values don't appear in help."""
         monkeypatch.setenv("INFRACTL_API_KEY", "should-not-appear")
 
@@ -945,7 +952,7 @@ class TestNargsVariations:
         """Test nargs with converter to transform result."""
 
         class Parser(argclass.Parser):
-            unique_tags: frozenset = argclass.Argument(
+            unique_tags: frozenset = argclass.Argument(  # type: ignore[type-arg]
                 nargs="+",
                 type=str,
                 converter=frozenset,
@@ -960,7 +967,9 @@ class TestNargsVariations:
 
         class TargetsGroup(argclass.Group):
             hosts: List[str] = argclass.Argument(nargs="+")
-            ports: List[int] = argclass.Argument(nargs="*", type=int, default=[])
+            ports: List[int] = argclass.Argument(
+                nargs="*", type=int, default=[]
+            )
 
         class Parser(argclass.Parser):
             targets = TargetsGroup()
@@ -1003,7 +1012,7 @@ class TestNargsVariations:
         """Test database backup tables with nargs='*'."""
         parser = DatabaseCommand()
         parser.parse_args(["backup", "--tables", "users", "orders", "products"])
-        assert parser.backup.tables == ["users", "orders", "products"]
+        assert parser.backup.tables == ["users", "orders", "products"]  # type: ignore[union-attr]
 
     def test_user_create_groups_nargs(self):
         """Test user create groups with nargs='*'."""
@@ -1018,7 +1027,7 @@ class TestNargsVariations:
                 "users",
             ]
         )
-        assert parser.create.groups == ["admin", "users"]
+        assert parser.create.groups == ["admin", "users"]  # type: ignore[union-attr]
 
 
 class TestTypeConversion:
@@ -1028,8 +1037,8 @@ class TestTypeConversion:
         """Test Path type conversion."""
         parser = DatabaseCommand()
         parser.parse_args(["backup", "--output=/var/backups/db.sql"])
-        assert parser.backup.output == Path("/var/backups/db.sql")
-        assert isinstance(parser.backup.output, Path)
+        assert parser.backup.output == Path("/var/backups/db.sql")  # type: ignore[union-attr]
+        assert isinstance(parser.backup.output, Path)  # type: ignore[union-attr]
 
     def test_custom_type_converter(self):
         """Test custom type converter function."""
@@ -1072,20 +1081,21 @@ class TestTypeConversion:
         """Test bool conversion from CLI flags."""
         parser = ServerCommand()
         parser.parse_args(["start", "--daemon"])
-        assert parser.start.daemon is True
+        assert parser.start.daemon is True  # type: ignore[union-attr]
 
     def test_bool_default_true_toggled(self):
         """Test bool with default=True toggled by flag."""
         parser = ServerCommand()
         parser.parse_args(["restart", "--graceful"])
-        assert parser.restart.graceful is False  # Toggled from True
+        # Toggled from True
+        assert parser.restart.graceful is False  # type: ignore[union-attr]
 
     def test_int_type_conversion(self):
         """Test int type conversion."""
         parser = ServerCommand()
         parser.parse_args(["start", "--workers=16"])
-        assert parser.start.workers == 16
-        assert isinstance(parser.start.workers, int)
+        assert parser.start.workers == 16  # type: ignore[union-attr]
+        assert isinstance(parser.start.workers, int)  # type: ignore[union-attr]
 
     def test_float_type_conversion(self):
         """Test float type conversion."""
@@ -1098,10 +1108,12 @@ class TestTypeConversion:
 class TestConfigFiles:
     """Test configuration file handling."""
 
-    def test_ini_config_loading(self, tmp_path):
+    def test_ini_config_loading(self, tmp_path: Path):
         """Test INI config file loading."""
         config_file = tmp_path / "config.ini"
-        config_file.write_text("[DEFAULT]\nhost = ini.example.com\nport = 9000\n")
+        config_file.write_text(
+            "[DEFAULT]\nhost = ini.example.com\nport = 9000\n"
+        )
 
         class Parser(argclass.Parser):
             host: str = "localhost"
@@ -1113,7 +1125,7 @@ class TestConfigFiles:
         assert parser.host == "ini.example.com"
         assert parser.port == 9000
 
-    def test_json_config_loading(self, tmp_path):
+    def test_json_config_loading(self, tmp_path: Path):
         """Test JSON config file loading."""
         config_file = tmp_path / "config.json"
         config_file.write_text('{"host": "json.example.com", "port": 9000}')
@@ -1131,10 +1143,12 @@ class TestConfigFiles:
         assert parser.host == "json.example.com"
         assert parser.port == 9000
 
-    def test_multiple_config_files_merge(self, tmp_path):
+    def test_multiple_config_files_merge(self, tmp_path: Path):
         """Test multiple config files are merged correctly."""
         global_config = tmp_path / "global.ini"
-        global_config.write_text("[DEFAULT]\nhost = global.com\nport = 8080\ndebug = false\n")
+        global_config.write_text(
+            "[DEFAULT]\nhost = global.com\nport = 8080\ndebug = false\n"
+        )
 
         user_config = tmp_path / "user.ini"
         user_config.write_text("[DEFAULT]\nhost = user.com\ndebug = true\n")
@@ -1154,14 +1168,11 @@ class TestConfigFiles:
         # Overridden by user config
         assert parser.debug is True
 
-    def test_config_with_groups(self, tmp_path):
+    def test_config_with_groups(self, tmp_path: Path):
         """Test config file with group sections."""
         config_file = tmp_path / "config.ini"
         config_file.write_text(
-            "[connection]\n"
-            "host = config.example.com\n"
-            "port = 9000\n"
-            "ssl = true\n"
+            "[connection]\nhost = config.example.com\nport = 9000\nssl = true\n"
         )
 
         class Parser(argclass.Parser):
@@ -1174,7 +1185,7 @@ class TestConfigFiles:
         assert parser.connection.port == 9000
         assert parser.connection.ssl is True
 
-    def test_missing_config_file_ignored(self, tmp_path):
+    def test_missing_config_file_ignored(self, tmp_path: Path):
         """Test missing config files are gracefully ignored."""
         existing_config = tmp_path / "existing.ini"
         existing_config.write_text("[DEFAULT]\nhost = existing.com\n")
@@ -1189,7 +1200,7 @@ class TestConfigFiles:
 
         assert parser.host == "existing.com"
 
-    def test_config_action_runtime_loading(self, tmp_path):
+    def test_config_action_runtime_loading(self, tmp_path: Path):
         """Test Config action for runtime config loading."""
         config_file = tmp_path / "runtime.ini"
         config_file.write_text("[app]\nname = myapp\nversion = 1.0\n")
@@ -1203,12 +1214,10 @@ class TestConfigFiles:
         assert parser.config["app"]["name"] == "myapp"
         assert parser.config["app"]["version"] == "1.0"
 
-    def test_json_config_action_runtime_loading(self, tmp_path):
+    def test_json_config_action_runtime_loading(self, tmp_path: Path):
         """Test JSON Config action for runtime loading."""
         config_file = tmp_path / "runtime.json"
-        config_file.write_text(
-            '{"app": {"name": "myapp", "version": "2.0"}}'
-        )
+        config_file.write_text('{"app": {"name": "myapp", "version": "2.0"}}')
 
         class Parser(argclass.Parser):
             config = argclass.Config(config_class=argclass.JSONConfig)
@@ -1219,10 +1228,10 @@ class TestConfigFiles:
         assert parser.config["app"]["name"] == "myapp"
         assert parser.config["app"]["version"] == "2.0"
 
-    def test_config_list_values(self, tmp_path):
+    def test_config_list_values(self, tmp_path: Path):
         """Test config file with list values."""
         config_file = tmp_path / "config.ini"
-        config_file.write_text('[DEFAULT]\nports = [80, 443, 8080]\n')
+        config_file.write_text("[DEFAULT]\nports = [80, 443, 8080]\n")
 
         class Parser(argclass.Parser):
             ports: List[int] = argclass.Argument(
@@ -1236,7 +1245,7 @@ class TestConfigFiles:
 
         assert parser.ports == [80, 443, 8080]
 
-    def test_json_config_with_nested_groups(self, tmp_path):
+    def test_json_config_with_nested_groups(self, tmp_path: Path):
         """Test JSON config with nested group data."""
         config_file = tmp_path / "config.json"
         config_file.write_text(
@@ -1273,7 +1282,7 @@ class TestConfigFiles:
 class TestEnvironmentVariables:
     """Test environment variable handling."""
 
-    def test_auto_env_var_prefix(self, monkeypatch):
+    def test_auto_env_var_prefix(self, monkeypatch: pytest.MonkeyPatch):
         """Test auto_env_var_prefix for automatic env var binding."""
         monkeypatch.setenv("MYAPP_HOST", "env.example.com")
         monkeypatch.setenv("MYAPP_PORT", "9000")
@@ -1288,7 +1297,7 @@ class TestEnvironmentVariables:
         assert parser.host == "env.example.com"
         assert parser.port == 9000
 
-    def test_explicit_env_var_parameter(self, monkeypatch):
+    def test_explicit_env_var_parameter(self, monkeypatch: pytest.MonkeyPatch):
         """Test explicit env_var parameter on argument."""
         monkeypatch.setenv("CUSTOM_HOST", "custom.example.com")
 
@@ -1303,7 +1312,7 @@ class TestEnvironmentVariables:
 
         assert parser.host == "custom.example.com"
 
-    def test_env_var_in_groups(self, monkeypatch):
+    def test_env_var_in_groups(self, monkeypatch: pytest.MonkeyPatch):
         """Test env var with group prefix."""
         monkeypatch.setenv("APP_CONNECTION_HOST", "group-env.example.com")
         monkeypatch.setenv("APP_CONNECTION_PORT", "9999")
@@ -1317,7 +1326,7 @@ class TestEnvironmentVariables:
         assert parser.connection.host == "group-env.example.com"
         assert parser.connection.port == 9999
 
-    def test_env_var_bool_conversion(self, monkeypatch):
+    def test_env_var_bool_conversion(self, monkeypatch: pytest.MonkeyPatch):
         """Test bool conversion from env var."""
         monkeypatch.setenv("APP_DEBUG", "true")
         monkeypatch.setenv("APP_VERBOSE", "yes")
@@ -1335,7 +1344,7 @@ class TestEnvironmentVariables:
         assert parser.verbose is True
         assert parser.quiet is True
 
-    def test_env_var_list_syntax(self, monkeypatch):
+    def test_env_var_list_syntax(self, monkeypatch: pytest.MonkeyPatch):
         """Test list value from env var."""
         monkeypatch.setenv("APP_PORTS", "[80, 443, 8080]")
 
@@ -1351,7 +1360,7 @@ class TestEnvironmentVariables:
 
         assert parser.ports == [80, 443, 8080]
 
-    def test_cli_overrides_env_var(self, monkeypatch):
+    def test_cli_overrides_env_var(self, monkeypatch: pytest.MonkeyPatch):
         """Test CLI argument overrides env var."""
         monkeypatch.setenv("APP_HOST", "env.example.com")
 
@@ -1363,7 +1372,7 @@ class TestEnvironmentVariables:
 
         assert parser.host == "cli.example.com"
 
-    def test_sanitize_env_all_vars(self, monkeypatch):
+    def test_sanitize_env_all_vars(self, monkeypatch: pytest.MonkeyPatch):
         """Test sanitize_env removes all bound env vars."""
         with patch("os.environ", new={}):
             import os
@@ -1383,7 +1392,7 @@ class TestEnvironmentVariables:
             assert "APP_HOST" not in os.environ
             assert "APP_PORT" not in os.environ
 
-    def test_parse_args_sanitize_secrets(self, monkeypatch):
+    def test_parse_args_sanitize_secrets(self, monkeypatch: pytest.MonkeyPatch):
         """Test parse_args with sanitize_secrets=True."""
         with patch("os.environ", new={}):
             import os
@@ -1453,7 +1462,7 @@ class TestErrorHandling:
     def test_type_conversion_error_with_details(self):
         """Test type conversion error includes useful details."""
 
-        def bad_converter(x):
+        def bad_converter(x: str) -> str:
             raise ValueError(f"cannot parse: {x}")
 
         class Parser(argclass.Parser):
@@ -1475,14 +1484,14 @@ class TestActionsVariations:
         """Test store_true action."""
         parser = ServerCommand()
         parser.parse_args(["start", "--daemon"])
-        assert parser.start.daemon is True
+        assert parser.start.daemon is True  # type: ignore[union-attr]
 
     def test_store_false_action(self):
         """Test bool with default=True acts as store_false."""
         parser = ServerCommand()
         # graceful defaults to True, flag toggles it
         parser.parse_args(["restart", "--graceful"])
-        assert parser.restart.graceful is False
+        assert parser.restart.graceful is False  # type: ignore[union-attr]
 
     def test_store_const_action(self):
         """Test store_const action."""
@@ -1541,7 +1550,7 @@ class TestActionsVariations:
 class TestComplexScenarios:
     """Test complex real-world scenarios."""
 
-    def test_full_deploy_command(self, monkeypatch):
+    def test_full_deploy_command(self, monkeypatch: pytest.MonkeyPatch):
         """Test a complete deploy command with all options."""
         monkeypatch.setenv("INFRACTL_API_KEY", "prod-api-key")
 
@@ -1566,20 +1575,23 @@ class TestComplexScenarios:
             ]
         )
 
+        deploy = parser.deploy
         assert parser.debug is True
-        assert parser.deploy.connection.host == "deploy.example.com"
-        assert parser.deploy.connection.port == 443
-        assert parser.deploy.connection.ssl is True
-        assert parser.deploy.logging.level == logging.INFO
-        assert parser.deploy.logging.format == "json"
-        assert parser.deploy.retry.max_retries == 5
-        assert parser.deploy.retry.delay == 2.0
-        assert parser.deploy.environment == DeployEnvironment.PROD
-        assert parser.deploy.parallel == 8
-        assert parser.deploy.targets == ["server1", "server2", "server3"]
-        assert str.__str__(parser.deploy.api_key) == "prod-api-key"
+        assert deploy.connection.host == "deploy.example.com"  # type: ignore[union-attr]
+        assert deploy.connection.port == 443  # type: ignore[union-attr]
+        assert deploy.connection.ssl is True  # type: ignore[union-attr]
+        assert deploy.logging.level == logging.INFO  # type: ignore[union-attr]
+        assert deploy.logging.format == "json"  # type: ignore[union-attr]
+        assert deploy.retry.max_retries == 5  # type: ignore[union-attr]
+        assert deploy.retry.delay == 2.0  # type: ignore[union-attr]
+        assert deploy.environment == DeployEnvironment.PROD  # type: ignore[union-attr]
+        assert deploy.parallel == 8  # type: ignore[union-attr]
+        assert deploy.targets == ["server1", "server2", "server3"]  # type: ignore[union-attr]
+        assert str.__str__(deploy.api_key) == "prod-api-key"  # type: ignore[union-attr]
 
-    def test_database_backup_with_config(self, tmp_path, monkeypatch):
+    def test_database_backup_with_config(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
         """Test database backup with config file and env override."""
         config_file = tmp_path / "db.ini"
         config_file.write_text(
@@ -1616,27 +1628,27 @@ class TestComplexScenarios:
         assert parser.connection.port == 5432
         assert parser.retry.max_retries == 5
         # CLI values
-        assert parser.backup.output == Path("/backups/db.sql")
-        assert parser.backup.tables == ["users", "orders"]
+        assert parser.backup.output == Path("/backups/db.sql")  # type: ignore[union-attr]
+        assert parser.backup.tables == ["users", "orders"]  # type: ignore[union-attr]
 
     def test_subparser_dispatch_pattern(self):
         """Test common subparser dispatch pattern."""
         from functools import singledispatch
 
         @singledispatch
-        def handle_command(cmd):
+        def handle_command(cmd: Any) -> str:
             raise NotImplementedError(f"Unknown command: {type(cmd)}")
 
         @handle_command.register(ServerStartCommand)
-        def handle_start(cmd):
+        def handle_start(cmd: ServerStartCommand) -> str:
             return f"Starting with {cmd.workers} workers"
 
         @handle_command.register(ServerStopCommand)
-        def handle_stop(cmd):
+        def handle_stop(cmd: ServerStopCommand) -> str:
             return f"Stopping (force={cmd.force})"
 
         @handle_command.register(type(None))
-        def handle_none(_):
+        def handle_none(_: None) -> str:
             return "No command"
 
         parser = ServerCommand()

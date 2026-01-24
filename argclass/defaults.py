@@ -40,7 +40,8 @@ class UnexpectedConfigValue(ConfigurationError):
         self.expected = expected
         self.key = key  # Backward compatibility alias
         super().__init__(
-            f"expected {expected.name}, got {type(value).__name__}: {self.value}",
+            f"expected {expected.name}, "
+            f"got {type(value).__name__}: {self.value}",
             field_name=key,
             hint=f"Provide a value of type {expected.name}",
         )

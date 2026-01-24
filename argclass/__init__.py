@@ -52,7 +52,14 @@ from .store import (
     StoreMeta,
     TypedArgument,
 )
-from .types import Actions, ConverterType, LogLevelEnum, Nargs, NargsType
+from .types import (
+    Actions,
+    ConverterType,
+    LogLevelEnum,
+    MetavarType,
+    Nargs,
+    NargsType,
+)
 from .utils import parse_bool, read_ini_configs
 
 # Alias for backward compatibility
@@ -75,6 +82,7 @@ __all__ = [
     "Nargs",
     "LogLevelEnum",
     "ConverterType",
+    "MetavarType",
     "NargsType",
     # Classes
     "SecretString",
