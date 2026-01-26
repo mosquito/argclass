@@ -49,6 +49,18 @@ and seamless integration with configuration files and environment variables.
 - **argparse compatible** - Full compatibility with the standard library
   `argparse`. Use any argparse extension or migrate existing code gradually.
 
+:::{important}
+**argclass is argparse** - not a replacement, but an enhancement.
+
+Every `**kwargs` you pass flows directly through to argparse:
+- `Parser(**kwargs)` passes kwargs to `argparse.ArgumentParser()`
+- `Argument(**kwargs)` passes kwargs to `parser.add_argument()`
+- `create_parser()` gives you the underlying `ArgumentParser` for direct access
+
+This means **any argparse feature works in argclass**. If argparse can do it,
+so can argclass.
+:::
+
 ```python
 import argclass
 
@@ -85,7 +97,10 @@ standard library.
 | Environment variables   | Built-in | No       | Plugin      |
 | Secret masking          | Built-in | No       | No          |
 | Argument groups         | Reusable | Limited  | No          |
+| Shell completions       | [argcomplete] | [argcomplete] | Built-in |
 | Dependencies            | stdlib   | stdlib   | Many        |
+
+[argcomplete]: integrations.md#shell-completions
 
 ```{only} html
 ::::{grid} 3
@@ -111,6 +126,22 @@ Full autocompletion and type checking in your editor.
 
 ::::
 ```
+
+## When to Choose argclass
+
+**argclass is a good fit when:**
+
+- You want type-safe argument parsing with IDE autocompletion
+- You need to load configuration from files AND environment variables
+- You're building internal tools, services, or scripts
+- You prefer class-based design to decorators
+- You want to minimize dependencies (argclass uses only stdlib)
+- You need to handle secrets securely
+
+**Consider alternatives when:**
+
+- **You need interactive prompts** - Click excels at interactive CLI applications
+  with prompts, confirmations, and progress bars built-in.
 
 ## How to Read This Documentation
 
@@ -316,56 +347,14 @@ pip install -e .
 After installation, verify it works:
 
 ```console
+$ python -m argclass greet World
+Hello, World!
+```
+
+You can also check the help to see a complete example:
+
+```console
 $ python -m argclass --help
-usage: python -m argclass [-h] [--verbose] [--secret-key SECRET_KEY] {greet} ...
-
-This code produces this help:
-
-import argparse
-import sys
-from pathlib import Path
-
-import argclass
-
-class GreetCommand(argclass.Parser):
-    user: str = argclass.Argument("user", help="User to greet")
-
-    def __call__(self) -> int:
-        print(f"Hello, {self.user}!")
-        return 0
-
-class Parser(argclass.Parser):
-    verbose: bool = False
-    secret_key: str = argclass.Secret(help="Secret API key")
-    greet = GreetCommand()
-
-def main() -> None:
-    parser = Parser(
-        prog=f"{Path(sys.executable).name} -m argclass",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        description=(
-            "This code produces this help:\n\n```"
-            f"python\n{open(__file__).read().strip()}\n```"
-        ),
-    )
-    parser.parse_args()
-    parser.sanitize_env()
-    exit(parser())
-
-if __name__ == "__main__":
-    main()
-
-positional arguments:
-{greet}
-
-options:
--h, --help            show this help message and exit
---verbose             (default: False)
---secret-key SECRET_KEY
-Secret API key
-
-$ python -m argclass greet Guido
-Hello, Guido!
 ```
 
 ## Quick Examples
@@ -523,6 +512,7 @@ Build a real CLI application step by step.
 quickstart
 tutorial
 examples
+migration
 ```
 
 ```{toctree}
@@ -543,6 +533,7 @@ integrations
 :maxdepth: 2
 :caption: Help
 
+faq
 errors
 pitfalls
 ```
@@ -551,6 +542,8 @@ pitfalls
 :maxdepth: 2
 :caption: Reference
 
+cheatsheet
+glossary
 api
 ```
 

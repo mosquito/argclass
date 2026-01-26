@@ -142,6 +142,23 @@ assert backup.compress is True
 assert backup.verbose is True
 ```
 
+**Sample `--help` output:**
+
+```
+$ python backup.py --help
+usage: backup.py [-h] --source SOURCE [-d DESTINATION] [-c] [-v]
+
+Backup files to a destination directory.
+
+options:
+  -h, --help            show this help message and exit
+  --source SOURCE       Source directory to backup
+  -d, --destination DESTINATION
+                        Destination directory
+  -c, --compress        Compress backup files (default: False)
+  -v, --verbose         Enable verbose output (default: False)
+```
+
 ### Using Argument Groups
 
 Groups bundle related arguments under a common prefix. Here, compression
@@ -229,6 +246,33 @@ assert tool.backup.source == Path("/data")
 assert tool.backup.destination == Path("/backup")
 assert tool.backup.compress is True
 assert tool() == 0
+```
+
+**Sample `--help` output with subcommands:**
+
+```
+$ python backup.py --help
+usage: backup.py [-h] [--verbose] {backup,restore} ...
+
+Backup management tool.
+
+positional arguments:
+  {backup,restore}
+
+options:
+  -h, --help        show this help message and exit
+  --verbose         (default: False)
+
+$ python backup.py backup --help
+usage: backup.py backup [-h] --source SOURCE --destination DESTINATION [--compress]
+
+Create a new backup.
+
+options:
+  -h, --help            show this help message and exit
+  --source SOURCE
+  --destination DESTINATION
+  --compress            (default: False)
 ```
 
 ### Configuration Files

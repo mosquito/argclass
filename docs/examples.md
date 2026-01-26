@@ -3,6 +3,121 @@
 Copy-pastable examples for common CLI patterns. Each example is self-contained
 and demonstrates specific argclass features you can adapt for your own projects.
 
+## Complete Runnable Application
+
+Here's a full, production-ready CLI application you can copy and run immediately.
+This example demonstrates the standard structure for argclass applications:
+
+<!--- name: test_example_complete_app --->
+```python
+#!/usr/bin/env python3
+"""A complete CLI application demonstrating argclass best practices."""
+
+import sys
+import argclass
+
+class App(argclass.Parser):
+    """File greeting utility.
+
+    Reads names from a file and prints personalized greetings.
+    """
+
+    input_file: str = argclass.Argument(
+        "-i", "--input",
+        help="File containing names (one per line)",
+        default="-"
+    )
+    greeting: str = argclass.Argument(
+        "-g", "--greeting",
+        help="Greeting to use",
+        default="Hello"
+    )
+    uppercase: bool = argclass.Argument(
+        "-u", "--uppercase",
+        default=False,
+        action=argclass.Actions.STORE_TRUE,
+        help="Output in uppercase"
+    )
+    verbose: bool = argclass.Argument(
+        "-v", "--verbose",
+        default=False,
+        action=argclass.Actions.STORE_TRUE,
+        help="Enable verbose output"
+    )
+
+    def __call__(self) -> int:
+        """Execute the application logic."""
+        if self.verbose:
+            print(f"Reading from: {self.input_file}", file=sys.stderr)
+
+        # Process names (in real app, read from file)
+        names = ["World", "argclass"]  # Simulated input
+
+        for name in names:
+            message = f"{self.greeting}, {name}!"
+            if self.uppercase:
+                message = message.upper()
+            print(message)
+
+        return 0
+
+
+def main() -> int:
+    """Entry point for the CLI application."""
+    app = App()
+
+    try:
+        app.parse_args([])  # In production: app.parse_args()
+    except SystemExit as e:
+        return e.code if isinstance(e.code, int) else 1
+
+    return app()
+
+
+# For testing purposes
+app = App()
+app.parse_args(["--greeting", "Hi", "--uppercase", "--verbose"])
+assert app.greeting == "Hi"
+assert app.uppercase is True
+assert app.verbose is True
+```
+
+**Sample `--help` output:**
+
+```
+$ python app.py --help
+usage: app.py [-h] [-i INPUT] [-g GREETING] [-u] [-v]
+
+File greeting utility.
+
+Reads names from a file and prints personalized greetings.
+
+options:
+  -h, --help            show this help message and exit
+  -i, --input INPUT     File containing names (one per line) (default: -)
+  -g, --greeting GREETING
+                        Greeting to use (default: Hello)
+  -u, --uppercase       Output in uppercase (default: False)
+  -v, --verbose         Enable verbose output (default: False)
+```
+
+**Sample run:**
+
+```
+$ python app.py --greeting "Welcome" --uppercase
+WELCOME, WORLD!
+WELCOME, ARGCLASS!
+```
+
+**Key patterns in this example:**
+- Docstrings become help text automatically
+- `__call__` method implements the main logic
+- `main()` function handles parse errors gracefully
+- Returns exit codes (0 for success, non-zero for errors)
+- Uses `-` as default for stdin input (common Unix pattern)
+
+---
+
 ## Simple CLI Tool
 
 This example shows the fundamental building blocks of any CLI application.
@@ -732,9 +847,17 @@ Testing CLI parsers is straightforward because argclass parsers are just
 Python classes. You can instantiate them, call `parse_args()` with test
 arguments, and assert on the resulting attribute values.
 
-The examples below show common testing patterns using pytest. Each pattern
-addresses a specific testing need: basic argument parsing, environment
-variable handling, config file loading, and subcommand dispatch.
+| Pattern | Use Case |
+|---------|----------|
+| [Basic Test](#basic-test) | Simple argument parsing verification |
+| [Testing with Environment](#testing-with-environment) | Environment variable handling |
+| [Testing with Config Files](#testing-with-config-files) | Config file loading |
+| [Testing Subcommands](#testing-subcommands) | Subcommand dispatch and arguments |
+| [Testing Error Handling](#testing-error-handling) | Invalid input and validation |
+| [Testing Required Arguments](#testing-required-arguments) | Missing required args |
+| [Testing Groups](#testing-groups) | Argument groups with prefixes |
+| [Testing Secrets](#testing-secrets) | Secret masking and sanitization |
+| [Testing Priority Order](#testing-priority-order) | Config/env/CLI override behavior |
 
 ### Basic Test
 
@@ -742,8 +865,8 @@ The simplest test pattern: create a parser instance, parse known arguments,
 and verify the results. This works for any parser and catches regressions
 in argument definitions.
 
+<!--- name: test_testing_basic --->
 ```python
-import pytest
 import argclass
 
 class Parser(argclass.Parser):
@@ -761,6 +884,10 @@ def test_parser_all_args():
     parser.parse_args(["--name", "test", "--count", "5"])
     assert parser.name == "test"
     assert parser.count == 5
+
+# Run the tests
+test_parser_defaults()
+test_parser_all_args()
 ```
 
 ### Testing with Environment
@@ -769,16 +896,23 @@ Use pytest's `monkeypatch` fixture to set environment variables for tests.
 This isolates each test and ensures environment changes don't leak between
 tests.
 
+<!--- name: test_testing_env --->
 ```python
-def test_with_env(monkeypatch):
-    monkeypatch.setenv("APP_HOST", "test-host")
+import os
+import argclass
 
-    class Parser(argclass.Parser):
-        host: str = argclass.Argument(env_var="APP_HOST", default="localhost")
+class Parser(argclass.Parser):
+    host: str = argclass.Argument(env_var="TEST_APP_HOST", default="localhost")
 
-    parser = Parser()
-    parser.parse_args([])
-    assert parser.host == "test-host"
+# Simulate monkeypatch.setenv
+os.environ["TEST_APP_HOST"] = "test-host"
+
+parser = Parser()
+parser.parse_args([])
+assert parser.host == "test-host"
+
+# Cleanup (monkeypatch does this automatically)
+del os.environ["TEST_APP_HOST"]
 ```
 
 ### Testing with Config Files
@@ -786,17 +920,25 @@ def test_with_env(monkeypatch):
 Use pytest's `tmp_path` fixture to create temporary config files. This
 ensures tests are isolated and don't depend on files in your filesystem.
 
+<!--- name: test_testing_config --->
 ```python
-def test_with_config(tmp_path):
-    config_file = tmp_path / "config.ini"
-    config_file.write_text("[DEFAULT]\nport = 9000\n")
+import argclass
+from tempfile import NamedTemporaryFile
+from pathlib import Path
 
-    class Parser(argclass.Parser):
-        port: int = 8080
+class Parser(argclass.Parser):
+    port: int = 8080
 
-    parser = Parser(config_files=[str(config_file)])
-    parser.parse_args([])
-    assert parser.port == 9000
+# Simulate tmp_path fixture
+with NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as f:
+    f.write("[DEFAULT]\nport = 9000\n")
+    config_file = f.name
+
+parser = Parser(config_files=[config_file])
+parser.parse_args([])
+assert parser.port == 9000
+
+Path(config_file).unlink()
 ```
 
 ### Testing Subcommands
@@ -804,16 +946,237 @@ def test_with_config(tmp_path):
 Test subcommand dispatch by parsing arguments that include the subcommand
 name, then call the parser to execute the selected subcommand.
 
+<!--- name: test_testing_subcommands --->
 ```python
-def test_subcommand():
-    class Sub(argclass.Parser):
-        value: int = 1
-        def __call__(self): return self.value
+import argclass
 
-    class CLI(argclass.Parser):
-        sub = Sub()
+class Sub(argclass.Parser):
+    value: int = 1
+    def __call__(self): return self.value
 
-    cli = CLI()
-    cli.parse_args(["sub", "--value", "42"])
-    assert cli() == 42
+class CLI(argclass.Parser):
+    sub = Sub()
+
+cli = CLI()
+cli.parse_args(["sub", "--value", "42"])
+assert cli() == 42
+```
+
+### Testing Error Handling
+
+Test that your parser correctly rejects invalid input by catching `SystemExit`:
+
+<!--- name: test_testing_errors --->
+```python
+import argclass
+import sys
+from io import StringIO
+
+class Parser(argclass.Parser):
+    count: int = argclass.Argument(type=int)
+
+def test_invalid_type():
+    parser = Parser()
+    # Capture stderr and catch SystemExit
+    old_stderr = sys.stderr
+    sys.stderr = StringIO()
+    try:
+        parser.parse_args(["--count", "not-a-number"])
+        assert False, "Should have raised SystemExit"
+    except SystemExit as e:
+        assert e.code == 2  # argparse uses exit code 2 for errors
+    finally:
+        sys.stderr = old_stderr
+
+test_invalid_type()
+```
+
+### Testing Required Arguments
+
+Verify that missing required arguments cause the expected error:
+
+<!--- name: test_testing_required --->
+```python
+import argclass
+import sys
+from io import StringIO
+
+class Parser(argclass.Parser):
+    required_arg: str  # No default = required
+
+def test_missing_required():
+    parser = Parser()
+    old_stderr = sys.stderr
+    sys.stderr = StringIO()
+    try:
+        parser.parse_args([])
+        assert False, "Should have raised SystemExit"
+    except SystemExit as e:
+        assert e.code == 2
+    finally:
+        sys.stderr = old_stderr
+
+test_missing_required()
+```
+
+### Parametrized Testing
+
+Test multiple input combinations efficiently:
+
+<!--- name: test_testing_parametrized --->
+```python
+import argclass
+
+class Parser(argclass.Parser):
+    value: int = 0
+
+# Test cases: (args, expected_value)
+test_cases = [
+    ([], 0),
+    (["--value", "10"], 10),
+    (["--value", "100"], 100),
+    (["--value", "-5"], -5),
+]
+
+for args, expected in test_cases:
+    parser = Parser()
+    parser.parse_args(args)
+    assert parser.value == expected, f"Failed for args={args}"
+```
+
+### Testing Groups
+
+Test argument groups are correctly parsed and accessible:
+
+<!--- name: test_testing_groups --->
+```python
+import argclass
+
+class DatabaseGroup(argclass.Group):
+    host: str = "localhost"
+    port: int = 5432
+
+class Parser(argclass.Parser):
+    database = DatabaseGroup()
+
+def test_group_defaults():
+    parser = Parser()
+    parser.parse_args([])
+    assert parser.database.host == "localhost"
+    assert parser.database.port == 5432
+
+def test_group_override():
+    parser = Parser()
+    parser.parse_args(["--database-host", "prod.db", "--database-port", "5433"])
+    assert parser.database.host == "prod.db"
+    assert parser.database.port == 5433
+
+test_group_defaults()
+test_group_override()
+```
+
+### Testing Secrets
+
+Verify secret handling and sanitization:
+
+<!--- name: test_testing_secrets --->
+```python
+import os
+import argclass
+
+os.environ["TEST_SECRET"] = "supersecret"
+
+class Parser(argclass.Parser):
+    api_key: str = argclass.Secret(env_var="TEST_SECRET")
+
+parser = Parser()
+parser.parse_args([])
+
+# Value is accessible for use
+assert parser.api_key == "supersecret"
+
+# Value is masked in repr() - safe for logging
+assert "supersecret" not in repr(parser.api_key)
+
+# Sanitize removes from environment
+parser.sanitize_env()
+assert "TEST_SECRET" not in os.environ
+```
+
+### Testing Priority Order
+
+Verify config source priority (CLI > env > config > default):
+
+<!--- name: test_testing_priority --->
+```python
+import os
+import argclass
+from tempfile import NamedTemporaryFile
+from pathlib import Path
+
+class Parser(argclass.Parser):
+    value: str = argclass.Argument(env_var="TEST_PRIORITY_VALUE", default="default")
+
+# Create config file
+with NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as f:
+    f.write("[DEFAULT]\nvalue = from-config\n")
+    config_file = f.name
+
+# Test 1: Default wins when nothing else provided
+parser1 = Parser()
+parser1.parse_args([])
+assert parser1.value == "default"
+
+# Test 2: Config overrides default
+parser2 = Parser(config_files=[config_file])
+parser2.parse_args([])
+assert parser2.value == "from-config"
+
+# Test 3: Env overrides config
+os.environ["TEST_PRIORITY_VALUE"] = "from-env"
+parser3 = Parser(config_files=[config_file])
+parser3.parse_args([])
+assert parser3.value == "from-env"
+
+# Test 4: CLI overrides everything
+parser4 = Parser(config_files=[config_file])
+parser4.parse_args(["--value", "from-cli"])
+assert parser4.value == "from-cli"
+
+# Cleanup
+del os.environ["TEST_PRIORITY_VALUE"]
+Path(config_file).unlink()
+```
+
+### Mocking External Dependencies
+
+When your CLI calls external services, mock them in tests:
+
+<!--- name: test_testing_mock --->
+```python
+import argclass
+
+# Simulated external service
+class ExternalService:
+    def fetch(self, url: str) -> str:
+        raise NotImplementedError("Would call real service")
+
+class Parser(argclass.Parser):
+    url: str
+
+    def __call__(self, service: ExternalService = None) -> str:
+        service = service or ExternalService()
+        return service.fetch(self.url)
+
+# Mock service for testing
+class MockService(ExternalService):
+    def fetch(self, url: str) -> str:
+        return f"mocked response for {url}"
+
+parser = Parser()
+parser.parse_args(["--url", "https://example.com"])
+
+# Test with mock
+result = parser(service=MockService())
+assert result == "mocked response for https://example.com"
 ```

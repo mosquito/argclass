@@ -9,6 +9,29 @@ Boolean arguments are the most common source of confusion. The shortcut syntax
 `bool = False` automatically creates a flag, but using `Argument()` requires
 explicit action configuration.
 
+### Visual Behavior Summary
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ default=False:  no flag → False    --flag → True   ✓ Common pattern │
+│ default=True:   no flag → True     --flag → False  ⚠ Inverted!      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**For features that should be OFF by default:**
+```python
+verbose: bool = False    # --verbose enables it (sets to True)
+```
+
+**For features that should be ON by default:**
+```python
+cache: bool = True       # --cache DISABLES it (sets to False)
+# Better naming for clarity:
+no_cache: bool = False   # --no-cache disables cache (sets to True)
+```
+
+### Syntax Reference
+
 | Syntax | Behavior |
 |--------|----------|
 | `flag: bool = False` | `--flag` sets to `True` (recommended) |

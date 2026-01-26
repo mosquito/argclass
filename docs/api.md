@@ -123,8 +123,8 @@ class MyApp(argclass.Parser):
 app = MyApp()
 # Use sanitize_secrets=True to auto-remove secret env vars during parsing
 app.parse_args([], sanitize_secrets=True)
-assert str(app.api_key) == "******"  # Masked in string representation
-assert app.api_key == "secret123"    # But actual value is accessible
+assert str(app.api_key) == "secret123"  # Actual value via str()
+assert "******" in repr(app.api_key)     # Masked in repr() - safe for logging
 assert "TEST_API_KEY" not in os.environ  # Already removed
 ```
 

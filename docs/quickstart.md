@@ -109,6 +109,18 @@ assert greeter.name == "Alice"
 assert greeter.count == 1
 ```
 
+**Sample `--help` output:**
+
+```
+$ python greeter.py --help
+usage: greeter.py [-h] --name NAME [--count COUNT]
+
+options:
+  -h, --help     show this help message and exit
+  --name NAME    Name to greet
+  --count COUNT  Number of times to greet (default: 1)
+```
+
 ### Short Aliases
 
 Add short single-letter aliases like `-n` for frequently used arguments.
@@ -223,6 +235,12 @@ Usage: `TEST_DB_HOST=prod.example.com python app.py`
 | Help text | `argclass.Argument(help="...")` | Shows in `--help` |
 | Short alias | `argclass.Argument("-n", "--name")` | `-n` or `--name` |
 | Env variable | `argclass.Argument(env_var="VAR")` | Reads from `$VAR` |
+
+:::{tip}
+**argclass passes all kwargs to argparse.** Any parameter accepted by
+`argparse.add_argument()` works with `argclass.Argument()`. See the
+[Arguments guide](arguments.md#full-argparse-compatibility) for details.
+:::
 
 ## Next Steps
 

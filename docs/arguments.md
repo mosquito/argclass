@@ -179,6 +179,67 @@ assert parser.name == "Alice"
 assert parser.count == 5
 ```
 
+## Full argparse Compatibility
+
+Every parameter you pass to `argclass.Argument()` is forwarded directly to
+`argparse.add_argument()`. This means **all argparse features work**:
+
+<!--- name: test_args_full_argparse --->
+```python
+import argclass
+
+class Parser(argclass.Parser):
+    # Every argparse parameter works
+    path: str = argclass.Argument(
+        "-p", "--path",
+        help="Output path",
+        metavar="PATH",
+        default=".",
+    )
+
+    # Complex argparse features work too
+    verbosity: int = argclass.Argument(
+        "-v",
+        action="count",  # Each -v increases count
+        default=0,
+        help="Increase verbosity (can be repeated)"
+    )
+
+parser = Parser()
+parser.parse_args(["-v", "-v", "-v"])
+assert parser.verbosity == 3
+```
+
+Similarly, `Parser(**kwargs)` passes all keyword arguments to the underlying
+`argparse.ArgumentParser()`:
+
+<!--- name: test_args_parser_kwargs --->
+```python
+import argparse
+import argclass
+
+class Parser(argclass.Parser):
+    """Application with custom help formatting."""
+    name: str = "World"
+
+# All ArgumentParser parameters work
+parser = Parser(
+    prog="myapp",
+    usage="%(prog)s [options]",
+    formatter_class=argparse.RawDescriptionHelpFormatter,
+    epilog="Examples:\n  myapp --name Alice",
+    add_help=True,
+    allow_abbrev=False,  # Disable abbreviated flags
+)
+parser.parse_args([])
+assert parser.name == "World"
+```
+
+:::{tip}
+**Rule of thumb:** If you find yourself thinking "I need raw argparse for this,"
+try it with `argclass.Argument(**kwargs)` first - it probably works.
+:::
+
 ## Typed Argument Functions
 
 For better IDE support and type checking, use the typed variants. These
@@ -228,6 +289,24 @@ assert parser.files == []
 ## Boolean Flags
 
 Boolean arguments have special handling in argclass.
+
+```{warning}
+**Boolean Flag Behavior**
+
+With `bool = True` default, the flag **inverts** the value:
+- `--flag` passed → `False` (toggles from True to False)
+- No flag passed → `True` (the default)
+
+For a flag that **enables** something when passed, use `default=False`:
+
+    verbose: bool = False
+    # --verbose → True, no flag → False  ✓ Common pattern
+
+Flags with `default=True` toggle OFF when passed:
+
+    cache: bool = True
+    # --cache → False, no flag → True  ⚠ Inverted!
+```
 
 **Shortcut syntax** - Using `bool = False` or `bool = True` directly:
 
@@ -561,3 +640,179 @@ parser.parse_args(["--date", "2024-01-15", "--output", "/tmp/output"])
 assert parser.date == datetime(2024, 1, 15)
 assert parser.output == Path("/tmp/output")
 ```
+
+## Version Flag
+
+Adding a `--version` flag is a standard CLI feature. Since the version action
+requires argparse-specific parameters, add it by overriding the parser
+initialization.
+
+<!--- name: test_args_version_basic --->
+```python
+import argclass
+
+class Parser(argclass.Parser):
+    """My application."""
+    name: str = "World"
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # Add version argument to the underlying argparse parser
+        self.create_parser().add_argument(
+            "-V", "--version",
+            action="version",
+            version="myapp 1.0.0"
+        )
+
+parser = Parser()
+parser.parse_args([])
+assert parser.name == "World"
+# Calling parser.parse_args(["--version"]) would print "myapp 1.0.0" and exit
+```
+
+For real applications, read the version from your package metadata:
+
+```python
+import argclass
+from importlib.metadata import version
+
+class Parser(argclass.Parser):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.create_parser().add_argument(
+            "-V", "--version",
+            action="version",
+            version=f"%(prog)s {version('mypackage')}"
+        )
+
+# Running: myapp --version
+# Output: myapp 1.2.3
+```
+
+The `%(prog)s` placeholder is replaced with the program name automatically.
+
+You can also include additional information in the version output:
+
+```python
+import argclass
+import sys
+
+class Parser(argclass.Parser):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.create_parser().add_argument(
+            "-V", "--version",
+            action="version",
+            version=f"myapp 1.0.0 (Python {sys.version_info.major}.{sys.version_info.minor})"
+        )
+
+# Running: myapp --version
+# Output: myapp 1.0.0 (Python 3.12)
+```
+
+## Mutually Exclusive Arguments
+
+Sometimes you need arguments where only one can be specified at a time, like
+`--verbose` vs `--quiet`. argclass supports this through validation.
+
+### Using Literal Types
+
+The cleanest approach for mutually exclusive choices is to use a single argument
+with `Literal` type:
+
+<!--- name: test_args_mutex_literal --->
+```python
+import argclass
+from typing import Literal
+
+class Parser(argclass.Parser):
+    """Application with verbosity level."""
+    verbosity: Literal["quiet", "normal", "verbose"] = "normal"
+
+parser = Parser()
+parser.parse_args(["--verbosity", "verbose"])
+assert parser.verbosity == "verbose"
+```
+
+### Manual Validation
+
+For flags that need to be mutually exclusive, validate in `__call__`:
+
+<!--- name: test_args_mutex_manual --->
+```python
+import argclass
+
+class Parser(argclass.Parser):
+    verbose: bool = False
+    quiet: bool = False
+
+    def __call__(self) -> int:
+        if self.verbose and self.quiet:
+            raise ValueError("Cannot use --verbose and --quiet together")
+        return 0
+
+parser = Parser()
+parser.parse_args(["--verbose"])
+assert parser() == 0
+```
+
+### Validation with Custom Error Messages
+
+For better error handling, validate before using values:
+
+<!--- name: test_args_mutex_validate --->
+```python
+import argclass
+
+class Parser(argclass.Parser):
+    json_output: bool = False
+    yaml_output: bool = False
+    csv_output: bool = False
+
+    def validate(self) -> None:
+        """Validate mutually exclusive options."""
+        selected = sum([self.json_output, self.yaml_output, self.csv_output])
+        if selected > 1:
+            raise ValueError("Only one output format can be specified")
+
+    def get_format(self) -> str:
+        """Get selected output format."""
+        self.validate()
+        if self.json_output:
+            return "json"
+        if self.yaml_output:
+            return "yaml"
+        if self.csv_output:
+            return "csv"
+        return "text"  # Default
+
+parser = Parser()
+parser.parse_args(["--json-output"])
+assert parser.get_format() == "json"
+```
+
+### Using argparse Directly
+
+For full argparse mutually exclusive groups with `--help` integration, use
+the underlying parser directly. Note that these arguments won't be accessible
+as class attributes:
+
+```python
+import argclass
+
+class Parser(argclass.Parser):
+    name: str = "default"
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # Add mutex group to underlying argparse
+        group = self.create_parser().add_mutually_exclusive_group()
+        group.add_argument("--verbose", action="store_true")
+        group.add_argument("--quiet", action="store_true")
+
+# These arguments appear in --help but are accessed via argparse namespace
+# parser.create_parser().parse_args(args).verbose
+```
+
+This provides `--help` output showing the mutual exclusion, but requires
+accessing values through the underlying argparse namespace.
