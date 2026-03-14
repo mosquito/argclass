@@ -7,7 +7,7 @@ on:
     branches: [ master ]
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,20 +25,44 @@ jobs:
         env:
           FORCE_COLOR: 1
 
-      - name: Install LaTeX dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y texlive-full latexmk
+  build-pdf:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/${{ github.repository }}:docs-build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Python dependencies
+        run: uv sync --group docs
 
       - name: Build PDF documentation
         run: uv run make -C docs latexpdf
-        env:
-          FORCE_COLOR: 1
 
-      - name: Copy PDF to static directory
-        run: |
-          mkdir -p docs/_static
-          cp docs/_build/latex/argclass.pdf docs/_static/
+      - name: Upload PDF artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation-pdf
+          path: docs/_build/latex/argclass.pdf
+
+  build-html:
+    needs: build-pdf
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        run: uv sync --group docs
+
+      - name: Download PDF artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: documentation-pdf
+          path: docs/_static
 
       - name: Build HTML documentation
         run: uv run make -C docs html
@@ -51,14 +75,8 @@ jobs:
           name: documentation
           path: docs/_build/html
 
-      - name: Upload PDF documentation
-        uses: actions/upload-artifact@v4
-        with:
-          name: documentation-pdf
-          path: docs/_build/latex/argclass.pdf
-
   publish:
-    needs: build
+    needs: build-html
     runs-on: ubuntu-latest
     container: rclone/rclone:latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'

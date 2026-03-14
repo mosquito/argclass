@@ -2,7 +2,7 @@ SPHINXOPTS    ?= -W
 SPHINXBUILD   ?= uv run --group docs sphinx-build
 SOURCEDIR     = .
 BUILDDIR      = _build
-DOCKER_IMAGE  = argclass-docs
+DOCKER_IMAGE  ?= ghcr.io/mosquito/argclass:docs-build
 
 .PHONY: help clean html latexpdf pdf docker-pdf test all
 
@@ -33,9 +33,11 @@ latexpdf:
 pdf: latexpdf
 
 # Build PDF using Docker (no local LaTeX installation needed)
+# Override DOCKER_IMAGE to use a local build:
+#   make docker-pdf DOCKER_IMAGE=argclass-docs-local
 docker-pdf:
-	@echo "Building Docker image..."
-	docker build -t $(DOCKER_IMAGE) -f Dockerfile ..
+	@echo "Pulling Docker image $(DOCKER_IMAGE)..."
+	-docker pull $(DOCKER_IMAGE)
 	@echo "Installing dependencies and building LaTeX sources..."
 	docker run --rm -v $(CURDIR)/..:/project -w /project $(DOCKER_IMAGE) \
 		sh -c "uv sync --group docs && uv run --group docs sphinx-build -W -b latex docs docs/_build/latex"
