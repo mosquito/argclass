@@ -39,7 +39,12 @@ extensions = [
     "sphinx_autodoc_typehints",
     "sphinx_copybutton",
     "sphinx_design",
+    "sphinx_sitemap",
 ]
+
+# Sitemap settings
+html_baseurl = "https://docs.argclass.com/"
+sitemap_url_scheme = "{link}"
 
 # MyST settings
 myst_enable_extensions = [
@@ -57,7 +62,7 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 html_theme = "furo"
 html_static_path = ["_static"]
-html_extra_path = ["llm.txt"]
+html_extra_path = ["llm.txt", "robots.txt"]
 html_title = project
 html_favicon = "_static/icon.svg"
 
