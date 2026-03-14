@@ -1,0 +1,27 @@
+# argclass
+
+> A Python library for building type-safe command-line interfaces using declarative classes with type hints, configuration files, and environment variables. Zero external dependencies. Requires Python 3.10+.
+
+argclass wraps Python's standard `argparse` module, letting you describe argument parsers as classes with type annotations instead of imperative `add_argument()` calls. It supports INI/JSON/TOML config files, environment variable binding, secret masking, argument groups, and hierarchical subcommands — all with full IDE autocompletion.
+
+Key API classes: `Parser` (main entry point), `Argument`, `Group`, `Secret`, `INIConfig`, `JSONConfig`, `TOMLConfig`, `LogLevel`.
+
+## Docs
+
+- [Quick Start](https://docs.argclass.com/quickstart.html): 5-minute overview of essential concepts
+- [Tutorial](https://docs.argclass.com/tutorial.html): 30-minute guide building a complete CLI application
+- [Arguments](https://docs.argclass.com/arguments.html): Typed arguments, defaults, nargs, enums, boolean flags
+- [Groups](https://docs.argclass.com/groups.html): Reusable argument groups with prefix support
+- [Subparsers](https://docs.argclass.com/subparsers.html): Hierarchical subcommands and nested parsers
+- [Config Files](https://docs.argclass.com/config-files.html): INI, JSON, and TOML configuration file support
+- [Environment Variables](https://docs.argclass.com/environment.html): Automatic env var binding with prefixes
+- [Secrets](https://docs.argclass.com/secrets.html): Secret masking to prevent accidental exposure in logs
+- [API Reference](https://docs.argclass.com/api.html): Full API documentation with all classes and functions
+
+## Optional
+
+- [Examples Gallery](https://docs.argclass.com/examples.html): Ready-to-use patterns from simple CLIs to multi-command tools
+- [Error Handling](https://docs.argclass.com/errors.html): Error types and handling strategies
+- [Common Pitfalls](https://docs.argclass.com/pitfalls.html): Frequent mistakes and how to avoid them
+- [Integrations](https://docs.argclass.com/integrations.html): Using argclass with other tools
+- [Security](https://docs.argclass.com/security.html): Security policy and best practices
