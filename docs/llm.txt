@@ -8,20 +8,20 @@ Key API classes: `Parser` (main entry point), `Argument`, `Group`, `Secret`, `IN
 
 ## Docs
 
-- [Quick Start](https://docs.argclass.com/quickstart.html): 5-minute overview of essential concepts
-- [Tutorial](https://docs.argclass.com/tutorial.html): 30-minute guide building a complete CLI application
-- [Arguments](https://docs.argclass.com/arguments.html): Typed arguments, defaults, nargs, enums, boolean flags
-- [Groups](https://docs.argclass.com/groups.html): Reusable argument groups with prefix support
-- [Subparsers](https://docs.argclass.com/subparsers.html): Hierarchical subcommands and nested parsers
-- [Config Files](https://docs.argclass.com/config-files.html): INI, JSON, and TOML configuration file support
-- [Environment Variables](https://docs.argclass.com/environment.html): Automatic env var binding with prefixes
-- [Secrets](https://docs.argclass.com/secrets.html): Secret masking to prevent accidental exposure in logs
+- [Quick Start](https://docs.argclass.com/_sources/quickstart.md.txt): 5-minute overview of essential concepts
+- [Tutorial](https://docs.argclass.com/_sources/tutorial.md.txt): 30-minute guide building a complete CLI application
+- [Arguments](https://docs.argclass.com/_sources/arguments.md.txt): Typed arguments, defaults, nargs, enums, boolean flags
+- [Groups](https://docs.argclass.com/_sources/groups.md.txt): Reusable argument groups with prefix support
+- [Subparsers](https://docs.argclass.com/_sources/subparsers.md.txt): Hierarchical subcommands and nested parsers
+- [Config Files](https://docs.argclass.com/_sources/config-files.md.txt): INI, JSON, and TOML configuration file support
+- [Environment Variables](https://docs.argclass.com/_sources/environment.md.txt): Automatic env var binding with prefixes
+- [Secrets](https://docs.argclass.com/_sources/secrets.md.txt): Secret masking to prevent accidental exposure in logs
 - [API Reference](https://docs.argclass.com/api.html): Full API documentation with all classes and functions
 
 ## Optional
 
-- [Examples Gallery](https://docs.argclass.com/examples.html): Ready-to-use patterns from simple CLIs to multi-command tools
-- [Error Handling](https://docs.argclass.com/errors.html): Error types and handling strategies
-- [Common Pitfalls](https://docs.argclass.com/pitfalls.html): Frequent mistakes and how to avoid them
-- [Integrations](https://docs.argclass.com/integrations.html): Using argclass with other tools
-- [Security](https://docs.argclass.com/security.html): Security policy and best practices
+- [Examples Gallery](https://docs.argclass.com/_sources/examples.md.txt): Ready-to-use patterns from simple CLIs to multi-command tools
+- [Error Handling](https://docs.argclass.com/_sources/errors.md.txt): Error types and handling strategies
+- [Common Pitfalls](https://docs.argclass.com/_sources/pitfalls.md.txt): Frequent mistakes and how to avoid them
+- [Integrations](https://docs.argclass.com/_sources/integrations.md.txt): Using argclass with other tools
+- [Security](https://docs.argclass.com/_sources/security.md.txt): Security policy and best practices
