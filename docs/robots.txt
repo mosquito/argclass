@@ -2,4 +2,4 @@ User-agent: *
 Allow: /
 
 Sitemap: https://docs.argclass.com/sitemap.xml
-LLMsTxt: https://docs.argclass.com/llm.txt
+LLMsTxt: https://docs.argclass.com/llms.txt
