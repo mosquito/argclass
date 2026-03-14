@@ -5,6 +5,10 @@ on:
     branches: [ master ]
     paths:
       - 'docs/Dockerfile'
+  pull_request:
+    branches: [ master ]
+    paths:
+      - 'docs/Dockerfile'
   workflow_dispatch:
 
 jobs:
