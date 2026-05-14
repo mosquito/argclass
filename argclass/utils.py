@@ -15,6 +15,7 @@ from typing import (
     Union,
     get_args,
     get_origin,
+    get_type_hints,
 )
 
 from .exceptions import ComplexTypeError
@@ -80,6 +81,22 @@ def merge_annotations(
             result.update(getattr(cls, "__annotations__", {}))
     result.update(annotations)
     return result
+
+
+def resolve_annotations(cls: type) -> Dict[str, Any]:
+    """Resolve annotations for a class, handling stringified annotations.
+
+    Uses typing.get_type_hints() to resolve string annotations
+    (from ``from __future__ import annotations`` or PEP 649).
+    Falls back to merge_annotations() if resolution fails.
+    """
+    try:
+        return get_type_hints(cls)
+    except Exception:
+        return merge_annotations(
+            getattr(cls, "__annotations__", {}),
+            *cls.__mro__[1:],
+        )
 
 
 def parse_bool(value: str) -> bool:

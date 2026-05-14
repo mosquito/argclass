@@ -37,8 +37,8 @@ from .types import Actions, Nargs
 from .utils import (
     _unwrap_container_type,
     deep_getattr,
-    merge_annotations,
     parse_bool,
+    resolve_annotations,
     unwrap_literal,
     unwrap_optional,
 )
@@ -89,10 +89,7 @@ class Meta(ABCMeta):
         cls = super().__new__(mcs, name, bases, attrs)
 
         # Now get annotations from the created class
-        annotations = merge_annotations(
-            getattr(cls, "__annotations__", {}),
-            *bases,
-        )
+        annotations = resolve_annotations(cls)
 
         arguments = {}
         argument_groups = {}
