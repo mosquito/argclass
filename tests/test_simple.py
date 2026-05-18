@@ -1902,18 +1902,18 @@ class TestMainModule:
 
     def test_main_function_exists(self):
         """Test that main function can be imported."""
-        from argclass.__main__ import main, Parser, GreetCommand
+        from argclass.__main__ import main, DemoParser, HelloCommand
 
         assert callable(main)
-        assert issubclass(Parser, argclass.Parser)
-        assert issubclass(GreetCommand, argclass.Parser)
+        assert issubclass(DemoParser, argclass.Parser)
+        assert issubclass(HelloCommand, argclass.Parser)
 
-    def test_greet_command(self, capsys):
-        """Test GreetCommand __call__ method."""
-        from argclass.__main__ import GreetCommand
+    def test_hello_command(self, capsys):
+        """Test HelloCommand __call__ method."""
+        from argclass.__main__ import HelloCommand
 
-        cmd = GreetCommand()
-        cmd.parse_args(["World"])
+        cmd = HelloCommand()
+        cmd.parse_args(["--user", "World"])
 
         result = cmd()
         assert result == 0
@@ -1923,9 +1923,9 @@ class TestMainModule:
 
     def test_main_with_help(self):
         """Test main module with --help exits."""
-        from argclass.__main__ import Parser
+        from argclass.__main__ import DemoParser
 
-        parser = Parser(prog="test-argclass")
+        parser = DemoParser(prog="test-argclass")
 
         with pytest.raises(SystemExit) as exc_info:
             parser.parse_args(["--help"])
@@ -1937,8 +1937,11 @@ class TestMainModule:
         from argclass import __main__
         import sys
 
-        # Mock sys.argv with greet subcommand
-        monkeypatch.setattr(sys, "argv", ["argclass", "greet", "Test"])
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["argclass", "subcommands", "hello", "--user", "Test"],
+        )
 
         with pytest.raises(SystemExit) as exc_info:
             __main__.main()
@@ -1956,6 +1959,138 @@ class TestMainModule:
             runpy.run_module("argclass", run_name="__main__")
 
         assert exc_info.value.code == 0
+
+    def test_basic_demo_call(self, capsys):
+        from argclass.__main__ import BasicDemo
+
+        cmd = BasicDemo()
+        cmd.parse_args(["--name", "Test", "--count", "3", "--debug"])
+        assert cmd() == 0
+        out = capsys.readouterr().out
+        assert "Basic Type Annotations" in out
+        assert "Test" in out
+
+    def test_types_demo_call(self, capsys):
+        from argclass.__main__ import TypesDemo
+
+        cmd = TypesDemo()
+        cmd.parse_args(
+            [
+                "--mode",
+                "fast",
+                "--tags",
+                "a",
+                "b",
+                "--color",
+                "green",
+                "--unique",
+                "1",
+                "2",
+                "1",
+            ],
+        )
+        assert cmd() == 0
+        out = capsys.readouterr().out
+        assert "Advanced Types" in out
+        assert "fast" in out
+
+    def test_groups_demo_call(self, capsys):
+        from argclass.__main__ import GroupsDemo
+
+        cmd = GroupsDemo()
+        cmd.parse_args(
+            ["--server-host", "0.0.0.0", "--db-port", "3306"],
+        )
+        assert cmd() == 0
+        out = capsys.readouterr().out
+        assert "Argument Groups" in out
+        assert "0.0.0.0" in out
+
+    def test_secrets_demo_call(self, capsys):
+        from argclass.__main__ import SecretsDemo
+
+        cmd = SecretsDemo()
+        cmd.parse_args(["--api-key", "sk-12345", "--password", "hunter2"])
+        assert cmd() == 0
+        out = capsys.readouterr().out
+        assert "Secrets" in out
+        assert "******" in out
+        assert "sk-12345" in out
+
+    def test_env_demo_call(self, capsys, monkeypatch):
+        from argclass.__main__ import EnvDemo
+
+        monkeypatch.setenv("DEMO_HOST", "example.com")
+        cmd = EnvDemo()
+        cmd.parse_args([])
+        assert cmd() == 0
+        out = capsys.readouterr().out
+        assert "Environment Variables" in out
+        assert "example.com" in out
+
+    def test_info_command_call_verbose(self, capsys):
+        from argclass.__main__ import InfoCommand
+
+        cmd = InfoCommand()
+        cmd.parse_args(["--verbose"])
+        assert cmd() == 0
+        out = capsys.readouterr().out
+        assert "Python:" in out
+        assert "Platform:" in out
+
+    def test_info_command_call_non_verbose(self, capsys):
+        import sys
+        from argclass.__main__ import InfoCommand
+
+        cmd = InfoCommand()
+        cmd.parse_args([])
+        assert cmd() == 0
+        out = capsys.readouterr().out
+        assert "Python:" in out
+        # Verbose-only line with actual sys.prefix path is absent
+        assert f"Prefix:   {sys.prefix}" not in out
+
+    def test_subcommand_demo_help_dispatch(self, capsys):
+        """SubcommandDemo with no nested subparser prints help and returns 1."""
+        from argclass.__main__ import SubcommandDemo
+
+        cmd = SubcommandDemo()
+        cmd.parse_args([])
+        assert cmd() == 1
+        out = capsys.readouterr().out
+        assert out  # printed help
+
+    def test_subcommand_demo_dispatches_to_hello(self, capsys):
+        """SubcommandDemo with hello subparser dispatches to HelloCommand."""
+        from argclass.__main__ import SubcommandDemo
+
+        cmd = SubcommandDemo()
+        cmd.parse_args(["hello", "--user", "Alice"])
+        assert cmd() == 0
+        out = capsys.readouterr().out
+        assert "Hello, Alice!" in out
+
+    def test_subcommand_demo_skips_self_in_chain(self, capsys):
+        """The 'sp is not self' guard skips self when it appears in chain."""
+        from argclass.__main__ import SubcommandDemo
+
+        cmd = SubcommandDemo()
+        cmd.parse_args(["hello", "--user", "Bob"])
+        # Inject self at the front of the chain to exercise the skip branch
+        cmd.current_subparsers = (cmd,) + cmd.current_subparsers
+        assert cmd() == 0
+        out = capsys.readouterr().out
+        assert "Hello, Bob!" in out
+
+    def test_demo_parser_no_subcommand_prints_help(self, capsys):
+        """Top-level DemoParser with no subcommand prints help and returns 0."""
+        from argclass.__main__ import DemoParser
+
+        parser = DemoParser(prog="test-argclass")
+        parser.parse_args([])
+        assert parser() == 0
+        out = capsys.readouterr().out
+        assert "usage" in out.lower()
 
 
 class TestStoreRequiredArgument:
@@ -2160,6 +2295,96 @@ class TestTypedArgumentGetKwargs:
         kwargs = arg.get_kwargs()
 
         assert kwargs["action"] == "store_true"
+        assert "type" not in kwargs
+
+
+class TestArgumentExtraKwargs:
+    """Argument() must pass unknown kwargs through to argparse.add_argument."""
+
+    def test_version_action_passes_version_kwarg(self, capsys):
+        class CLI(argclass.Parser):
+            version = argclass.Argument(
+                "-V",
+                "--version",
+                action=argclass.Actions.VERSION,
+                version="myapp/1.2.3",
+            )
+
+        parser = CLI()
+        with pytest.raises(SystemExit):
+            parser.parse_args(["--version"])
+
+        captured = capsys.readouterr()
+        assert "myapp/1.2.3" in (captured.out + captured.err)
+
+    def test_extra_kwargs_stored_on_fallback_path(self):
+        """No type, no nargs -> fallback TypedArgument path."""
+        arg = argclass.Argument(
+            "--foo",
+            action=argclass.Actions.VERSION,
+            version="x/1",
+        )
+        assert arg.extra_kwargs == {"version": "x/1"}
+        kwargs = arg.get_kwargs()
+        assert kwargs["version"] == "x/1"
+        assert kwargs["action"] == "version"
+        assert "type" not in kwargs
+
+    def test_extra_kwargs_on_argument_single_path(self):
+        """type + no nargs -> ArgumentSingle dispatch path."""
+        from argclass.store import TypedArgument
+
+        arg = argclass.Argument("--foo", type=int, my_extra="single")
+        assert isinstance(arg, TypedArgument)
+        assert arg.extra_kwargs == {"my_extra": "single"}
+
+    def test_extra_kwargs_on_argument_sequence_path(self):
+        """type + nargs="+" -> ArgumentSequence dispatch path."""
+        from argclass.store import TypedArgument
+
+        arg = argclass.Argument(
+            "--foo",
+            type=int,
+            nargs="+",
+            my_extra="seq",
+        )
+        assert isinstance(arg, TypedArgument)
+        assert arg.extra_kwargs == {"my_extra": "seq"}
+
+    def test_extra_kwargs_on_nargs_optional_path(self):
+        """type + nargs="?" -> direct TypedArgument path."""
+        from argclass.store import TypedArgument
+
+        arg = argclass.Argument(
+            "--foo",
+            type=int,
+            nargs="?",
+            my_extra="opt",
+        )
+        assert isinstance(arg, TypedArgument)
+        assert arg.extra_kwargs == {"my_extra": "opt"}
+
+    def test_no_extra_kwargs_means_field_is_empty_mapping(self):
+        """Without **kwargs the field is an empty immutable mapping."""
+        from argclass.store import TypedArgument
+
+        single = argclass.Argument("--a", type=int)
+        seq = argclass.Argument("--b", type=int, nargs="+")
+        opt = argclass.Argument("--c", type=int, nargs="?")
+        fallback = argclass.Argument("--d")
+
+        for arg in (single, seq, opt, fallback):
+            assert isinstance(arg, TypedArgument)
+            assert dict(arg.extra_kwargs) == {}
+
+    def test_help_action_drops_type(self):
+        """HELP action should not propagate `type` to argparse."""
+        from argclass.store import TypedArgument
+        from argclass import Actions
+
+        arg = TypedArgument(action=Actions.HELP, type=str)
+        kwargs = arg.get_kwargs()
+        assert kwargs["action"] == "help"
         assert "type" not in kwargs
 
 
