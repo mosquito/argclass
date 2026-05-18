@@ -12,7 +12,7 @@ from .actions import (
     TOMLConfigAction,
 )
 from .types import Actions, ConverterType, Nargs
-from .utils import merge_annotations
+from .utils import resolve_annotations
 
 
 class StoreMeta(type):
@@ -28,10 +28,7 @@ class StoreMeta(type):
         # Python 3.14+ (PEP 649) defers annotation evaluation
         cls = super().__new__(mcs, name, bases, attrs)
 
-        annotations = merge_annotations(
-            getattr(cls, "__annotations__", {}),
-            *bases,
-        )
+        annotations = resolve_annotations(cls)
         setattr(cls, "__annotations__", annotations)
         setattr(
             cls,
