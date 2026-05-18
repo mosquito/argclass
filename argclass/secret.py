@@ -21,13 +21,14 @@ class SecretString(str):
     Examples:
 
     >>> import logging
+    >>> import sys
     >>> from argclass import SecretString
-    >>> logging.basicConfig(level=logging.INFO)
+    >>> logging.basicConfig(level=logging.INFO, stream=sys.stdout, force=True)
     >>> s = SecretString("my-secret-password")
     >>> logging.info(s)          # __str__ will be called from logging
-    INFO:root:'******'
+    INFO:root:******
     >>> logging.info(f"s=%s", s) # __str__ will be called from logging too
-    INFO:root:s='******'
+    INFO:root:s=******
     >>> logging.info(f"{s!r}")   # repr is safe
     INFO:root:'******'
     >>> logging.info(f"{s}")     # the password will be compromised

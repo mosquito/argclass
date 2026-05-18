@@ -561,3 +561,38 @@ parser.parse_args(["--date", "2024-01-15", "--output", "/tmp/output"])
 assert parser.date == datetime(2024, 1, 15)
 assert parser.output == Path("/tmp/output")
 ```
+
+## Argparse Passthrough Kwargs
+
+`Argument()`, `ArgumentSingle()`, and `ArgumentSequence()` accept arbitrary
+extra keyword arguments via `**kwargs` and forward them as-is to
+`argparse.ArgumentParser.add_argument()`. This lets you use argparse features
+that argclass doesn't model explicitly — most commonly the `version` parameter
+for `action=Actions.VERSION`.
+
+<!--- name: test_args_version_action --->
+```python
+import argclass
+
+class CLI(argclass.Parser):
+    version = argclass.Argument(
+        "-V", "--version",
+        action=argclass.Actions.VERSION,
+        version="myapp/1.2.3",
+    )
+
+# argparse's version action prints the version and exits the process
+try:
+    CLI().parse_args(["--version"])
+except SystemExit as exc:
+    assert exc.code == 0
+```
+
+The same passthrough works for `Actions.HELP` and any custom argparse `Action`
+subclass that takes constructor kwargs beyond argclass's built-in set. argclass
+automatically strips the `type` parameter for `VERSION`, `HELP`, `STORE_TRUE`,
+`STORE_FALSE`, and `COUNT` actions, since argparse rejects `type=` for them.
+
+Extra kwargs are stored as an immutable `MappingProxyType` on the resulting
+argument and merged into the kwargs passed to `add_argument()` at parser
+construction time.

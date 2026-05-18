@@ -6,6 +6,20 @@ argclass wraps Python's standard `argparse` module, letting you describe argumen
 
 Key API classes: `Parser` (main entry point), `Argument`, `Group`, `Secret`, `INIConfig`, `JSONConfig`, `TOMLConfig`, `LogLevel`.
 
+## Interactive Examples
+
+Run `python -m argclass` to explore features interactively. Each subcommand demonstrates a different feature and prints its own source code:
+
+```bash
+python -m argclass                # overview and help
+python -m argclass basic          # str, int, float, bool, Optional
+python -m argclass types          # Literal, list, Enum, frozenset
+python -m argclass groups         # argument groups with prefixes
+python -m argclass secrets        # Secret and SecretString masking
+python -m argclass env            # environment variable integration
+python -m argclass subcommands    # nested subcommands with __call__
+```
+
 ## Quick Examples
 
 ### Minimal parser
@@ -98,7 +112,30 @@ class CLI(argclass.Parser):
     )
 ```
 
-## Docs
+### Argparse passthrough kwargs
+
+`Argument()`, `ArgumentSingle()`, and `ArgumentSequence()` accept arbitrary `**kwargs` and forward them verbatim to `argparse.ArgumentParser.add_argument()`. This unlocks argparse-specific options that argclass does not model explicitly — most notably the `version=` parameter for `action=Actions.VERSION`:
+
+```python
+import argclass
+
+class CLI(argclass.Parser):
+    version = argclass.Argument(
+        "-V", "--version",
+        action=argclass.Actions.VERSION,
+        version="myapp/1.2.3",
+    )
+
+# argparse's version action prints the version and exits
+try:
+    CLI().parse_args(["--version"])
+except SystemExit:
+    pass
+```
+
+argclass automatically strips `type=` for `VERSION`, `HELP`, `STORE_TRUE`, `STORE_FALSE`, and `COUNT` actions (argparse rejects it). Extra kwargs are frozen as an immutable `MappingProxyType` and merged into the dict passed to `add_argument()`.
+
+## Docs markdown files splitted by topic for easier navigation and LLM processing:
 
 - [Quick Start](https://docs.argclass.com/_sources/quickstart.md.txt): 5-minute overview of essential concepts
 - [Tutorial](https://docs.argclass.com/_sources/tutorial.md.txt): 30-minute guide building a complete CLI application

@@ -2,6 +2,7 @@
 
 from enum import Enum
 from pathlib import Path
+from types import MappingProxyType
 from typing import (
     Any,
     Callable,
@@ -46,12 +47,17 @@ def ArgumentSingle(
     metavar: Optional[MetavarType] = None,
     required: Optional[bool] = None,
     secret: bool = False,
+    **extra_kwargs: Any,
 ) -> T:
     """
     Create a single-value argument with precise typing.
 
     Use this when you need exact type inference for a single value.
     The `type` parameter is required and determines the return type.
+
+    Any extra keyword arguments are passed through to
+    ``argparse.ArgumentParser.add_argument`` (e.g., ``version='1.0'``
+    for ``action=Actions.VERSION``).
 
     Example:
         class Parser(argclass.Parser):
@@ -69,6 +75,7 @@ def ArgumentSingle(
             default=default,
             secret=secret,
             env_var=env_var,
+            extra_kwargs=MappingProxyType(dict(extra_kwargs or {})),
             help=help,
             metavar=metavar,
             nargs=None,
@@ -93,12 +100,16 @@ def ArgumentSequence(
     metavar: Optional[MetavarType] = None,
     required: Optional[bool] = None,
     secret: bool = False,
+    **extra_kwargs: Any,
 ) -> List[T]:
     """
     Create a multi-value argument with precise typing.
 
     Use this when you need exact type inference for a list of values.
     The ``type`` parameter is required and determines the element type.
+
+    Any extra keyword arguments are passed through to
+    ``argparse.ArgumentParser.add_argument``.
 
     Args:
         nargs: Number of values. Defaults to "+" (one or more).
@@ -123,6 +134,7 @@ def ArgumentSequence(
             default=default,
             secret=secret,
             env_var=env_var,
+            extra_kwargs=MappingProxyType(dict(extra_kwargs or {})),
             help=help,
             metavar=metavar,
             nargs=nargs,
@@ -151,6 +163,7 @@ def Argument(
     metavar: Optional[MetavarType] = ...,
     required: Optional[bool] = ...,
     secret: bool = ...,
+    **extra_kwargs: Any,
 ) -> R: ...
 
 
@@ -170,6 +183,7 @@ def Argument(
     metavar: Optional[MetavarType] = ...,
     required: Optional[bool] = ...,
     secret: bool = ...,
+    **extra_kwargs: Any,
 ) -> T: ...
 
 
@@ -189,6 +203,7 @@ def Argument(
     metavar: Optional[MetavarType] = ...,
     required: Optional[bool] = ...,
     secret: bool = ...,
+    **extra_kwargs: Any,
 ) -> T: ...
 
 
@@ -208,6 +223,7 @@ def Argument(
     metavar: Optional[MetavarType] = ...,
     required: Optional[bool] = ...,
     secret: bool = ...,
+    **extra_kwargs: Any,
 ) -> List[T]: ...
 
 
@@ -227,6 +243,7 @@ def Argument(
     metavar: Optional[MetavarType] = ...,
     required: Optional[bool] = ...,
     secret: bool = ...,
+    **extra_kwargs: Any,
 ) -> List[T]: ...
 
 
@@ -246,6 +263,7 @@ def Argument(
     nargs: None = ...,
     required: Optional[bool] = ...,
     secret: bool = ...,
+    **extra_kwargs: Any,
 ) -> T: ...
 
 
@@ -265,6 +283,7 @@ def Argument(
     nargs: None = ...,
     required: Optional[bool] = ...,
     secret: bool = ...,
+    **extra_kwargs: Any,
 ) -> T: ...
 
 
@@ -284,6 +303,7 @@ def Argument(
     required: Optional[bool] = ...,
     secret: bool = ...,
     type: Optional[ConverterType] = ...,
+    **extra_kwargs: Any,
 ) -> T: ...
 
 
@@ -303,6 +323,7 @@ def Argument(
     required: Optional[bool] = ...,
     secret: bool = ...,
     type: Optional[ConverterType] = ...,
+    **extra_kwargs: Any,
 ) -> Any: ...
 
 
@@ -321,6 +342,7 @@ def Argument(
     required: Optional[bool] = None,
     secret: bool = False,
     type: Optional[ConverterType] = None,
+    **extra_kwargs: Any,
 ) -> Any:
     """
     Create a typed argument for a Parser or Group class.
@@ -390,6 +412,7 @@ def Argument(
                 metavar=metavar,
                 required=required,
                 secret=secret,
+                **extra_kwargs,
             )
         elif nargs == "?" or nargs == Nargs.ZERO_OR_ONE:
             # nargs="?" needs special handling - creates TypedArgument directly
@@ -401,6 +424,7 @@ def Argument(
                 converter=converter,
                 default=default,
                 env_var=env_var,
+                extra_kwargs=MappingProxyType(dict(extra_kwargs or {})),
                 help=help,
                 metavar=metavar,
                 nargs=nargs,
@@ -422,6 +446,7 @@ def Argument(
                 metavar=metavar,
                 required=required,
                 secret=secret,
+                **extra_kwargs,
             )
 
     # Fallback for untyped arguments
@@ -434,6 +459,7 @@ def Argument(
         default=default,
         secret=secret,
         env_var=env_var,
+        extra_kwargs=MappingProxyType(dict(extra_kwargs or {})),
         help=help,
         metavar=metavar,
         nargs=nargs,

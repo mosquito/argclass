@@ -204,6 +204,43 @@ class Parser(argclass.Parser):
 # repr() returns '******', str() returns actual value
 ```
 
+### Argparse Passthrough
+
+`Argument()` forwards any extra keyword arguments to
+`argparse.add_argument()`, so argparse-specific options like `version=` work
+out of the box:
+
+<!--- name: test_version_example --->
+```python
+import argclass
+
+class CLI(argclass.Parser):
+    version = argclass.Argument(
+        "-V", "--version",
+        action=argclass.Actions.VERSION,
+        version="myapp/1.2.3",
+    )
+
+try:
+    CLI().parse_args(["--version"])
+except SystemExit as exc:
+    assert exc.code == 0
+```
+
+### Interactive Examples
+
+Run `python -m argclass` to explore all features interactively.
+Each subcommand prints its own source code and demonstrates a different feature:
+
+```bash
+python -m argclass basic          # str, int, float, bool, Optional
+python -m argclass types          # Literal, list, Enum, frozenset
+python -m argclass groups         # argument groups with prefixes
+python -m argclass secrets        # Secret and SecretString masking
+python -m argclass env            # environment variable integration
+python -m argclass subcommands    # nested subcommands with __call__
+```
+
 ## Documentation
 
 Full documentation at **[docs.argclass.com](https://docs.argclass.com)**:

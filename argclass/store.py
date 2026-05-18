@@ -3,7 +3,18 @@
 import collections
 from argparse import Action
 from pathlib import Path
-from typing import Any, Dict, Iterable, Iterator, Optional, Tuple, Type, Union
+from types import MappingProxyType
+from typing import (
+    Any,
+    Dict,
+    Iterable,
+    Iterator,
+    Mapping,
+    Optional,
+    Tuple,
+    Type,
+    Union,
+)
 
 from .actions import (
     ConfigAction,
@@ -114,19 +125,28 @@ class ArgumentBase(Store):
         action = self.action
         kwargs = self.as_dict()
 
-        if action in (Actions.STORE_TRUE, Actions.STORE_FALSE, Actions.COUNT):
+        if action in (
+            Actions.STORE_TRUE,
+            Actions.STORE_FALSE,
+            Actions.COUNT,
+            Actions.HELP,
+            Actions.VERSION,
+        ):
             kwargs.pop("type", None)
 
         if isinstance(action, Actions):
             action = action.value
 
+        extra_kwargs = kwargs.pop("extra_kwargs")
         kwargs.pop("aliases", None)
         kwargs.pop("converter", None)
         kwargs.pop("env_var", None)
         kwargs.pop("secret", None)
         kwargs.update(action=action, nargs=nargs)
 
-        return {k: v for k, v in kwargs.items() if v is not None}
+        result = {k: v for k, v in kwargs.items() if v is not None}
+        result.update(extra_kwargs)
+        return result
 
 
 class TypedArgument(ArgumentBase):
@@ -140,6 +160,7 @@ class TypedArgument(ArgumentBase):
     default: Optional[Any] = None
     secret: bool = False
     env_var: Optional[str] = None
+    extra_kwargs: Mapping[str, Any] = MappingProxyType({})
     help: Optional[str] = None
     metavar: Optional[str] = None
     nargs: Optional[Union[int, Nargs]] = None

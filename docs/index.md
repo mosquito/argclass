@@ -317,55 +317,19 @@ After installation, verify it works:
 
 ```console
 $ python -m argclass --help
-usage: python -m argclass [-h] [--verbose] [--secret-key SECRET_KEY] {greet} ...
+```
 
-This code produces this help:
+This launches an interactive demo with subcommands that demonstrate
+each argclass feature. Every subcommand prints its own source code,
+so you can see both the code and the result:
 
-import argparse
-import sys
-from pathlib import Path
-
-import argclass
-
-class GreetCommand(argclass.Parser):
-    user: str = argclass.Argument("user", help="User to greet")
-
-    def __call__(self) -> int:
-        print(f"Hello, {self.user}!")
-        return 0
-
-class Parser(argclass.Parser):
-    verbose: bool = False
-    secret_key: str = argclass.Secret(help="Secret API key")
-    greet = GreetCommand()
-
-def main() -> None:
-    parser = Parser(
-        prog=f"{Path(sys.executable).name} -m argclass",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        description=(
-            "This code produces this help:\n\n```"
-            f"python\n{open(__file__).read().strip()}\n```"
-        ),
-    )
-    parser.parse_args()
-    parser.sanitize_env()
-    exit(parser())
-
-if __name__ == "__main__":
-    main()
-
-positional arguments:
-{greet}
-
-options:
--h, --help            show this help message and exit
---verbose             (default: False)
---secret-key SECRET_KEY
-Secret API key
-
-$ python -m argclass greet Guido
-Hello, Guido!
+```console
+$ python -m argclass basic --name World --count 3 --debug
+$ python -m argclass types --mode fast --tags a b c --color green
+$ python -m argclass groups --server-host 0.0.0.0 --db-port 3306
+$ python -m argclass secrets --api-key my-secret
+$ DEMO_HOST=example.com python -m argclass env
+$ python -m argclass subcommands hello --user Alice
 ```
 
 ## Quick Examples
