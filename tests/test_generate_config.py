@@ -693,9 +693,23 @@ class TestEdgeCases:
         with pytest.raises(NotImplementedError):
             ConfigGenerator().render({})
 
-    def test_ini_none_value_renders_empty(self):
-        gen = INIConfigGenerator()
-        assert gen.render_scalar(None) == ""
+    def test_ini_skips_none_in_root_and_sections(self):
+        """INI cannot natively express None; the renderer drops
+        such keys entirely so the reloaded parser falls back to its
+        own default instead of seeing an empty string."""
+
+        class Inner(argclass.Group):
+            ghost: Optional[str] = None
+            present: str = "yes"
+
+        class App(argclass.Parser):
+            ghost: Optional[str] = None
+            present: str = "yes"
+            inner: Inner = Inner()
+
+        text = INIConfigGenerator().dump_to_string(App())
+        assert "ghost" not in text
+        assert "present = yes" in text
 
     def test_ini_bool_value(self):
         gen = INIConfigGenerator()
@@ -1004,6 +1018,207 @@ class TestEnvIntrospection:
 
     def test_quote_empty_string(self):
         assert EnvConfigGenerator().quote_string("") == ""
+
+
+class TestCrossFormatRoundTrip:
+    """End-to-end: take a richly-shaped parser, drive CLI/env values
+    through it, dump to every format, then load each dump back into a
+    FRESH parser of the same shape — every value must come back equal.
+
+    Covers all the features users actually compose in one shot:
+    top-level args of several types, a 2-level + 3-level nested
+    group hierarchy, a `list[T]` field, a `bool` flag, an arg with
+    explicit `env_var=`, and a Secret field.
+    """
+
+    @staticmethod
+    def make_complex_parser() -> Type[argclass.Parser]:
+        class TLS(argclass.Group):
+            cert: str = argclass.Argument(
+                default="/etc/tls/cert",
+                help="TLS certificate path",
+            )
+            key: str = "/etc/tls/key"
+
+        class Security(argclass.Group):
+            tls: TLS = TLS()
+            verify: bool = False
+
+        class Database(argclass.Group):
+            host: str = argclass.Argument(
+                default="db.local",
+                help="Database host",
+            )
+            port: int = 5432
+            security: Security = Security()
+
+        class Logging(argclass.Group):
+            level: str = "info"
+            file: Optional[str] = None
+
+        class App(argclass.Parser):
+            name: str = argclass.Argument(
+                default="myapp",
+                help="App name",
+            )
+            workers: int = 4
+            debug: bool = False
+            tags: list[str] = argclass.Argument(
+                nargs=argclass.Nargs.ZERO_OR_MORE,
+                default=["alpha", "beta"],
+            )
+            token: str = argclass.Argument(
+                default="default-token",
+                env_var="MY_TOKEN",
+                help="API token",
+            )
+            api_key: str = argclass.Secret(default="default-key")
+            db: Database = Database()
+            log: Logging = Logging()
+
+        return App
+
+    @pytest.fixture
+    def populated_parser(
+        self,
+        monkeypatch,
+    ) -> argclass.Parser:
+        """Build a parser, drive CLI args, env vars, and an explicit
+        env_var-bound field through it. The returned instance carries
+        a mixture of values from each source."""
+        App = self.make_complex_parser()
+        # explicit-env_var-bound field
+        monkeypatch.setenv("MY_TOKEN", "secret-from-env")
+        # auto-prefix env vars at every level of the group tree
+        monkeypatch.setenv("APP_WORKERS", "8")
+        monkeypatch.setenv("APP_DB_HOST", "prod.example.com")
+        monkeypatch.setenv("APP_DB_SECURITY_VERIFY", "true")
+
+        parser = App(auto_env_var_prefix="APP_")
+        parser.parse_args(
+            [
+                "--name",
+                "from-cli",
+                "--debug",
+                "--tags",
+                "x",
+                "y",
+                "z",
+                "--api-key",
+                "sk-cli-123",
+                "--db-security-tls-cert",
+                "/cli/cert",
+                "--log-level",
+                "debug",
+            ],
+        )
+        return parser
+
+    @staticmethod
+    def assert_state(parser: argclass.Parser) -> None:
+        """Pin down the exact resolved state after parse_args. Used
+        for both the source parser and every reloaded copy so any
+        format that drops a value gets caught."""
+        assert parser.name == "from-cli"
+        assert parser.workers == 8
+        assert parser.debug is True
+        assert parser.tags == ["x", "y", "z"]
+        assert parser.token == "secret-from-env"
+        # Secret() — value survives round-trip; SecretString masks
+        # its repr but compares equal as a plain string.
+        assert parser.api_key == "sk-cli-123"
+        assert isinstance(parser.api_key, argclass.SecretString)
+        assert parser.db.host == "prod.example.com"
+        assert parser.db.port == 5432
+        assert parser.db.security.verify is True
+        assert parser.db.security.tls.cert == "/cli/cert"
+        assert parser.db.security.tls.key == "/etc/tls/key"
+        assert parser.log.level == "debug"
+        assert parser.log.file is None
+
+    def test_populated_parser_baseline(
+        self,
+        populated_parser: argclass.Parser,
+    ) -> None:
+        """Sanity-check the fixture itself before round-tripping."""
+        self.assert_state(populated_parser)
+
+    @pytest.mark.parametrize(
+        "fmt,generator,parser_cls",
+        [
+            (
+                "ini",
+                INIConfigGenerator,
+                argclass.INIDefaultsParser,
+            ),
+            (
+                "json",
+                JSONConfigGenerator,
+                argclass.JSONDefaultsParser,
+            ),
+            (
+                "toml",
+                TOMLConfigGenerator,
+                argclass.TOMLDefaultsParser,
+            ),
+        ],
+    )
+    def test_file_format_roundtrip(
+        self,
+        tmp_path: Path,
+        populated_parser: argclass.Parser,
+        fmt: str,
+        generator: type,
+        parser_cls: type,
+    ) -> None:
+        out = tmp_path / f"app.{fmt}"
+        generator().dump(populated_parser, str(out))
+
+        # Brand-new parser class graph — no leaked state from the
+        # source parser. Same shape, same defaults.
+        App = self.make_complex_parser()
+        loaded = App(
+            config_files=[out],
+            config_parser_class=parser_cls,
+        )
+        loaded.parse_args([])
+        self.assert_state(loaded)
+
+    def test_env_format_roundtrip(
+        self,
+        populated_parser: argclass.Parser,
+        monkeypatch,
+    ) -> None:
+        """Env round-trip is special: we dump KEY=VALUE lines, then
+        set those env vars and parse a fresh parser with the same
+        auto_env_var_prefix. The reloaded state must match."""
+        text = EnvConfigGenerator().dump_to_string(populated_parser)
+
+        # Wipe the env vars from the source fixture so the env-only
+        # reload exercises ONLY what the dump produced.
+        for key in (
+            "MY_TOKEN",
+            "APP_WORKERS",
+            "APP_DB_HOST",
+            "APP_DB_SECURITY_VERIFY",
+        ):
+            monkeypatch.delenv(key, raising=False)
+
+        # Replay the dumped lines as env vars.
+        for line in text.splitlines():
+            if not line or line.startswith("#"):
+                continue
+            key, _, raw_value = line.partition("=")
+            # Strip surrounding quotes (matches what shell would do).
+            value = raw_value
+            if value.startswith('"') and value.endswith('"'):
+                value = value[1:-1]
+            monkeypatch.setenv(key, value)
+
+        App = self.make_complex_parser()
+        loaded = App(auto_env_var_prefix="APP_")
+        loaded.parse_args([])
+        self.assert_state(loaded)
 
 
 class TestDumpDestinations:

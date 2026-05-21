@@ -407,6 +407,8 @@ class INIConfigGenerator(ConfigGenerator):
         if root:
             lines.append("[DEFAULT]")
             for key, value in root.items():
+                if value is None:
+                    continue
                 if text := help_map.get((key,)):
                     lines.append(f"; {text}")
                 lines.append(f"{key} = {self.render_scalar(value)}")
@@ -415,6 +417,8 @@ class INIConfigGenerator(ConfigGenerator):
             section_path = tuple(section_name.split("."))
             lines.append(f"[{section_name}]")
             for key, value in items.items():
+                if value is None:
+                    continue
                 if text := help_map.get(section_path + (key,)):
                     lines.append(f"; {text}")
                 lines.append(f"{key} = {self.render_scalar(value)}")
@@ -423,8 +427,6 @@ class INIConfigGenerator(ConfigGenerator):
 
     @staticmethod
     def render_scalar(value: Any) -> str:
-        if value is None:
-            return ""
         if isinstance(value, bool):
             return "true" if value else "false"
         if isinstance(value, (list, tuple)):
