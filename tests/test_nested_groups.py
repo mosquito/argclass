@@ -476,6 +476,66 @@ class TestSameInstanceReuse:
             parser.parse_args([])
         assert "referenced more than once" in str(exc_info.value)
 
+    def test_three_link_cycle_raises(self):
+        """A → B → C → A. Synthetic — normal class syntax can't form
+        this because forward refs don't resolve at metaclass time —
+        but we manually wire __argument_groups__ to verify the
+        visited-set detector catches arbitrary cycles, not just
+        same-instance reuse on sibling attributes.
+        """
+        from types import MappingProxyType
+
+        class A(argclass.Group):
+            foo: int = 1
+
+        class B(argclass.Group):
+            foo: int = 2
+
+        class C(argclass.Group):
+            foo: int = 3
+
+        a, b, c = A(), B(), C()
+        A.__argument_groups__ = MappingProxyType({"b": b})
+        B.__argument_groups__ = MappingProxyType({"c": c})
+        C.__argument_groups__ = MappingProxyType({"a": a})
+
+        try:
+
+            class P(argclass.Parser):
+                root: A = a
+
+            parser = P()
+            with pytest.raises(ArgclassError) as exc_info:
+                parser.parse_args([])
+            assert "referenced more than once" in str(exc_info.value)
+            assert "root.b.c.a" in str(exc_info.value)
+        finally:
+            A.__argument_groups__ = MappingProxyType({})
+            B.__argument_groups__ = MappingProxyType({})
+            C.__argument_groups__ = MappingProxyType({})
+
+    def test_self_loop_raises(self):
+        """A group whose own __argument_groups__ contains itself."""
+        from types import MappingProxyType
+
+        class Loop(argclass.Group):
+            foo: int = 0
+
+        instance = Loop()
+        Loop.__argument_groups__ = MappingProxyType({"self": instance})
+
+        try:
+
+            class P(argclass.Parser):
+                root: Loop = instance
+
+            parser = P()
+            with pytest.raises(ArgclassError) as exc_info:
+                parser.parse_args([])
+            assert "referenced more than once" in str(exc_info.value)
+        finally:
+            Loop.__argument_groups__ = MappingProxyType({})
+
     def test_two_distinct_instances_of_same_class_ok(self):
         class Outer(argclass.Group):
             primary: Credentials = Credentials()
