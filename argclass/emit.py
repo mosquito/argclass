@@ -34,6 +34,7 @@ import os
 import sys
 from typing import Any, Dict, IO, List, Optional, Tuple, Union, cast
 
+from .parser import get_argclass_parser
 from .store import AbstractGroup, AbstractParser, TypedArgument
 from .types import Actions
 
@@ -659,7 +660,8 @@ class GenerateConfigAction(NonConfigAction):
         values: Any,
         option_string: Optional[str] = None,
     ) -> None:
-        argclass_parser = getattr(parser, "argclass_parser", None)
+        # Out-of-band back-reference avoids touching argparse_parser.
+        argclass_parser = get_argclass_parser(parser)
         if argclass_parser is None:
             parser.error(
                 "argclass parser back-reference missing — "

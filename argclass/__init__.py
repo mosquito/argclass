@@ -122,7 +122,10 @@ __all__ = [
     "TOMLDefaultsParser",
     "ValueKind",
     "UnexpectedConfigValue",
-    # Config generators (write configs from a parser)
+    # Config generators (write configs from a parser).
+    # ``ConfigGenerator`` is exposed for typing / subclassing;
+    # ``NonConfigAction`` lets user-defined actions opt out of
+    # dumps. Other helpers stay in ``argclass.emit``.
     "ConfigGenerator",
     "INIConfigGenerator",
     "JSONConfigGenerator",

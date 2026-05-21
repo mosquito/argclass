@@ -2,6 +2,7 @@
 
 import ast
 import os
+import weakref
 from abc import ABCMeta
 from argparse import Action, ArgumentParser
 from collections import defaultdict
@@ -399,6 +400,30 @@ class Group(AbstractGroup, Base):
 ParserType = TypeVar("ParserType", bound="Parser")
 
 
+# Out-of-band back-references: argparse_parser -> argclass Parser.
+# Lets custom actions (e.g. ``GenerateConfigAction``) recover the
+# argclass Parser without mutating any argparse object. Auto-cleans
+# entries when the argparse parser is garbage-collected.
+_BackRefMap = weakref.WeakKeyDictionary
+_argclass_back_refs: "_BackRefMap[ArgumentParser, AbstractParser]" = (
+    _BackRefMap()
+)
+
+
+def get_argclass_parser(
+    argparse_parser: ArgumentParser,
+) -> Optional["Parser"]:
+    """Return the :class:`argclass.Parser` that built
+    ``argparse_parser``, or ``None`` if it wasn't built through
+    argclass (e.g. a bare ``argparse.ArgumentParser``).
+
+    Useful for writing custom argparse Actions that need access to
+    the argclass-level parser at invocation time —
+    :class:`argclass.GenerateConfigAction` uses this internally.
+    """
+    return _argclass_back_refs.get(argparse_parser)  # type: ignore[return-value]
+
+
 # noinspection PyProtectedMember
 class Parser(AbstractParser, Base):
     """Main parser class for command-line argument parsing."""
@@ -587,7 +612,7 @@ class Parser(AbstractParser, Base):
                 **self._parser_kwargs,
             )
 
-        parser.argclass_parser = self  # type: ignore[attr-defined]
+        _argclass_back_refs[parser] = self
 
         destinations: DestinationsType = defaultdict(set)
         self._fill_arguments(destinations, parser)

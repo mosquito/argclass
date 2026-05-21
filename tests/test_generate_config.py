@@ -280,6 +280,50 @@ class TestSkipNonConfig:
         assert "ver" not in text
         assert "host" in text
 
+    def test_version_and_generate_config_coexist(
+        self,
+        tmp_path: Path,
+        capsys,
+    ):
+        """A parser carrying both ``--version`` and
+        ``--generate-config`` must keep both flags working
+        independently — neither should appear in the dump, and each
+        must still print + exit when invoked."""
+
+        class App(argclass.Parser):
+            host: str = "localhost"
+            port: int = 8080
+            ver = argclass.Argument(
+                "-V",
+                "--version",
+                action=argclass.Actions.VERSION,
+                version="myapp/1.2.3",
+            )
+            generate = argclass.Argument(
+                "--generate-config",
+                action=GenerateConfigAction,
+                generator=INIConfigGenerator,
+            )
+
+        # --version still prints + exits 0; namespace stays clean.
+        with pytest.raises(SystemExit) as exc:
+            App().parse_args(["--version"])
+        assert exc.value.code == 0
+        version_out = capsys.readouterr().out + capsys.readouterr().err
+        assert "1.2.3" in version_out
+
+        # --generate-config still writes the dump; neither version
+        # nor generate-config itself leaks into it.
+        out = tmp_path / "cfg.ini"
+        with pytest.raises(SystemExit) as exc:
+            App().parse_args(["--generate-config", str(out)])
+        assert exc.value.code == 0
+        text = out.read_text()
+        assert "host = localhost" in text
+        assert "port = 8080" in text
+        assert "ver" not in text
+        assert "generate" not in text
+
     def test_custom_non_config_action_skipped(self, tmp_path: Path):
         class MyAction(NonConfigAction):
             def __init__(self, option_strings, dest, **kw):

@@ -399,7 +399,19 @@ other characters that would confuse a typical `.env` parser.
 
 Some arguments make no sense in a config file — `--version`,
 `--generate-config` itself, `--check-updates`, anything else that
-"fires and exits". Mark such actions with `NonConfigAction`:
+"fires and exits". argclass needs to know about them so they stay
+out of generated configs.
+
+argparse's built-in `--help` and `--version` actions are recognised
+and skipped automatically. For your own custom `argparse.Action`
+subclasses, pick one of two equivalent opt-outs:
+
+### Option 1 — inherit from `argclass.NonConfigAction`
+
+The cleanest choice if you're writing a new action from scratch.
+`NonConfigAction` is a thin `argparse.Action` subclass that just
+sets the `__emit_config__ = False` marker for you, and it keeps
+intent visible at the class declaration:
 
 <!--- name: test_config_gen_non_config_action --->
 ```python
@@ -424,9 +436,40 @@ assert "host = localhost" in text
 assert "ping" not in text
 ```
 
-argparse's built-in `--help` and `--version` actions are recognised
-and skipped automatically. Custom actions opt out via the marker
-class (or by setting `__emit_config__ = False` directly).
+### Option 2 — set `__emit_config__ = False` on an existing action
+
+Useful when you already inherit from something else (a third-party
+`argparse.Action` subclass, your own base, etc.) and would rather not
+add another base class. The marker is just a class attribute:
+
+<!--- name: test_config_gen_marker_attribute --->
+```python
+import argparse
+import argclass
+
+class PingAction(argparse.Action):
+    __emit_config__ = False   # opt out, equivalent to NonConfigAction
+
+    def __init__(self, option_strings, dest, **kw):
+        kw.setdefault("nargs", 0)
+        kw.setdefault("default", argparse.SUPPRESS)
+        super().__init__(option_strings, dest, **kw)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        parser.exit(0, "pong\n")
+
+class CLI(argclass.Parser):
+    host: str = "localhost"
+    ping = argclass.Argument(action=PingAction)
+
+text = argclass.INIConfigGenerator().dump_to_string(CLI())
+assert "ping" not in text
+```
+
+Both forms are honoured by the generator the same way — pick
+whichever fits your inheritance chain. If you forget both, your
+action will end up in dumps as an empty value, which is what tells
+you to opt out.
 
 ## Custom formats
 
