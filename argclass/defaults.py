@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping, Optional, Tuple, Union
 
 from .exceptions import ConfigurationError
+from .utils import own_section_items
 
 try:
     import tomllib
@@ -212,29 +213,6 @@ class INIDefaultsParser(AbstractDefaultsParser):
             return value.lower() in self.BOOL_TRUE_VALUES
 
         return value
-
-
-def own_section_items(
-    parser: configparser.ConfigParser,
-    section: str,
-) -> Dict[str, str]:
-    """Return ``section``'s own keys, excluding cascaded ``[DEFAULT]``.
-
-    configparser's public API
-    (``parser.items(section, raw=True)`` / ``parser[section]``)
-    inherits keys from ``[DEFAULT]`` into every section. argclass
-    groups are independent argument namespaces — a top-level
-    ``host = root`` must not leak into ``[inner].host`` when the
-    group's own default is ``None``.
-
-    There's no documented opt-out, so this helper isolates the
-    one place where we reach into ``parser._sections``. Keeps the
-    private-attribute risk to a single well-commented call site.
-    """
-    own: Dict[str, str] = dict(
-        parser._sections[section],  # type: ignore[attr-defined]
-    )
-    return own
 
 
 class JSONDefaultsParser(AbstractDefaultsParser):

@@ -1554,6 +1554,14 @@ class TestCoerceEnvValue:
         arg = argclass.TypedArgument(type=double)
         assert coerce_env_default("ab", arg) == "abab"
 
+    def test_non_string_input_passes_through(self):
+        """Callers may stash non-string values in kwargs[default]
+        (e.g. a Path or int) before env handling runs. The helper
+        must pass them through untouched."""
+        arg = argclass.TypedArgument(type=int)
+        assert coerce_env_default(42, arg) == 42
+        assert coerce_env_default(None, arg) is None
+
 
 class TestDumpAcceptsPath:
     def test_dump_to_path_object(self, tmp_path: Path):

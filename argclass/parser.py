@@ -463,18 +463,20 @@ class Parser(AbstractParser, Base):
             ).strip()
 
         if argument.env_var is not None:
-            default = kwargs.get("default")
-            raw = os.getenv(argument.env_var, default)
-            kwargs["default"] = coerce_env_default(raw, argument)
+            # Only coerce when the env var was actually set; an
+            # absent env must not retype the existing default
+            # (a string ``"0"`` default with ``type=int`` would
+            # otherwise silently become the integer ``0`` here).
+            raw = os.environ.get(argument.env_var)
+            if raw is not None:
+                kwargs["default"] = coerce_env_default(raw, argument)
+                self._used_env_vars.add(argument.env_var)
+                if argument.secret:
+                    self._used_secret_env_vars.add(argument.env_var)
 
             kwargs["help"] = (
                 f"{kwargs.get('help', '')} [ENV: {argument.env_var}]"
             ).strip()
-
-            if argument.env_var in os.environ:
-                self._used_env_vars.add(argument.env_var)
-                if argument.secret:
-                    self._used_secret_env_vars.add(argument.env_var)
 
         # Safety net: env vars are read above, so default may have changed.
         # If we now have a default, remove the required flag.

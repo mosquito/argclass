@@ -55,10 +55,32 @@ def read_ini_configs(
     )
 
     for section in parser.sections():
-        config = dict(parser.items(section, raw=True))
-        result[section] = config
+        result[section] = own_section_items(parser, section)
 
     return result, tuple(map(Path, config_paths))
+
+
+def own_section_items(
+    parser: configparser.ConfigParser,
+    section: str,
+) -> Dict[str, str]:
+    """Return ``section``'s own keys, excluding cascaded ``[DEFAULT]``.
+
+    configparser's public API
+    (``parser.items(section, raw=True)`` / ``parser[section]``)
+    inherits keys from ``[DEFAULT]`` into every section. argclass
+    groups are independent argument namespaces — a top-level
+    ``host = root`` must not leak into ``[inner].host`` when the
+    group's own default is ``None``.
+
+    There's no documented opt-out, so this helper isolates the
+    one place where we reach into ``parser._sections``. Keeps the
+    private-attribute risk to a single well-commented call site.
+    """
+    own: Dict[str, str] = dict(
+        parser._sections[section],  # type: ignore[attr-defined]
+    )
+    return own
 
 
 def deep_getattr(name: str, attrs: Dict[str, Any], *bases: Type) -> Any:

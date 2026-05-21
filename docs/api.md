@@ -645,6 +645,18 @@ for the user guide.
    :members:
 ```
 
+### ConfigField
+
+The record type that custom ``render`` implementations consume. One
+``ConfigField`` is yielded per leaf argument in the parser tree,
+carrying everything a renderer needs (path, dest, value, env var,
+help) so subclasses never have to walk the tree themselves.
+
+```{eval-rst}
+.. autoclass:: argclass.ConfigField
+   :members:
+```
+
 ### INIConfigGenerator
 
 ```{eval-rst}
