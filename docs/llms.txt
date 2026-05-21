@@ -1,6 +1,6 @@
 # argclass
 
-## Docs markdown files splitted by topic for easier navigation and LLM processing:
+## Docs markdown files split by topic for easier navigation and LLM processing:
 
 The links below point to the **raw Markdown source** of each
 documentation page (`/_sources/<topic>.md.txt` on docs.argclass.com),
