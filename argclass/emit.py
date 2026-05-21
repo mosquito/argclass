@@ -25,8 +25,13 @@ The attribute name auto-derives the CLI flag, so end users run
 ``myapp --generate-config /etc/myapp.ini`` to write the file, or
 ``myapp --generate-config -`` to print to stdout.
 
-Security note: secret values are emitted as-is. Treat generated files
-like any credential-bearing file.
+Security note: secret values are emitted as-is by default. Pass
+``mask_secrets=True`` to the generator (or to its
+``GenerateConfigAction`` wrapping via an instance) to replace
+``Secret()`` field values with :attr:`SecretString.PLACEHOLDER`,
+so a generated file can be shared as a template without leaking
+credentials. Treat any unmasked generated file like a
+credential-bearing file.
 """
 
 import argparse
@@ -51,6 +56,7 @@ from typing import (
 )
 
 from .parser import get_argclass_parser
+from .secret import SecretString
 from .store import AbstractGroup, AbstractParser, TypedArgument
 from .types import Actions
 from .utils import coerce_env_default
@@ -262,6 +268,7 @@ def iter_config_fields(
     parser: AbstractParser,
     *,
     namespace: Optional[argparse.Namespace] = None,
+    mask_secrets: bool = False,
 ) -> Iterator[ConfigField]:
     """Walk ``parser`` and yield one :class:`ConfigField` per leaf.
 
@@ -273,6 +280,12 @@ def iter_config_fields(
     ``namespace``, when provided, lets fields pick up CLI args that
     argparse has already parsed — used by
     :class:`GenerateConfigAction` mid-parse.
+
+    When ``mask_secrets`` is true, any field whose argument was
+    declared via :func:`argclass.Secret` (or carries
+    ``secret=True``) gets its value replaced with
+    :attr:`SecretString.PLACEHOLDER` so the dump can be shared as a
+    template without leaking credentials.
     """
     auto_prefix = getattr(parser, "_auto_env_var_prefix", None)
     yield from iter_subtree_fields(
@@ -281,6 +294,7 @@ def iter_config_fields(
         cli_path=(),
         auto_prefix=auto_prefix,
         namespace=namespace,
+        mask_secrets=mask_secrets,
     )
 
 
@@ -291,12 +305,16 @@ def iter_subtree_fields(
     cli_path: Tuple[str, ...] = (),
     auto_prefix: Optional[str] = None,
     namespace: Optional[argparse.Namespace] = None,
+    mask_secrets: bool = False,
 ) -> Iterator[ConfigField]:
     """Recursive walker used by :func:`iter_config_fields`.
 
     Power-users can call this directly to walk a sub-tree (for example
     to dump just one nested group). Pass the cumulative ``attr_path``
     and ``cli_path`` you want the yielded fields to carry.
+
+    ``mask_secrets`` mirrors :func:`iter_config_fields` — see its
+    docstring for the semantics.
     """
     node = cast(Any, target)
     cli_prefix = "_".join(cli_path)
@@ -313,13 +331,16 @@ def iter_subtree_fields(
             dest=dest,
             env_var=env_var,
         )
+        value = normalize_value(raw)
+        if mask_secrets and argument.secret and value is not None:
+            value = SecretString.PLACEHOLDER
         yield ConfigField(
             attr_path=attr_path + (name,),
             cli_path=cli_path + (name,),
             dest=dest,
             argument=argument,
             target=target,
-            value=normalize_value(raw),
+            value=value,
             env_var=env_var,
             help=argument.help if argument.help else None,
         )
@@ -332,6 +353,7 @@ def iter_subtree_fields(
             cli_path=child_cli,
             auto_prefix=auto_prefix,
             namespace=namespace,
+            mask_secrets=mask_secrets,
         )
 
 
@@ -369,10 +391,24 @@ class ConfigGenerator:
     Subclasses override :meth:`render`. The base
     :meth:`dump_to_string` and :meth:`dump` methods take care of
     walking the parser and writing to disk / stdout / a file object.
+
+    Parameters
+    ----------
+    mask_secrets:
+        When true, fields declared via :func:`argclass.Secret` (or
+        otherwise carrying ``secret=True``) have their values
+        replaced with :attr:`SecretString.PLACEHOLDER`. Use this to
+        emit a credential-free template config; the resulting file
+        is safe to commit / share. Default is ``False`` — the
+        generator reproduces real credential values exactly so the
+        file round-trips back into a working parser.
     """
 
     #: File extension hint. Subclasses set this.
     extension: str = ""
+
+    def __init__(self, *, mask_secrets: bool = False) -> None:
+        self.mask_secrets = mask_secrets
 
     def render(self, fields: Sequence[ConfigField]) -> str:
         """Render a sequence of :class:`ConfigField` records to text.
@@ -397,7 +433,13 @@ class ConfigGenerator:
         string."""
         # Materialise into a tuple so ``render`` (and any custom
         # subclass) can iterate the field stream multiple times.
-        fields = tuple(iter_config_fields(parser, namespace=namespace))
+        fields = tuple(
+            iter_config_fields(
+                parser,
+                namespace=namespace,
+                mask_secrets=self.mask_secrets,
+            ),
+        )
         return self.render(fields)
 
     def dump(

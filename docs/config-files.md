@@ -908,6 +908,7 @@ Path(config_path).unlink()
 
 For other formats like YAML, extend `ConfigAction`:
 
+<!--- name: test_config_custom_yaml_action --->
 ```python
 from pathlib import Path
 from typing import Mapping, Any

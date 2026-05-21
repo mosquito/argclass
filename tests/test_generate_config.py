@@ -1855,3 +1855,126 @@ class TestDumpDestinations:
         CLI = make_cli()
         text = INIConfigGenerator().dump_to_string(CLI())
         assert "host = localhost" in text
+
+
+class TestMaskSecrets:
+    """``mask_secrets=True`` replaces ``Secret()`` field values with
+    :attr:`SecretString.PLACEHOLDER` across every generator while
+    leaving every non-secret field untouched."""
+
+    @staticmethod
+    def make_parser() -> Type[argclass.Parser]:
+        class Inner(argclass.Group):
+            visible: str = "ok"
+            token: str = argclass.Secret(default="inner-secret")
+
+        class App(argclass.Parser):
+            host: str = "localhost"
+            api_key: str = argclass.Secret(default="sk-real-key")
+            password: str = argclass.Secret(default="hunter2")
+            inner: Inner = Inner()
+
+        return App
+
+    def test_default_off_emits_real_values(self):
+        App = self.make_parser()
+        text = INIConfigGenerator().dump_to_string(App())
+        assert "api_key = sk-real-key" in text
+        assert "password = hunter2" in text
+        assert "token = inner-secret" in text
+        assert argclass.SecretString.PLACEHOLDER not in text
+
+    def test_ini_masks_secrets(self):
+        App = self.make_parser()
+        text = INIConfigGenerator(mask_secrets=True).dump_to_string(App())
+        placeholder = argclass.SecretString.PLACEHOLDER
+        assert f"api_key = {placeholder}" in text
+        assert f"password = {placeholder}" in text
+        assert f"token = {placeholder}" in text
+        # Real secret values must not leak.
+        assert "sk-real-key" not in text
+        assert "hunter2" not in text
+        assert "inner-secret" not in text
+        # Non-secret fields untouched.
+        assert "host = localhost" in text
+        assert "visible = ok" in text
+
+    def test_json_masks_secrets(self):
+        App = self.make_parser()
+        text = JSONConfigGenerator(mask_secrets=True).dump_to_string(App())
+        data = json.loads(text)
+        placeholder = argclass.SecretString.PLACEHOLDER
+        assert data["api_key"] == placeholder
+        assert data["password"] == placeholder
+        assert data["inner"]["token"] == placeholder
+        assert data["host"] == "localhost"
+        assert data["inner"]["visible"] == "ok"
+
+    def test_toml_masks_secrets(self):
+        App = self.make_parser()
+        text = TOMLConfigGenerator(mask_secrets=True).dump_to_string(App())
+        placeholder = argclass.SecretString.PLACEHOLDER
+        assert f'api_key = "{placeholder}"' in text
+        assert f'password = "{placeholder}"' in text
+        assert f'token = "{placeholder}"' in text
+        assert "sk-real-key" not in text
+        assert "hunter2" not in text
+
+    def test_env_masks_secrets(self):
+        class App(argclass.Parser):
+            host: str = "localhost"
+            api_key: str = argclass.Secret(default="sk-real-key")
+
+        p = App(auto_env_var_prefix="APP_")
+        text = EnvConfigGenerator(mask_secrets=True).dump_to_string(p)
+        placeholder = argclass.SecretString.PLACEHOLDER
+        assert f"APP_API_KEY={placeholder}" in text
+        assert "APP_HOST=localhost" in text
+        assert "sk-real-key" not in text
+
+    def test_none_secret_still_skipped(self):
+        """A secret whose value is None still drops out of the dump —
+        masking only kicks in when there is something to hide."""
+
+        class App(argclass.Parser):
+            token: Optional[str] = argclass.Secret(default=None)
+            host: str = "localhost"
+
+        text = INIConfigGenerator(mask_secrets=True).dump_to_string(App())
+        assert "token" not in text
+        assert "host = localhost" in text
+
+    def test_iter_config_fields_marks_value(self):
+        """Plumb-through check: the helper that walks the parser
+        carries the mask flag into each yielded :class:`ConfigField`."""
+
+        class App(argclass.Parser):
+            token: str = argclass.Secret(default="real")
+
+        fields = {
+            f.key: f.value for f in iter_config_fields(App(), mask_secrets=True)
+        }
+        assert fields["token"] == argclass.SecretString.PLACEHOLDER
+
+    def test_action_uses_instance_with_mask_secrets(self, tmp_path: Path):
+        """Wiring a configured generator INSTANCE into
+        ``GenerateConfigAction`` propagates the masking choice end to
+        end."""
+
+        class App(argclass.Parser):
+            host: str = "localhost"
+            api_key: str = argclass.Secret(default="sk-real-key")
+            gen = argclass.Argument(
+                "--generate-config",
+                action=GenerateConfigAction,
+                generator=INIConfigGenerator(mask_secrets=True),
+            )
+
+        out = tmp_path / "cfg.ini"
+        with pytest.raises(SystemExit) as exc:
+            App().parse_args(["--generate-config", str(out)])
+        assert exc.value.code == 0
+        text = out.read_text()
+        assert f"api_key = {argclass.SecretString.PLACEHOLDER}" in text
+        assert "sk-real-key" not in text
+        assert "host = localhost" in text
