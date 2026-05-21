@@ -1,6 +1,5 @@
 """Core parser classes for argclass."""
 
-import ast
 import os
 import weakref
 from abc import ABCMeta
@@ -42,6 +41,7 @@ from .store import AbstractGroup, AbstractParser, TypedArgument
 from .types import Actions, Nargs
 from .utils import (
     _unwrap_container_type,
+    coerce_env_default,
     deep_getattr,
     parse_bool,
     resolve_annotations,
@@ -462,29 +462,10 @@ class Parser(AbstractParser, Base):
                 f"{kwargs.get('help', '')} (default: {argument.default})"
             ).strip()
 
-        # Check if nargs produces a list
-        nargs_is_list = (
-            argument.nargs in (Nargs.ONE_OR_MORE, Nargs.ZERO_OR_MORE, "*", "+")
-            or isinstance(argument.nargs, int)
-            and argument.nargs >= 1
-        )
-
         if argument.env_var is not None:
             default = kwargs.get("default")
-            kwargs["default"] = os.getenv(argument.env_var, default)
-
-            # Parse env var string for nargs (only if still a string)
-            if (
-                isinstance(kwargs["default"], str)
-                and kwargs["default"]
-                and nargs_is_list
-            ):
-                kwargs["default"] = list(
-                    map(
-                        argument.type or str,
-                        ast.literal_eval(kwargs["default"]),
-                    ),
-                )
+            raw = os.getenv(argument.env_var, default)
+            kwargs["default"] = coerce_env_default(raw, argument)
 
             kwargs["help"] = (
                 f"{kwargs.get('help', '')} [ENV: {argument.env_var}]"
@@ -494,17 +475,6 @@ class Parser(AbstractParser, Base):
                 self._used_env_vars.add(argument.env_var)
                 if argument.secret:
                     self._used_secret_env_vars.add(argument.env_var)
-
-        # Convert string boolean values from config/env to proper bools
-        action = kwargs.get("action")
-        default = kwargs.get("default")
-        if isinstance(default, str) and action in (
-            Actions.STORE_TRUE,
-            Actions.STORE_FALSE,
-            "store_true",
-            "store_false",
-        ):
-            kwargs["default"] = parse_bool(default)
 
         # Safety net: env vars are read above, so default may have changed.
         # If we now have a default, remove the required flag.

@@ -191,15 +191,8 @@ class INIDefaultsParser(AbstractDefaultsParser):
         result: Dict[str, Any] = dict(
             parser.items(parser.default_section, raw=True),
         )
-
-        # configparser auto-cascades [DEFAULT] keys into every other
-        # section. argclass groups are independent argument
-        # namespaces — they share nothing with top-level args — so
-        # we collect each section's OWN keys only. Without this, a
-        # top-level ``host = root`` would leak into ``[inner]`` and
-        # override an Optional[str] = None group default on reload.
         for section in parser.sections():
-            result[section] = dict(parser._sections[section])  # type: ignore[attr-defined]
+            result[section] = own_section_items(parser, section)
 
         self._values = result
         return result
@@ -219,6 +212,29 @@ class INIDefaultsParser(AbstractDefaultsParser):
             return value.lower() in self.BOOL_TRUE_VALUES
 
         return value
+
+
+def own_section_items(
+    parser: configparser.ConfigParser,
+    section: str,
+) -> Dict[str, str]:
+    """Return ``section``'s own keys, excluding cascaded ``[DEFAULT]``.
+
+    configparser's public API
+    (``parser.items(section, raw=True)`` / ``parser[section]``)
+    inherits keys from ``[DEFAULT]`` into every section. argclass
+    groups are independent argument namespaces — a top-level
+    ``host = root`` must not leak into ``[inner].host`` when the
+    group's own default is ``None``.
+
+    There's no documented opt-out, so this helper isolates the
+    one place where we reach into ``parser._sections``. Keeps the
+    private-attribute risk to a single well-commented call site.
+    """
+    own: Dict[str, str] = dict(
+        parser._sections[section],  # type: ignore[attr-defined]
+    )
+    return own
 
 
 class JSONDefaultsParser(AbstractDefaultsParser):

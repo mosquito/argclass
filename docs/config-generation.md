@@ -479,15 +479,14 @@ Subclass `ConfigGenerator` and override `render`:
 <!--- name: test_config_gen_custom --->
 ```python
 import argclass
-from argclass.emit import ConfigField
-from typing import Iterable
+from typing import Sequence
 
 class KeyValueGenerator(argclass.ConfigGenerator):
     """Flat KEY=VALUE format with dotted paths for nested groups."""
 
     extension = ".kv"
 
-    def render(self, fields: Iterable[ConfigField]) -> str:
+    def render(self, fields: Sequence[argclass.ConfigField]) -> str:
         lines = []
         for field in fields:
             if field.value is None:

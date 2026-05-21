@@ -22,6 +22,7 @@ from .defaults import (
     ValueKind,
 )
 from .emit import (
+    ConfigField,
     ConfigGenerator,
     EnvConfigGenerator,
     GenerateConfigAction,
@@ -124,8 +125,10 @@ __all__ = [
     "UnexpectedConfigValue",
     # Config generators (write configs from a parser).
     # ``ConfigGenerator`` is exposed for typing / subclassing;
-    # ``NonConfigAction`` lets user-defined actions opt out of
-    # dumps. Other helpers stay in ``argclass.emit``.
+    # ``ConfigField`` is the record type custom ``render`` impls
+    # consume; ``NonConfigAction`` lets user-defined actions opt
+    # out of dumps. Other helpers stay in ``argclass.emit``.
+    "ConfigField",
     "ConfigGenerator",
     "INIConfigGenerator",
     "JSONConfigGenerator",

@@ -30,13 +30,13 @@ from argclass.emit import (
     JSONConfigGenerator,
     NonConfigAction,
     TOMLConfigGenerator,
-    coerce_env_value,
     current_value,
     derive_env_var,
     iter_config_fields,
     normalize_value,
     should_emit,
 )
+from argclass.utils import coerce_env_default
 
 
 @pytest.fixture
@@ -743,7 +743,7 @@ class TestGroupReuseAndNesting:
 class TestEdgeCases:
     def test_base_generator_render_not_implemented(self):
         with pytest.raises(NotImplementedError):
-            ConfigGenerator().render({})
+            ConfigGenerator().render(())
 
     def test_ini_skips_none_in_root_and_sections(self):
         """INI cannot natively express None; the renderer drops
@@ -1499,7 +1499,7 @@ class TestFieldsToNestedDict:
 
 
 class TestCoerceEnvValue:
-    """``coerce_env_value`` mirrors argparse's env coercions so the
+    """``coerce_env_default`` mirrors argparse's env coercions so the
     dump-mid-parse path sees parsed-style values instead of raw
     strings. Each branch covered once."""
 
@@ -1508,7 +1508,7 @@ class TestCoerceEnvValue:
             type=int,
             nargs=argclass.Nargs.ONE_OR_MORE,
         )
-        assert coerce_env_value("[1, 2, 3]", arg) == [1, 2, 3]
+        assert coerce_env_default("[1, 2, 3]", arg) == [1, 2, 3]
 
     def test_list_with_bad_literal_returns_raw(self):
         arg = argclass.TypedArgument(
@@ -1516,32 +1516,32 @@ class TestCoerceEnvValue:
             nargs=argclass.Nargs.ONE_OR_MORE,
         )
         # Not parseable as a literal — return the raw string.
-        assert coerce_env_value("not-a-list", arg) == "not-a-list"
+        assert coerce_env_default("not-a-list", arg) == "not-a-list"
 
     def test_bool_store_true_action(self):
         arg = argclass.TypedArgument(action=argclass.Actions.STORE_TRUE)
-        assert coerce_env_value("true", arg) is True
-        assert coerce_env_value("0", arg) is False
+        assert coerce_env_default("true", arg) is True
+        assert coerce_env_default("0", arg) is False
 
     def test_bool_store_false_string_action(self):
         arg = argclass.TypedArgument(action="store_false")
-        assert coerce_env_value("yes", arg) is True
+        assert coerce_env_default("yes", arg) is True
 
     def test_no_type_returns_raw(self):
         """Plain string-valued argument without ``type=`` passes the
         env value through untouched."""
         arg = argclass.TypedArgument()
-        assert coerce_env_value("hello", arg) == "hello"
+        assert coerce_env_default("hello", arg) == "hello"
 
     def test_type_already_correct_returns_raw(self):
         """``type=str`` plus a str env value short-circuits the
         coercion (no redundant ``str("hello")`` call)."""
         arg = argclass.TypedArgument(type=str)
-        assert coerce_env_value("hello", arg) == "hello"
+        assert coerce_env_default("hello", arg) == "hello"
 
     def test_type_conversion_failure_returns_raw(self):
         arg = argclass.TypedArgument(type=int)
-        assert coerce_env_value("not-an-int", arg) == "not-an-int"
+        assert coerce_env_default("not-an-int", arg) == "not-an-int"
 
     def test_type_callable_not_a_class(self):
         """A ``type=`` callable that is not itself a class (e.g.
@@ -1552,7 +1552,7 @@ class TestCoerceEnvValue:
             return value + value
 
         arg = argclass.TypedArgument(type=double)
-        assert coerce_env_value("ab", arg) == "abab"
+        assert coerce_env_default("ab", arg) == "abab"
 
 
 class TestDumpAcceptsPath:

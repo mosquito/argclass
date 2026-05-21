@@ -30,7 +30,6 @@ like any credential-bearing file.
 """
 
 import argparse
-import ast
 import json
 import os
 import sys
@@ -45,6 +44,7 @@ from typing import (
     Iterator,
     List,
     Optional,
+    Sequence,
     Tuple,
     Union,
     cast,
@@ -52,8 +52,8 @@ from typing import (
 
 from .parser import get_argclass_parser
 from .store import AbstractGroup, AbstractParser, TypedArgument
-from .types import Actions, Nargs
-from .utils import parse_bool
+from .types import Actions
+from .utils import coerce_env_default
 
 
 class NonConfigAction(argparse.Action):
@@ -125,57 +125,8 @@ def current_value(
     if env_var:
         raw = os.environ.get(env_var)
         if raw is not None:
-            return coerce_env_value(raw, argument)
+            return coerce_env_default(raw, argument)
     return argument.default
-
-
-def nargs_is_list(argument: TypedArgument) -> bool:
-    """Return whether argparse will treat the argument as a sequence."""
-    return (
-        argument.nargs in (Nargs.ONE_OR_MORE, Nargs.ZERO_OR_MORE, "*", "+")
-        or isinstance(argument.nargs, int)
-        and argument.nargs >= 1
-    )
-
-
-def coerce_env_value(raw: str, argument: TypedArgument) -> Any:
-    """Apply the same env-var coercions used while building argparse.
-
-    ``GenerateConfigAction`` can run before argclass has copied parsed
-    values back to Parser/Group instances. In that path we still need
-    env values to look like parsed values, including sequence defaults,
-    bool flags, and callable ``type=`` converters.
-    """
-    if raw and nargs_is_list(argument):
-        try:
-            return list(map(argument.type or str, ast.literal_eval(raw)))
-        except Exception:
-            return raw
-
-    if argument.action in (
-        Actions.STORE_TRUE,
-        Actions.STORE_FALSE,
-        "store_true",
-        "store_false",
-    ):
-        return parse_bool(raw)
-
-    type_func = argument.type
-    if type_func is None:
-        return raw
-
-    try:
-        already_correct = isinstance(raw, type_func)
-    except TypeError:
-        already_correct = False
-
-    if already_correct:
-        return raw
-
-    try:
-        return type_func(raw)
-    except Exception:
-        return raw
 
 
 def derive_env_var(
@@ -404,11 +355,16 @@ class ConfigGenerator:
     #: File extension hint. Subclasses set this.
     extension: str = ""
 
-    def render(self, fields: Iterable[ConfigField]) -> str:
-        """Render a stream of :class:`ConfigField` records to text.
+    def render(self, fields: Sequence[ConfigField]) -> str:
+        """Render a sequence of :class:`ConfigField` records to text.
 
-        Override this for a new format. Default implementation just
-        raises — every format has to decide how to lay out fields.
+        Override this for a new format. ``fields`` is a materialised
+        sequence — implementations may iterate it more than once
+        (e.g. to split into header / sections) without burning
+        through an exhausted iterator.
+
+        Default implementation just raises — every format has to
+        decide how to lay out fields.
         """
         raise NotImplementedError
 
@@ -420,9 +376,10 @@ class ConfigGenerator:
     ) -> str:
         """Walk ``parser`` and return the rendered config as a
         string."""
-        return self.render(
-            iter_config_fields(parser, namespace=namespace),
-        )
+        # Materialise into a tuple so ``render`` (and any custom
+        # subclass) can iterate the field stream multiple times.
+        fields = tuple(iter_config_fields(parser, namespace=namespace))
+        return self.render(fields)
 
     def dump(
         self,
@@ -478,7 +435,7 @@ class INIConfigGenerator(ConfigGenerator):
 
     extension = ".ini"
 
-    def render(self, fields: Iterable[ConfigField]) -> str:
+    def render(self, fields: Sequence[ConfigField]) -> str:
         sections = group_fields_by_section(fields)
         lines: List[str] = []
         root_fields = sections.pop((), [])
@@ -524,7 +481,7 @@ class JSONConfigGenerator(ConfigGenerator):
 
     extension = ".json"
 
-    def render(self, fields: Iterable[ConfigField]) -> str:
+    def render(self, fields: Sequence[ConfigField]) -> str:
         data = fields_to_nested_dict(fields)
         return json.dumps(self.coerce_value(data), indent=2) + "\n"
 
@@ -551,7 +508,7 @@ class TOMLConfigGenerator(ConfigGenerator):
 
     extension = ".toml"
 
-    def render(self, fields: Iterable[ConfigField]) -> str:
+    def render(self, fields: Sequence[ConfigField]) -> str:
         sections = group_fields_by_section(fields)
         lines: List[str] = []
         root_fields = sections.pop((), [])
@@ -619,7 +576,7 @@ class EnvConfigGenerator(ConfigGenerator):
     extension = ".env"
     QUOTE_CHARS = frozenset(' \t\n"\\#=')
 
-    def render(self, fields: Iterable[ConfigField]) -> str:
+    def render(self, fields: Sequence[ConfigField]) -> str:
         lines: List[str] = []
         for field in fields:
             if field.env_var is None:

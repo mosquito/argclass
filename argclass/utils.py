@@ -1,5 +1,6 @@
 """Utility functions for argclass."""
 
+import ast
 import configparser
 import os
 import types
@@ -22,6 +23,8 @@ from .exceptions import ComplexTypeError
 from .types import (
     CONTAINER_TYPES,
     TEXT_TRUE_VALUES,
+    Actions,
+    Nargs,
     NoneType,
     UnionClass,
 )
@@ -102,6 +105,61 @@ def resolve_annotations(cls: type) -> Dict[str, Any]:
 def parse_bool(value: str) -> bool:
     """Parse a string to boolean."""
     return value.lower() in TEXT_TRUE_VALUES
+
+
+def nargs_is_list(argument: Any) -> bool:
+    """Return True when argparse will treat ``argument`` as a sequence.
+
+    Shared between the parser (when applying env defaults) and the
+    config-emit code (when materialising env vars during a dump walk).
+    """
+    nargs = argument.nargs
+    if nargs in (Nargs.ONE_OR_MORE, Nargs.ZERO_OR_MORE, "*", "+"):
+        return True
+    return isinstance(nargs, int) and nargs >= 1
+
+
+def coerce_env_default(raw: Any, argument: Any) -> Any:
+    """Coerce a raw env-var string into the value argparse would bind.
+
+    Mirrors the conversions ``Parser._add_argument`` applies after
+    reading ``os.getenv``: ``ast.literal_eval`` for sequence-typed
+    arguments, :func:`parse_bool` for ``store_true``/``store_false``
+    actions, and ``argument.type`` for the scalar fallback.
+
+    Single source of truth for both the parser's env binding and the
+    dump-time field walker; using it in both places keeps the two
+    paths from drifting apart.
+    """
+    if not isinstance(raw, str):
+        return raw
+    if raw and nargs_is_list(argument):
+        try:
+            return list(
+                map(argument.type or str, ast.literal_eval(raw)),
+            )
+        except Exception:
+            return raw
+    if argument.action in (
+        Actions.STORE_TRUE,
+        Actions.STORE_FALSE,
+        "store_true",
+        "store_false",
+    ):
+        return parse_bool(raw)
+    type_func = argument.type
+    if type_func is None:
+        return raw
+    try:
+        already_correct = isinstance(raw, type_func)
+    except TypeError:
+        already_correct = False
+    if already_correct:
+        return raw
+    try:
+        return type_func(raw)
+    except Exception:
+        return raw
 
 
 def _is_union_type(typespec: Any) -> bool:
