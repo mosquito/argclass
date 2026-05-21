@@ -553,3 +553,17 @@ class TestSameInstanceReuse:
         )
         assert parser.outer.primary.username == "a"
         assert parser.outer.secondary.username == "b"
+
+    def test_single_external_instance_bound_once_ok(self):
+        """An externally-created Group instance assigned to a single
+        attribute is fine. The reuse check only fires when the same
+        instance is bound to two or more attributes."""
+        shared = Credentials()
+
+        class P(argclass.Parser):
+            primary: Credentials = shared
+
+        parser = P()
+        parser.parse_args(["--primary-username=alice"])
+        assert parser.primary.username == "alice"
+        assert parser.primary is shared

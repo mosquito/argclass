@@ -225,9 +225,14 @@ class Credentials(argclass.Group):
 shared = Credentials()
 
 class Parser(argclass.Parser):
-    primary = shared      # WRONG - same instance
-    secondary = shared    # ArgclassError at parse_args time
+    primary = shared      # OK on its own — single binding
+    secondary = shared    # Together with `primary`, raises ArgclassError
+                          # at parse_args time (same instance bound twice)
 ```
+
+A single attribute bound to an externally-created Group is fine; the
+error only fires when the **same instance** is reachable through two
+or more attributes at parse time.
 
 Create a separate instance for each attribute instead:
 
