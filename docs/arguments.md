@@ -604,11 +604,10 @@ subclasses that take their own constructor parameters. The action receives
 whatever extra kwargs you pass through `Argument(...)` directly in its
 `__init__`. Here is a self-contained example: a `--check-updates` flag that
 queries PyPI for the latest version of a configurable package and prints
-whether an update is available, then exits.
+whether an update is available.
 
 <!--- name: test_args_custom_action_pypi_update --->
 ```python
-import argparse
 import json
 import urllib.request
 from importlib.metadata import PackageNotFoundError
@@ -617,20 +616,20 @@ from importlib.metadata import version as get_installed_version
 import argclass
 
 
-class CheckPyPIUpdateAction(argparse.Action):
-    """Query PyPI for the latest version of ``package_name`` and exit.
+class CheckPyPIUpdateAction(argclass.NonConfigAction):
+    """Query PyPI for the latest version of ``package_name``.
 
     ``package_name`` is supplied by argclass via passthrough kwargs.
-    The action behaves like ``--version`` — flag-style (``nargs=0``),
-    suppressed from the parsed namespace, and exits the process.
+    The action behaves like a flag (``nargs=0``) and stores the result
+    on the parsed namespace. It inherits ``NonConfigAction`` because
+    this runtime check should not appear in generated config files.
     """
 
     def __init__(self, option_strings, dest, package_name, **kwargs):
         kwargs.setdefault("nargs", 0)
-        kwargs.setdefault("default", argparse.SUPPRESS)
         kwargs.setdefault(
             "help",
-            f"Check PyPI for updates to {package_name} and exit",
+            f"Check PyPI for updates to {package_name}",
         )
         self.package_name = package_name
         super().__init__(option_strings, dest, **kwargs)
@@ -646,21 +645,15 @@ class CheckPyPIUpdateAction(argparse.Action):
                 latest = json.load(resp)["info"]["version"]
         except Exception as exc:
             parser.exit(2, f"PyPI check failed: {exc}\n")
-        if current is None:
-            parser.exit(
-                0,
-                f"{self.package_name} {latest} available "
-                "(not installed locally)\n",
-            )
-        if current == latest:
-            parser.exit(
-                0,
-                f"{self.package_name} {current} is up to date\n",
-            )
-        parser.exit(
-            0,
-            f"Update available: {self.package_name} "
-            f"{current} -> {latest}\n",
+
+        setattr(
+            namespace,
+            self.dest,
+            {
+                "current": current,
+                "latest": latest,
+                "up_to_date": current == latest,
+            },
         )
 
 
@@ -672,13 +665,17 @@ class CLI(argclass.Parser):
     )
 
 
-# The class definition wires the action up; running --check-updates
-# would hit PyPI and exit. Here we just verify the parser builds.
 parser = CLI()
-parser.parse_args([])
+parser.parse_args(["--check-updates"])
+assert parser.check_updates["current"] == get_installed_version("argclass")
+assert isinstance(parser.check_updates["latest"], str)
+assert isinstance(parser.check_updates["up_to_date"], bool)
+assert "check_updates" not in argclass.INIConfigGenerator().dump_to_string(
+    parser,
+)
 ```
 
-Run `python myapp.py --check-updates` to see the live PyPI check.
+Run `python myapp.py --check-updates` to perform the live PyPI check.
 
 The pattern generalises to any custom action: declare your own constructor
 parameters, consume them in `__init__` before calling `super().__init__`,
@@ -704,6 +701,7 @@ Otherwise it would end up as a noisy empty entry. Two equivalent opt-outs:
    useful if you already inherit from something else (a third-party
    action, your own base).
 
+<!--- name: test_args_non_config_action_marker --->
 ```python
 import argparse, argclass
 

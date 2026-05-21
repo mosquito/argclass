@@ -222,6 +222,7 @@ except argclass.EnumValueError as e:
 
 Each exception type includes contextual attributes for debugging:
 
+<!--- name: test_error_exception_attributes_doc --->
 ```python
 import argclass
 

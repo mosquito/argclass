@@ -770,6 +770,8 @@ This isolates each test and ensures environment changes don't leak between
 tests.
 
 ```python
+import argclass
+
 def test_with_env(monkeypatch):
     monkeypatch.setenv("APP_HOST", "test-host")
 
@@ -787,6 +789,8 @@ Use pytest's `tmp_path` fixture to create temporary config files. This
 ensures tests are isolated and don't depend on files in your filesystem.
 
 ```python
+import argclass
+
 def test_with_config(tmp_path):
     config_file = tmp_path / "config.ini"
     config_file.write_text("[DEFAULT]\nport = 9000\n")
@@ -805,6 +809,8 @@ Test subcommand dispatch by parsing arguments that include the subcommand
 name, then call the parser to execute the selected subcommand.
 
 ```python
+import argclass
+
 def test_subcommand():
     class Sub(argclass.Parser):
         value: int = 1
