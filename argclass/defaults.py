@@ -192,8 +192,14 @@ class INIDefaultsParser(AbstractDefaultsParser):
             parser.items(parser.default_section, raw=True),
         )
 
+        # configparser auto-cascades [DEFAULT] keys into every other
+        # section. argclass groups are independent argument
+        # namespaces — they share nothing with top-level args — so
+        # we collect each section's OWN keys only. Without this, a
+        # top-level ``host = root`` would leak into ``[inner]`` and
+        # override an Optional[str] = None group default on reload.
         for section in parser.sections():
-            result[section] = dict(parser.items(section, raw=True))
+            result[section] = dict(parser._sections[section])  # type: ignore[attr-defined]
 
         self._values = result
         return result

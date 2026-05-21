@@ -7,8 +7,10 @@ parsed state for debugging, or hand a snapshot off to other tools.
 
 ## How it works
 
-A `ConfigGenerator` walks the parser tree, builds a nested dict of
-the current state, then renders it to a format-specific string.
+A `ConfigGenerator` walks the parser tree once and yields
+`ConfigField` records containing the current value, attribute path,
+help text, and env var metadata. Generators render that field stream
+to a format-specific string.
 argclass ships four generators:
 
 | Class                  | Output  |
@@ -18,9 +20,8 @@ argclass ships four generators:
 | `TOMLConfigGenerator`  | TOML    |
 | `EnvConfigGenerator`   | `.env`  |
 
-All inherit the same walking + Action wiring; subclasses only
-override `render(data, help_map)` (or `dump_to_string(parser)` for
-formats that need extra metadata such as env var names).
+All inherit the same walking + Action wiring; subclasses override
+`render(fields)`.
 
 ## Basic usage
 
@@ -504,9 +505,8 @@ assert "host=localhost" in text
 assert "port=8080" in text
 ```
 
-For formats that need extra metadata (like env var names), override
-`dump_to_string(parser)` directly — `EnvConfigGenerator` is the
-reference example.
+Field records already include metadata such as env var names, so even
+formats like `.env` can usually implement only `render(fields)`.
 
 ## Security note
 

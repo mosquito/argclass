@@ -30,6 +30,7 @@ like any credential-bearing file.
 """
 
 import argparse
+import ast
 import json
 import os
 import sys
@@ -51,7 +52,8 @@ from typing import (
 
 from .parser import get_argclass_parser
 from .store import AbstractGroup, AbstractParser, TypedArgument
-from .types import Actions
+from .types import Actions, Nargs
+from .utils import parse_bool
 
 
 class NonConfigAction(argparse.Action):
@@ -123,14 +125,57 @@ def current_value(
     if env_var:
         raw = os.environ.get(env_var)
         if raw is not None:
-            type_func = argument.type
-            if type_func is not None and not isinstance(raw, type_func):
-                try:
-                    return type_func(raw)
-                except Exception:
-                    return raw
-            return raw
+            return coerce_env_value(raw, argument)
     return argument.default
+
+
+def nargs_is_list(argument: TypedArgument) -> bool:
+    """Return whether argparse will treat the argument as a sequence."""
+    return (
+        argument.nargs in (Nargs.ONE_OR_MORE, Nargs.ZERO_OR_MORE, "*", "+")
+        or isinstance(argument.nargs, int)
+        and argument.nargs >= 1
+    )
+
+
+def coerce_env_value(raw: str, argument: TypedArgument) -> Any:
+    """Apply the same env-var coercions used while building argparse.
+
+    ``GenerateConfigAction`` can run before argclass has copied parsed
+    values back to Parser/Group instances. In that path we still need
+    env values to look like parsed values, including sequence defaults,
+    bool flags, and callable ``type=`` converters.
+    """
+    if raw and nargs_is_list(argument):
+        try:
+            return list(map(argument.type or str, ast.literal_eval(raw)))
+        except Exception:
+            return raw
+
+    if argument.action in (
+        Actions.STORE_TRUE,
+        Actions.STORE_FALSE,
+        "store_true",
+        "store_false",
+    ):
+        return parse_bool(raw)
+
+    type_func = argument.type
+    if type_func is None:
+        return raw
+
+    try:
+        already_correct = isinstance(raw, type_func)
+    except TypeError:
+        already_correct = False
+
+    if already_correct:
+        return raw
+
+    try:
+        return type_func(raw)
+    except Exception:
+        return raw
 
 
 def derive_env_var(
@@ -425,10 +470,10 @@ class INIConfigGenerator(ConfigGenerator):
     sections (``[endpoint.credentials]``). Help text is emitted as
     ``; <text>`` comments above each key.
 
-    Caveat: configparser's ``[DEFAULT]`` section cascades into every
-    other section. If a top-level argument shares a name with a group
-    attribute, the top-level value will be inherited by the group on
-    reload. Rename one of the colliding attributes to avoid this.
+    Note: configparser's ``[DEFAULT]`` section would normally cascade
+    into every other section, but
+    :class:`argclass.INIDefaultsParser` strips that cascade on read so
+    a top-level ``host`` cannot leak into a group's ``host`` attribute.
     """
 
     extension = ".ini"

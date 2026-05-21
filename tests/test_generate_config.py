@@ -14,6 +14,7 @@ Covers:
 import argparse
 import io
 import json
+from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, List, Optional, Type
 
@@ -29,6 +30,7 @@ from argclass.emit import (
     JSONConfigGenerator,
     NonConfigAction,
     TOMLConfigGenerator,
+    coerce_env_value,
     current_value,
     derive_env_var,
     iter_config_fields,
@@ -480,6 +482,22 @@ class TestHelpers:
         )
         assert result == "not-a-number"
 
+    def test_current_value_env_callable_type_conversion(self, monkeypatch):
+        """Callable ``type=`` values are converters, not isinstance
+        targets, so env fallback must call them without crashing."""
+        monkeypatch.setenv("APP_X", "5")
+        arg = argclass.TypedArgument(
+            type=lambda raw: int(raw) + 1,
+            default=0,
+        )
+        result = current_value(
+            type("Stub", (), {"__dict__": {}})(),
+            "x",
+            arg,
+            env_var="APP_X",
+        )
+        assert result == 6
+
     def test_current_value_reads_namespace_when_provided(self):
         ns = argparse.Namespace(host="from-cli")
         arg = argclass.TypedArgument(default="localhost")
@@ -744,6 +762,35 @@ class TestEdgeCases:
         text = INIConfigGenerator().dump_to_string(App())
         assert "ghost" not in text
         assert "present = yes" in text
+
+    def test_ini_default_section_does_not_leak_into_group_none_value(
+        self,
+        tmp_path: Path,
+    ):
+        """Round-trip with an INI [DEFAULT] / [inner] name collision.
+
+        The generated file omits ``inner.host`` because it is ``None``.
+        configparser would normally cascade the top-level ``host``
+        from [DEFAULT] into [inner], but
+        :class:`argclass.INIDefaultsParser` strips DEFAULT cascade so
+        each group's own None default survives.
+        """
+
+        class Inner(argclass.Group):
+            host: Optional[str] = None
+
+        class App(argclass.Parser):
+            host: str = "root"
+            inner: Inner = Inner()
+
+        out = tmp_path / "cfg.ini"
+        INIConfigGenerator().dump(App(), out)
+
+        loaded = App(config_files=[out])
+        loaded.parse_args([])
+
+        assert loaded.host == "root"
+        assert loaded.inner.host is None
 
     def test_ini_bool_value(self):
         gen = INIConfigGenerator()
@@ -1179,6 +1226,237 @@ class TestEnumAndCollectionRoundTrip:
         assert "unique = [1, 2, 3]" in text
 
 
+class TestGeneratorNormalisesIterablesToLists:
+    """The generators must convert set/frozenset/tuple to plain
+    ``list`` in every format. Otherwise the output is either invalid
+    syntax (TOML cannot represent ``frozenset(...)``) or unreadable
+    on round-trip (INI ``literal_eval`` rejects ``frozenset({1, 2})``,
+    JSON outright refuses sets).
+    """
+
+    @staticmethod
+    def make_parser_with_collections(default: Any) -> Type[argclass.Parser]:
+        class App(argclass.Parser):
+            tags: Any = argclass.Argument(
+                type=str,
+                nargs=argclass.Nargs.ONE_OR_MORE,
+                converter=type(default),
+                default=default,
+            )
+
+        return App
+
+    def test_set_dumps_as_list_in_all_formats(self, tmp_path: Path):
+        App = self.make_parser_with_collections({"c", "a", "b"})
+        for gen_cls in (
+            INIConfigGenerator,
+            JSONConfigGenerator,
+            TOMLConfigGenerator,
+        ):
+            text = gen_cls().dump_to_string(App())
+            assert "set(" not in text
+            assert "frozenset" not in text
+
+    def test_frozenset_dumps_as_list_in_all_formats(self, tmp_path: Path):
+        App = self.make_parser_with_collections(frozenset({3, 1, 2}))
+        for gen_cls in (
+            INIConfigGenerator,
+            JSONConfigGenerator,
+            TOMLConfigGenerator,
+        ):
+            text = gen_cls().dump_to_string(App())
+            assert "frozenset" not in text
+
+    def test_tuple_dumps_as_list_in_all_formats(self, tmp_path: Path):
+        """Tuples don't need normalisation per se — every emitter
+        already treats ``(list, tuple)`` uniformly — but pin the
+        observable behaviour so it can't regress."""
+
+        class App(argclass.Parser):
+            tags: tuple = argclass.Argument(  # type: ignore[type-arg]
+                type=str,
+                nargs=argclass.Nargs.ONE_OR_MORE,
+                converter=tuple,
+                default=("alpha", "beta"),
+            )
+
+        # JSON: list literal.
+        text = JSONConfigGenerator().dump_to_string(App())
+        assert '[\n    "alpha",\n    "beta"\n  ]' in text
+        # TOML: square-bracket array.
+        text = TOMLConfigGenerator().dump_to_string(App())
+        assert 'tags = ["alpha", "beta"]' in text
+        # INI: ast.literal_eval-able list.
+        text = INIConfigGenerator().dump_to_string(App())
+        assert "tags = ['alpha', 'beta']" in text
+
+
+class TestCrossFormatIterableRoundTrip:
+    """Per-format dump-and-reload for set / frozenset / tuple. Each
+    case loads through the parser class itself, so the dumped form
+    must be syntactically and semantically right for every format.
+    """
+
+    @staticmethod
+    def reload(
+        parser_cls: Type[argclass.Parser],
+        gen_cls: type,
+        defaults_cls: type,
+        tmp_path: Path,
+        ext: str,
+    ) -> argclass.Parser:
+        out = tmp_path / f"cfg.{ext}"
+        gen_cls().dump(parser_cls(), str(out))
+        loaded = parser_cls(
+            config_files=[out],
+            config_parser_class=defaults_cls,
+        )
+        loaded.parse_args([])
+        return loaded
+
+    @pytest.mark.parametrize(
+        "gen_cls,defaults_cls,ext",
+        [
+            (INIConfigGenerator, argclass.INIDefaultsParser, "ini"),
+            (JSONConfigGenerator, argclass.JSONDefaultsParser, "json"),
+            (TOMLConfigGenerator, argclass.TOMLDefaultsParser, "toml"),
+        ],
+    )
+    def test_set_round_trip(
+        self,
+        tmp_path: Path,
+        gen_cls: type,
+        defaults_cls: type,
+        ext: str,
+    ) -> None:
+        class App(argclass.Parser):
+            tags: Any = argclass.Argument(
+                type=str,
+                nargs=argclass.Nargs.ONE_OR_MORE,
+                converter=set,
+                default={"alpha", "beta", "gamma"},
+            )
+
+        loaded = self.reload(App, gen_cls, defaults_cls, tmp_path, ext)
+        assert loaded.tags == {"alpha", "beta", "gamma"}
+
+    @pytest.mark.parametrize(
+        "gen_cls,defaults_cls,ext",
+        [
+            (INIConfigGenerator, argclass.INIDefaultsParser, "ini"),
+            (JSONConfigGenerator, argclass.JSONDefaultsParser, "json"),
+            (TOMLConfigGenerator, argclass.TOMLDefaultsParser, "toml"),
+        ],
+    )
+    def test_frozenset_round_trip(
+        self,
+        tmp_path: Path,
+        gen_cls: type,
+        defaults_cls: type,
+        ext: str,
+    ) -> None:
+        class App(argclass.Parser):
+            tags: Any = argclass.Argument(
+                type=int,
+                nargs=argclass.Nargs.ONE_OR_MORE,
+                converter=frozenset,
+                default=frozenset({1, 2, 3}),
+            )
+
+        loaded = self.reload(App, gen_cls, defaults_cls, tmp_path, ext)
+        assert loaded.tags == frozenset({1, 2, 3})
+
+    @pytest.mark.parametrize(
+        "gen_cls,defaults_cls,ext",
+        [
+            (INIConfigGenerator, argclass.INIDefaultsParser, "ini"),
+            (JSONConfigGenerator, argclass.JSONDefaultsParser, "json"),
+            (TOMLConfigGenerator, argclass.TOMLDefaultsParser, "toml"),
+        ],
+    )
+    def test_enum_round_trip(
+        self,
+        tmp_path: Path,
+        gen_cls: type,
+        defaults_cls: type,
+        ext: str,
+    ) -> None:
+        class Color(Enum):
+            RED = "red"
+            GREEN = "green"
+            BLUE = "blue"
+
+        class App(argclass.Parser):
+            color: Color = argclass.EnumArgument(Color, default="GREEN")
+
+        loaded = self.reload(App, gen_cls, defaults_cls, tmp_path, ext)
+        assert loaded.color is Color.GREEN
+
+    @pytest.mark.parametrize(
+        "gen_cls,defaults_cls,ext",
+        [
+            (INIConfigGenerator, argclass.INIDefaultsParser, "ini"),
+            (JSONConfigGenerator, argclass.JSONDefaultsParser, "json"),
+            (TOMLConfigGenerator, argclass.TOMLDefaultsParser, "toml"),
+        ],
+    )
+    def test_enum_lowercase_round_trip(
+        self,
+        tmp_path: Path,
+        gen_cls: type,
+        defaults_cls: type,
+        ext: str,
+    ) -> None:
+        """``EnumArgument(lowercase=True)`` accepts both cases on
+        read; the dump emits canonical ``.name`` and the lenient
+        converter rehydrates it."""
+
+        class Color(Enum):
+            RED = "red"
+            BLUE = "blue"
+
+        class App(argclass.Parser):
+            color: Color = argclass.EnumArgument(
+                Color,
+                default="BLUE",
+                lowercase=True,
+            )
+
+        loaded = self.reload(App, gen_cls, defaults_cls, tmp_path, ext)
+        assert loaded.color is Color.BLUE
+
+    @pytest.mark.parametrize(
+        "gen_cls,defaults_cls,ext",
+        [
+            (INIConfigGenerator, argclass.INIDefaultsParser, "ini"),
+            (JSONConfigGenerator, argclass.JSONDefaultsParser, "json"),
+            (TOMLConfigGenerator, argclass.TOMLDefaultsParser, "toml"),
+        ],
+    )
+    def test_int_enum_round_trip(
+        self,
+        tmp_path: Path,
+        gen_cls: type,
+        defaults_cls: type,
+        ext: str,
+    ) -> None:
+        from enum import IntEnum
+
+        class Priority(IntEnum):
+            LOW = 1
+            MEDIUM = 5
+            HIGH = 10
+
+        class App(argclass.Parser):
+            level: Priority = argclass.EnumArgument(
+                Priority,
+                default="MEDIUM",
+            )
+
+        loaded = self.reload(App, gen_cls, defaults_cls, tmp_path, ext)
+        assert loaded.level is Priority.MEDIUM
+
+
 class TestFieldsToNestedDict:
     """Direct tests on the field→dict helper used by JSON."""
 
@@ -1218,6 +1496,63 @@ class TestFieldsToNestedDict:
         ]
         out = fields_to_nested_dict(fields)
         assert out == {"g": {"child": 1}}
+
+
+class TestCoerceEnvValue:
+    """``coerce_env_value`` mirrors argparse's env coercions so the
+    dump-mid-parse path sees parsed-style values instead of raw
+    strings. Each branch covered once."""
+
+    def test_list_via_literal_eval(self):
+        arg = argclass.TypedArgument(
+            type=int,
+            nargs=argclass.Nargs.ONE_OR_MORE,
+        )
+        assert coerce_env_value("[1, 2, 3]", arg) == [1, 2, 3]
+
+    def test_list_with_bad_literal_returns_raw(self):
+        arg = argclass.TypedArgument(
+            type=int,
+            nargs=argclass.Nargs.ONE_OR_MORE,
+        )
+        # Not parseable as a literal — return the raw string.
+        assert coerce_env_value("not-a-list", arg) == "not-a-list"
+
+    def test_bool_store_true_action(self):
+        arg = argclass.TypedArgument(action=argclass.Actions.STORE_TRUE)
+        assert coerce_env_value("true", arg) is True
+        assert coerce_env_value("0", arg) is False
+
+    def test_bool_store_false_string_action(self):
+        arg = argclass.TypedArgument(action="store_false")
+        assert coerce_env_value("yes", arg) is True
+
+    def test_no_type_returns_raw(self):
+        """Plain string-valued argument without ``type=`` passes the
+        env value through untouched."""
+        arg = argclass.TypedArgument()
+        assert coerce_env_value("hello", arg) == "hello"
+
+    def test_type_already_correct_returns_raw(self):
+        """``type=str`` plus a str env value short-circuits the
+        coercion (no redundant ``str("hello")`` call)."""
+        arg = argclass.TypedArgument(type=str)
+        assert coerce_env_value("hello", arg) == "hello"
+
+    def test_type_conversion_failure_returns_raw(self):
+        arg = argclass.TypedArgument(type=int)
+        assert coerce_env_value("not-an-int", arg) == "not-an-int"
+
+    def test_type_callable_not_a_class(self):
+        """A ``type=`` callable that is not itself a class (e.g.
+        a function) takes the ``isinstance(raw, type_func)`` path
+        through TypeError and falls back to calling it."""
+
+        def double(value: str) -> str:
+            return value + value
+
+        arg = argclass.TypedArgument(type=double)
+        assert coerce_env_value("ab", arg) == "abab"
 
 
 class TestDumpAcceptsPath:
