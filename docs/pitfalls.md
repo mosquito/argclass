@@ -209,6 +209,38 @@ class Parser(argclass.Parser):
 ```
 :::
 
+### Reusing a Group instance across attributes
+
+Each `Group` instance owns the parsed state for one location in the
+parser tree. Assigning the **same instance** to two attributes raises
+`ArgclassError`, because parsed values would otherwise be shared
+between both locations.
+
+```python
+import argclass
+
+class Credentials(argclass.Group):
+    username: str = "admin"
+
+shared = Credentials()
+
+class Parser(argclass.Parser):
+    primary = shared      # WRONG - same instance
+    secondary = shared    # ArgclassError at parse_args time
+```
+
+Create a separate instance for each attribute instead:
+
+```python
+class Parser(argclass.Parser):
+    primary = Credentials()      # RIGHT - distinct instances
+    secondary = Credentials()
+```
+
+Using the same `Group` **class** twice (with different `Group()` calls)
+is fully supported — only sharing one already-constructed instance is
+disallowed.
+
 ---
 
 ## Subcommands

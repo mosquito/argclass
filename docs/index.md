@@ -337,7 +337,9 @@ $ python -m argclass subcommands hello --user Alice
 ### Groups
 
 Organize related arguments into reusable groups. Group arguments are
-automatically prefixed with the group name:
+automatically prefixed with the group name. Groups can also be nested
+inside other groups for arbitrary depth — names join with `-` (CLI),
+`_` (env vars), or `.` (INI/TOML sections):
 
 <!--- name: test_groups_basic --->
 ```python

@@ -185,6 +185,48 @@ assert backup.compression.level == 9
 assert backup.compression.format == "lzma"
 ```
 
+Groups can also contain other Groups, which is handy when settings have
+their own sub-settings (for example, encryption inside compression). Names
+join with `-` for CLI, `_` for env vars, and `.` for INI/TOML sections:
+
+<!--- name: test_tutorial_nested_groups --->
+```python
+import argclass
+from pathlib import Path
+
+class EncryptionOptions(argclass.Group):
+    """Encryption settings, nested under compression."""
+    enabled: bool = False
+    algorithm: str = "aes-256"
+
+class CompressionOptions(argclass.Group):
+    """Compression settings with nested encryption."""
+    enabled: bool = False
+    level: int = 6
+    encryption: EncryptionOptions = EncryptionOptions()
+
+class BackupTool(argclass.Parser):
+    source: Path
+    destination: Path
+    compression: CompressionOptions = CompressionOptions()
+
+backup = BackupTool()
+backup.parse_args([
+    "--source", "/data",
+    "--destination", "/backup",
+    "--compression-enabled",
+    "--compression-encryption-enabled",
+    "--compression-encryption-algorithm", "chacha20",
+])
+
+assert backup.compression.enabled is True
+assert backup.compression.encryption.enabled is True
+assert backup.compression.encryption.algorithm == "chacha20"
+```
+
+See [Groups → Nested Groups](groups.md#nested-groups) for the full rules
+on config files and environment variables.
+
 ### Adding Subcommands
 
 For tools with multiple operations, use subcommands. Each subcommand is a

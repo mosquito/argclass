@@ -205,6 +205,135 @@ assert parser.database.host == "db.example.com"
 assert parser.database.port == 5432
 ```
 
+## Nested Groups
+
+Groups can contain other Groups as fields. This works for any depth and
+keeps `Parser → Group → Group → ...` cleanly modelled in code. Names are
+built by joining the attribute path with the appropriate separator for
+each source:
+
+| Source | Separator | Example                                       |
+|--------|-----------|-----------------------------------------------|
+| CLI    | `-`       | `--endpoint-credentials-username`             |
+| ENV    | `_`       | `<PREFIX>ENDPOINT_CREDENTIALS_USERNAME`       |
+| INI    | `.`       | `[endpoint.credentials]` section, `username`  |
+| JSON   | nested    | `{"endpoint": {"credentials": {"username":…}}}` |
+| TOML   | `.`       | `[endpoint.credentials]` table, `username`    |
+
+<!--- name: test_groups_nested_cli --->
+```python
+import argclass
+
+class Credentials(argclass.Group):
+    username: str = "admin"
+    password: str = "secret"
+
+class Endpoint(argclass.Group):
+    host: str = "localhost"
+    port: int = 8080
+    credentials: Credentials = Credentials()
+
+class Parser(argclass.Parser):
+    endpoint: Endpoint = Endpoint()
+
+parser = Parser()
+parser.parse_args([
+    "--endpoint-host", "api.example.com",
+    "--endpoint-credentials-username", "root",
+    "--endpoint-credentials-password", "hunter2",
+])
+
+assert parser.endpoint.host == "api.example.com"
+assert parser.endpoint.credentials.username == "root"
+assert parser.endpoint.credentials.password == "hunter2"
+```
+
+Nested groups appear as separate sections in `--help`, titled with their
+dotted attribute path (e.g. `endpoint.credentials`). Set `title=` on a
+group to override the default title for that one level.
+
+### Nested groups in config files
+
+INI sections use a dotted section name; JSON/TOML use natural nesting.
+
+<!--- name: test_groups_nested_ini --->
+```python
+import argclass
+from pathlib import Path
+from tempfile import NamedTemporaryFile
+
+class Credentials(argclass.Group):
+    username: str = "admin"
+    password: str = "secret"
+
+class Endpoint(argclass.Group):
+    host: str = "localhost"
+    credentials: Credentials = Credentials()
+
+class Parser(argclass.Parser):
+    endpoint: Endpoint = Endpoint()
+
+CONFIG = """
+[endpoint]
+host = api.example.com
+
+[endpoint.credentials]
+username = root
+password = hunter2
+"""
+
+with NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as f:
+    f.write(CONFIG)
+    config_path = f.name
+
+parser = Parser(config_files=[config_path])
+parser.parse_args([])
+
+assert parser.endpoint.host == "api.example.com"
+assert parser.endpoint.credentials.username == "root"
+assert parser.endpoint.credentials.password == "hunter2"
+
+Path(config_path).unlink()
+```
+
+### `prefix=` and nested groups
+
+`Group(prefix=...)` overrides only the CLI/ENV segment for that group. It
+does **not** affect the INI/TOML section name — config sections always
+follow the attribute path. This keeps section names predictable and
+prevents CLI prefixes from silently desyncing from config layout.
+
+### Reusing a group instance is an error
+
+Passing the same `Group` instance to two different attributes raises
+`ArgclassError`, because that group's parsed state would otherwise be
+shared between locations. Instantiate a separate group per attribute,
+or subclass `Group` to define a dedicated type:
+
+<!--- name: test_groups_nested_separate_instances --->
+```python
+import argclass
+
+class Credentials(argclass.Group):
+    username: str = "admin"
+
+class Auth(argclass.Group):
+    primary: Credentials = Credentials()      # separate instance
+    secondary: Credentials = Credentials()    # separate instance
+
+class Parser(argclass.Parser):
+    auth: Auth = Auth()
+
+parser = Parser()
+parser.parse_args([
+    "--auth-primary-username", "alice",
+    "--auth-secondary-username", "bob",
+])
+
+assert parser.auth.primary.username == "alice"
+assert parser.auth.secondary.username == "bob"
+```
+
 ## Groups in Config Files
 
 Groups map to INI sections. The section name matches the group attribute name.

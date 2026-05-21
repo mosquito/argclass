@@ -89,6 +89,36 @@ assert parser.db.host == "db.example.com"
 assert parser.db.port == 3306
 ```
 
+Groups can also contain other Groups. Names join with `-` (CLI), `_`
+(env vars), or `.` (INI/TOML sections):
+
+<!--- name: test_nested_groups_example --->
+```python
+import argclass
+
+class Credentials(argclass.Group):
+    username: str = "admin"
+    password: str = "secret"
+
+class Endpoint(argclass.Group):
+    host: str = "localhost"
+    credentials: Credentials = Credentials()
+
+class Parser(argclass.Parser):
+    endpoint: Endpoint = Endpoint()
+
+parser = Parser()
+parser.parse_args([
+    "--endpoint-host", "api.example.com",
+    "--endpoint-credentials-username", "root",
+])
+assert parser.endpoint.host == "api.example.com"
+assert parser.endpoint.credentials.username == "root"
+```
+
+See [Groups](https://docs.argclass.com/groups.html#nested-groups) for
+nested groups in config files, environment variables, and `--help`.
+
 ### Configuration Files
 
 Load default values from configuration files. INI by default, JSON/TOML via `config_parser_class`.

@@ -30,7 +30,11 @@ from .defaults import (
     INIDefaultsParser,
     ValueKind,
 )
-from .exceptions import ArgumentDefinitionError, TypeConversionError
+from .exceptions import (
+    ArgclassError,
+    ArgumentDefinitionError,
+    TypeConversionError,
+)
 from .secret import SecretString
 from .store import AbstractGroup, AbstractParser, TypedArgument
 from .types import Actions, Nargs
@@ -604,76 +608,127 @@ class Parser(AbstractParser, Base):
         destinations: DestinationsType,
         parser: ArgumentParser,
     ) -> None:
+        visited: Set[int] = set()
         for group_name, group in self.__argument_groups__.items():
-            group_parser = parser.add_argument_group(
-                title=group._title,
-                description=group._description,
+            cli_seg = group._prefix if group._prefix is not None else group_name
+            cli_path: Tuple[str, ...] = (cli_seg,) if cli_seg else ()
+            self._fill_group(
+                group=group,
+                parser=parser,
+                attr_path=(group_name,),
+                cli_path=cli_path,
+                destinations=destinations,
+                visited=visited,
             )
 
-            for name, argument in group.__arguments__.items():
-                aliases = set(argument.aliases)
-                if group._prefix is not None:
-                    prefix = group._prefix
+    def _fill_group(
+        self,
+        group: "Group",
+        parser: ArgumentParser,
+        attr_path: Tuple[str, ...],
+        cli_path: Tuple[str, ...],
+        destinations: DestinationsType,
+        visited: Set[int],
+    ) -> None:
+        if id(group) in visited:
+            raise ArgclassError(
+                "Group instance is referenced more than once in the parser "
+                f"tree (current path: {'.'.join(attr_path)}). Reusing a "
+                "single Group instance across attributes is not supported "
+                "because state would be shared between locations.",
+                hint="Instantiate a new Group for each attribute, or "
+                "subclass Group to define a dedicated type.",
+            )
+        visited.add(id(group))
+
+        section = ".".join(attr_path)
+        cli_prefix = "_".join(cli_path)
+
+        title = group._title
+        if title is None and len(attr_path) > 1:
+            title = section
+
+        group_parser = parser.add_argument_group(
+            title=title,
+            description=group._description,
+        )
+
+        for name, argument in group.__arguments__.items():
+            aliases = set(argument.aliases)
+            dest = f"{cli_prefix}_{name}" if cli_prefix else name
+
+            if not aliases:
+                aliases.add(f"--{self.get_cli_name(dest)}")
+
+            # Get default from config with type-aware loading
+            kind = self._get_value_kind(argument)
+            config_default = self._config_parser.get_value(
+                name,
+                kind,
+                section=section,
+            )
+
+            # Apply type converter to config values
+            if config_default is not None and argument.type is not None:
+                type_func = argument.type
+                if isinstance(config_default, (list, tuple)):
+                    config_default = [type_func(x) for x in config_default]
                 else:
-                    prefix = group_name
-                dest = f"{prefix}_{name}" if prefix else name
+                    val = config_default
+                    try:
+                        already_correct = isinstance(val, type_func)
+                    except TypeError:
+                        already_correct = False
+                    if not already_correct:
+                        config_default = type_func(val)
 
-                if not aliases:
-                    aliases.add(f"--{self.get_cli_name(dest)}")
+            default = (
+                config_default
+                if config_default is not None
+                else group._defaults.get(name, argument.default)
+            )
 
-                # Get default from config with type-aware loading
-                kind = self._get_value_kind(argument)
-                config_default = self._config_parser.get_value(
-                    name,
-                    kind,
-                    section=group_name,
-                )
+            argument = argument.copy(
+                default=default,
+                env_var=self.get_env_var(dest, argument),
+            )
 
-                # Apply type converter to config values
-                if config_default is not None and argument.type is not None:
-                    type_func = argument.type
-                    if isinstance(config_default, (list, tuple)):
-                        config_default = [type_func(x) for x in config_default]
-                    else:
-                        # Check if already correct type (only for types)
-                        val = config_default
-                        try:
-                            already_correct = isinstance(val, type_func)
-                        except TypeError:
-                            already_correct = False
-                        if not already_correct:
-                            config_default = type_func(val)
+            is_optional = any(a.startswith("-") for a in aliases)
+            if is_optional and argument.has_default and argument.required:
+                argument = argument.copy(required=False)
 
-                default = (
-                    config_default
-                    if config_default is not None
-                    else group._defaults.get(name, argument.default)
-                )
+            dest, action = self._add_argument(
+                group_parser,
+                argument,
+                dest,
+                *aliases,
+            )
+            destinations[dest].add(
+                Destination(
+                    target=group,
+                    attribute=name,
+                    argument=argument,
+                    action=action,
+                ),
+            )
 
-                argument = argument.copy(
-                    default=default,
-                    env_var=self.get_env_var(dest, argument),
-                )
-
-                # Check if this will be an optional argument (has -- prefix)
-                is_optional = any(a.startswith("-") for a in aliases)
-                if is_optional and argument.has_default and argument.required:
-                    argument = argument.copy(required=False)
-
-                dest, action = self._add_argument(
-                    group_parser,
-                    argument,
-                    dest,
-                    *aliases,
-                )
-                destinations[dest].add(
-                    Destination(
-                        target=group,
-                        attribute=name,
-                        argument=argument,
-                        action=action,
-                    ),
-                )
+        for child_name, child_group in group.__argument_groups__.items():
+            child_cli_seg = (
+                child_group._prefix
+                if child_group._prefix is not None
+                else child_name
+            )
+            child_cli_path = cli_path + (
+                (child_cli_seg,) if child_cli_seg else ()
+            )
+            self._fill_group(
+                group=child_group,
+                parser=parser,
+                attr_path=attr_path + (child_name,),
+                cli_path=child_cli_path,
+                destinations=destinations,
+                visited=visited,
+            )
 
     def _fill_subparsers(
         self,

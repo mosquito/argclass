@@ -640,6 +640,84 @@ assert parser.database.port == 3306
 Path(config_path).unlink()
 ```
 
+#### Nested Groups in Config Files
+
+A group inside a group becomes a dotted INI section, a nested JSON/TOML
+table, or a child object — depending on the format.
+
+INI uses the dotted section name verbatim:
+
+<!--- name: test_config_nested_ini --->
+```python
+import argclass
+from pathlib import Path
+from tempfile import NamedTemporaryFile
+
+class Credentials(argclass.Group):
+    username: str = "admin"
+    password: str = "secret"
+
+class Endpoint(argclass.Group):
+    host: str = "localhost"
+    credentials: Credentials = Credentials()
+
+class Parser(argclass.Parser):
+    endpoint: Endpoint = Endpoint()
+
+CONFIG = """
+[endpoint]
+host = api.example.com
+
+[endpoint.credentials]
+username = root
+password = hunter2
+"""
+
+with NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as f:
+    f.write(CONFIG)
+    config_path = f.name
+
+parser = Parser(config_files=[config_path])
+parser.parse_args([])
+
+assert parser.endpoint.host == "api.example.com"
+assert parser.endpoint.credentials.username == "root"
+assert parser.endpoint.credentials.password == "hunter2"
+
+Path(config_path).unlink()
+```
+
+JSON uses natural nesting — each group level is a nested object:
+
+```json
+{
+  "endpoint": {
+    "host": "api.example.com",
+    "credentials": {
+      "username": "root",
+      "password": "hunter2"
+    }
+  }
+}
+```
+
+TOML uses dotted table headers, just like INI:
+
+```toml
+[endpoint]
+host = "api.example.com"
+
+[endpoint.credentials]
+username = "root"
+password = "hunter2"
+```
+
+:::{note}
+The section name in config files always follows the attribute path,
+even when a group has `prefix=` set. `prefix=` only renames the CLI/env
+segment for that group.
+:::
+
 ### Boolean Values
 
 | True values | False values |
