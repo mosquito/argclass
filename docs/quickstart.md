@@ -19,9 +19,10 @@ class Greeter(argclass.Parser):
     name: str          # Required argument
     count: int = 1     # Optional with default
 
-greeter = Greeter()
-greeter.parse_args()
-print(f"Hello, {greeter.name}!" * greeter.count)
+if __name__ == "__main__":
+    greeter = Greeter()
+    greeter.parse_args()
+    print(f"Hello, {greeter.name}!" * greeter.count)
 ```
 
 ```console

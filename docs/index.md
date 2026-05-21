@@ -57,9 +57,10 @@ class Server(argclass.Parser):
     port: int = 8080
     debug: bool = False
 
-server = Server()
-server.parse_args()
-print(f"Starting server on {server.host}:{server.port}")
+if __name__ == "__main__":
+    server = Server()
+    server.parse_args()
+    print(f"Starting server on {server.host}:{server.port}")
 ```
 
 ```bash

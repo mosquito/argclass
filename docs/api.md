@@ -123,8 +123,8 @@ class MyApp(argclass.Parser):
 app = MyApp()
 # Use sanitize_secrets=True to auto-remove secret env vars during parsing
 app.parse_args([], sanitize_secrets=True)
-assert str(app.api_key) == "******"  # Masked in string representation
-assert app.api_key == "secret123"    # But actual value is accessible
+assert repr(app.api_key) == "'******'"  # Masked in repr / logs
+assert app.api_key == "secret123"        # But actual value is accessible
 assert "TEST_API_KEY" not in os.environ  # Already removed
 ```
 
@@ -316,11 +316,12 @@ app = MyApp()
 app.parse_args(["--log-level", "debug"])
 assert app.log_level == logging.DEBUG
 
-app.parse_args(["--log-level", "WARNING"])
+app.parse_args(["--log-level", "warning"])
 assert app.log_level == logging.WARNING
 ```
 
-Accepts: `debug`, `info`, `warning`, `error`, `critical` (case-insensitive).
+Accepts the lowercase enum member names: `debug`, `info`, `warning`,
+`error`, `critical`, `notset`.
 
 ```{eval-rst}
 .. autoclass:: argclass.LogLevelEnum

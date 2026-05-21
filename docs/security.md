@@ -447,6 +447,7 @@ Environment variables are often more secure than config files because:
 - Environment variables are process-scoped and not persisted
 
 ```python
+import os
 # Store secrets in environment, not in config.ini
 os.environ["API_KEY"] = "your_secret"  # Set by deployment system
 ```
