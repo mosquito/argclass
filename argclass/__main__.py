@@ -220,9 +220,9 @@ class GroupsDemo(argclass.Parser):
       class CLI(argclass.Parser):
           endpoint: Endpoint = Endpoint()
 
-    Nested groups produce hyphen-joined CLI flags
-    (--endpoint-credentials-username), env vars
-    (PREFIX_ENDPOINT_CREDENTIALS_USERNAME), and INI
+    Nested groups join segments with `-` for CLI flags
+    (--endpoint-credentials-username), `_` for env vars
+    (PREFIX_ENDPOINT_CREDENTIALS_USERNAME), and `.` for INI
     sections ([endpoint.credentials]).
 
     Try: groups --server-host 0.0.0.0 --server-port 9090 \\

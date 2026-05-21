@@ -437,6 +437,75 @@ class TestGroupAnnotation:
         parser.parse_args(["--outer-inner-value=set"])
         assert parser.outer.inner.value == "set"
 
+    def test_group_in_complex_union_with_non_group_rejected(self):
+        """G | int (non-Optional union mixing Group with a regular
+        type) gets a Group-specific error message — not the generic
+        "use argclass.Argument with converter" hint, which would not
+        help the user understand the real problem."""
+
+        class G(argclass.Group):
+            foo: int = 0
+
+        with pytest.raises(ArgumentDefinitionError) as exc_info:
+            type(
+                "P",
+                (argclass.Parser,),
+                {"__annotations__": {"g": G | int}, "g": ...},
+            )
+
+        msg = str(exc_info.value)
+        assert "complex Union" in msg
+        assert "G" in msg
+
+    def test_union_of_two_group_classes_rejected(self):
+        """G1 | G2 is also rejected — only one Group class is
+        meaningful per attribute."""
+
+        class G1(argclass.Group):
+            foo: int = 0
+
+        class G2(argclass.Group):
+            bar: int = 0
+
+        with pytest.raises(ArgumentDefinitionError) as exc_info:
+            type(
+                "P",
+                (argclass.Parser,),
+                {"__annotations__": {"g": G1 | G2}, "g": ...},
+            )
+
+        assert "complex Union" in str(exc_info.value)
+
+    def test_three_member_union_with_group_and_none_rejected(self):
+        """G | int | None — three-member union containing a Group
+        also gets the Group-specific error."""
+
+        class G(argclass.Group):
+            foo: int = 0
+
+        with pytest.raises(ArgumentDefinitionError) as exc_info:
+            type(
+                "P",
+                (argclass.Parser,),
+                {"__annotations__": {"g": G | int | None}, "g": None},
+            )
+
+        assert "complex Union" in str(exc_info.value)
+
+    def test_non_group_complex_union_unaffected(self):
+        """int | str without explicit Argument still raises
+        ComplexTypeError (the pre-existing behaviour) — our new
+        Group-aware detection must not interfere with unrelated
+        Union annotations."""
+        from argclass.exceptions import ComplexTypeError
+
+        with pytest.raises(ComplexTypeError):
+            type(
+                "P",
+                (argclass.Parser,),
+                {"__annotations__": {"v": int | str}},
+            )
+
     def test_complex_union_annotation_does_not_break_group_detection(self):
         """Fields with unsupported Union types (e.g. int | str) must
         not raise during class definition just because we probe for

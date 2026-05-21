@@ -118,6 +118,32 @@ class Meta(ABCMeta):
                     optional_inner = unwrap_optional(kind)
                 except ComplexTypeError:
                     optional_inner = None
+                    # Complex union (e.g. `G | int`, `G | None | int`,
+                    # `G1 | G2`). If any member is a Group, raise a
+                    # Group-specific message — otherwise the generic
+                    # argument path raises the same ComplexTypeError
+                    # without mentioning Group, which is confusing.
+                    union_groups = [
+                        arg
+                        for arg in getattr(kind, "__args__", ())
+                        if isinstance(arg, type)
+                        and issubclass(arg, AbstractGroup)
+                    ]
+                    if union_groups:
+                        g = union_groups[0]
+                        raise ArgumentDefinitionError(
+                            f"Group field '{key}' cannot be part of a "
+                            f"complex Union ({kind!r}). Group instances "
+                            f"hold parsed state and only one Group "
+                            f"class is meaningful per attribute.",
+                            field_name=key,
+                            hint=(
+                                f"Use '{key}: {g.__name__}' "
+                                f"(auto-instantiated) or "
+                                f"'{key}: {g.__name__} = "
+                                f"{g.__name__}()'."
+                            ),
+                        )
                 if (
                     optional_inner is not None
                     and isinstance(optional_inner, type)
