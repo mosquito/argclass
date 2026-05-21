@@ -220,7 +220,7 @@ class GroupsDemo(argclass.Parser):
       class CLI(argclass.Parser):
           endpoint: Endpoint = Endpoint()
 
-    Nested groups produce dot-joined CLI flags
+    Nested groups produce hyphen-joined CLI flags
     (--endpoint-credentials-username), env vars
     (PREFIX_ENDPOINT_CREDENTIALS_USERNAME), and INI
     sections ([endpoint.credentials]).
