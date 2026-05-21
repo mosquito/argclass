@@ -196,6 +196,25 @@ class TestINI:
         assert parser.endpoint.host == "only-host"
         assert parser.endpoint.credentials.username == "admin"
 
+    def test_non_dict_intermediate_in_dotted_path_returns_default(
+        self,
+        tmp_path: Path,
+    ):
+        """If an intermediate config value on the dotted descent path
+        is not a dict (e.g. a string), get_value falls back to the
+        argument's own default instead of crashing."""
+        cfg = tmp_path / "config.json"
+        # endpoint.credentials would descend into "not-a-dict", which
+        # is not a dict — should return None and fall back to defaults.
+        cfg.write_text('{"endpoint": "not-a-dict"}')
+        parser = CLI(
+            config_files=[cfg],
+            config_parser_class=JSONDefaultsParser,
+        )
+        parser.parse_args([])
+        assert parser.endpoint.credentials.username == "admin"
+        assert parser.endpoint.credentials.password == "secret"
+
     def test_three_level_ini(self, tmp_path: Path):
         class TLS(argclass.Group):
             cert: str = "/etc/cert"
@@ -417,6 +436,28 @@ class TestGroupAnnotation:
         parser = P()
         parser.parse_args(["--outer-inner-value=set"])
         assert parser.outer.inner.value == "set"
+
+    def test_complex_union_annotation_does_not_break_group_detection(self):
+        """Fields with unsupported Union types (e.g. int | str) must
+        not raise during class definition just because we probe for
+        Group membership — they should still reach the regular
+        argument path."""
+
+        def coerce(v: str) -> object:
+            try:
+                return int(v)
+            except ValueError:
+                return v
+
+        class P(argclass.Parser):
+            value: int | str = argclass.Argument(
+                type=coerce,
+                default=0,
+            )
+
+        parser = P()
+        parser.parse_args(["--value", "42"])
+        assert parser.value == 42
 
 
 class TestSameInstanceReuse:
