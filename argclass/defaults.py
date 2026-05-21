@@ -97,15 +97,16 @@ class AbstractDefaultsParser(ABC):
     ) -> Any:
         """Get value with type validation.
 
+        The ``section`` argument may contain dots to address nested
+        groups (e.g. ``"endpoint.credentials"``). Resolution tries a
+        literal key match first (so INI section names with dots work),
+        then falls back to splitting on ``.`` and descending through
+        nested dicts (JSON/TOML).
+
         Args:
             key: The config key name.
             kind: Expected value type for validation.
-            section: Optional section/group name for nested values. May
-                contain dots to address nested groups (e.g.
-                ``"endpoint.credentials"``). Resolution tries a literal
-                key match first (so INI section names with dots work),
-                then falls back to splitting on ``.`` and descending
-                through nested dicts (JSON/TOML).
+            section: Optional section/group name for nested values.
 
         Returns:
             The value, converted if necessary (e.g., INI literal_eval).
