@@ -1,87 +1,14 @@
 # Generating Config Files
 
-argclass can WRITE config files for a parser, the inverse of the
-config-file reading covered in [Config Files](config-files.md).
-Use this to scaffold sample configs for users, dump the current
-parsed state for debugging, or hand a snapshot off to other tools.
+argclass can WRITE config files for a parser — the symmetric inverse
+of the [config-file reading](config-files.md) covered elsewhere. The
+expected end-user workflow is "run the app with a flag and get a
+config file out"; everything else (programmatic dumps, custom
+formats) builds on that.
 
-## How it works
+## Add `--generate-config` to your CLI
 
-A `ConfigGenerator` walks the parser tree once and yields
-`ConfigField` records containing the current value, attribute path,
-help text, and env var metadata. Generators render that field stream
-to a format-specific string.
-argclass ships four generators:
-
-| Class                  | Output  |
-|------------------------|---------|
-| `INIConfigGenerator`   | INI     |
-| `JSONConfigGenerator`  | JSON    |
-| `TOMLConfigGenerator`  | TOML    |
-| `EnvConfigGenerator`   | `.env`  |
-
-All inherit the same walking + Action wiring; subclasses override
-`render(fields)`.
-
-## Basic usage
-
-<!--- name: test_config_gen_basic --->
-```python
-import argclass
-
-class Database(argclass.Group):
-    host: str = "localhost"
-    port: int = 5432
-
-class CLI(argclass.Parser):
-    debug: bool = False
-    name: str = argclass.Argument(default="app", help="App name")
-    db: Database = Database()
-
-parser = CLI()
-ini_text = argclass.INIConfigGenerator().dump_to_string(parser)
-assert "[DEFAULT]" in ini_text
-assert "name = app" in ini_text
-assert "[db]" in ini_text
-assert "host = localhost" in ini_text
-```
-
-## Writing to a file (or stdout)
-
-`dump(parser, dest)` accepts a path, a file-like object, or `"-"`
-for stdout:
-
-<!--- name: test_config_gen_dump_file --->
-```python
-import argclass
-from pathlib import Path
-from tempfile import NamedTemporaryFile
-
-class CLI(argclass.Parser):
-    host: str = "localhost"
-    port: int = 8080
-
-with NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
-    config_path = f.name
-
-argclass.TOMLConfigGenerator().dump(CLI(), config_path)
-
-# Read it back
-loaded = CLI(
-    config_files=[config_path],
-    config_parser_class=argclass.TOMLDefaultsParser,
-)
-loaded.parse_args([])
-assert loaded.host == "localhost"
-assert loaded.port == 8080
-
-Path(config_path).unlink()
-```
-
-## The `--generate-config` flag
-
-argclass ships `GenerateConfigAction` — an argparse Action that lets
-users dump a config from your CLI:
+Most users only need this:
 
 ```python
 import argclass
@@ -89,159 +16,111 @@ import argclass
 class CLI(argclass.Parser):
     host: str = "localhost"
     port: int = 8080
-    generate = argclass.Argument(
-        "--generate-config",
+    generate_config = argclass.Argument(
         action=argclass.GenerateConfigAction,
         generator=argclass.INIConfigGenerator,
         metavar="FILE",
     )
 ```
 
-End users run:
+The attribute name `generate_config` auto-derives `--generate-config`;
+end users then run:
 
 ```
 myapp --generate-config /etc/myapp.ini   # write a file
 myapp --generate-config -                # print to stdout
 ```
 
-The action writes the file (or stdout), then exits with status 0.
+The action writes the file (or stdout) and exits with status 0.
 
-You can also pass a generator INSTANCE instead of a class — useful
-if your generator needs constructor arguments:
+If you want to ship multiple formats, declare one attribute per
+generator — the flag names follow the attribute names:
 
 ```python
-generator=argclass.JSONConfigGenerator()
-```
-
-## Sources reflected in the dump
-
-The generator reads the parser's CURRENT state. Whatever argclass
-resolved at the moment of dumping is what gets written — defaults,
-config-file values, env vars, or CLI overrides. The usual priority
-order (`defaults < config < env < CLI`) is preserved, so dumping
-after `parse_args` gives you a full snapshot.
-
-This makes config generation useful for more than just scaffolding
-defaults — you can also use it to:
-
-- **Convert between formats.** Load an existing INI, dump as TOML.
-- **Snapshot a deployed configuration.** After `parse_args`, dump to
-  inspect what the parser actually resolved (defaults plus
-  config file plus env vars plus CLI).
-- **Materialise env-based config to a file.** Run the parser with
-  env vars set, dump as INI/TOML/JSON, commit the file.
-
-### Including CLI values
-
-CLI arguments parsed by `parse_args` end up in the dump. After parse,
-the parser's attributes carry the resolved values; dumping just reads
-them out.
-
-<!--- name: test_config_gen_cli_in_dump --->
-```python
-import argclass
-
 class CLI(argclass.Parser):
     host: str = "localhost"
-    port: int = 8080
 
-parser = CLI()
-parser.parse_args(["--host", "10.0.0.1", "--port", "9090"])
-
-text = argclass.INIConfigGenerator().dump_to_string(parser)
-assert "host = 10.0.0.1" in text
-assert "port = 9090" in text
+    generate_ini  = argclass.Argument(
+        action=argclass.GenerateConfigAction,
+        generator=argclass.INIConfigGenerator,
+        metavar="FILE",
+    )
+    generate_toml = argclass.Argument(
+        action=argclass.GenerateConfigAction,
+        generator=argclass.TOMLConfigGenerator,
+        metavar="FILE",
+    )
+    generate_env  = argclass.Argument(
+        action=argclass.GenerateConfigAction,
+        generator=argclass.EnvConfigGenerator,
+        metavar="FILE",
+    )
 ```
 
-When `--generate-config` is invoked via `GenerateConfigAction`, the
-action also captures CLI arguments that argparse has already
-processed at that point in the command line — order matters. Put
-overrides BEFORE the generation flag to make sure they reach the
-dump.
+This is exactly the pattern the interactive demo uses; try it with:
 
-### Including existing config-file values
-
-A parser configured with `config_files=` loads those values during
-`parse_args`. Dump after parse and the source config-file values
-appear in the output, which makes converting between formats
-trivial:
-
-<!--- name: test_config_gen_format_conversion --->
-```python
-import argclass
-from pathlib import Path
-from tempfile import NamedTemporaryFile
-
-class CLI(argclass.Parser):
-    host: str = "localhost"
-    port: int = 8080
-
-# Pretend the user already ships an INI; convert it to TOML.
-with NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as f:
-    f.write("[DEFAULT]\nhost = prod.example.com\nport = 9000\n")
-    src = f.name
-
-parser = CLI(config_files=[src])
-parser.parse_args([])
-toml_text = argclass.TOMLConfigGenerator().dump_to_string(parser)
-
-assert 'host = "prod.example.com"' in toml_text
-assert "port = 9000" in toml_text
-
-Path(src).unlink()
+```
+python -m argclass genconfig --generate-ini -
+python -m argclass genconfig --generate-toml -
+DEMO_HOST=prod python -m argclass genconfig --generate-env -
 ```
 
-### Including environment variables
+## Picking a format
 
-When `auto_env_var_prefix=` is set on the parser (or arguments
-declare explicit `env_var=`), values from `os.environ` are resolved
-just like config or CLI values, and they land in the dump too.
+| Generator                | Output  | Help comments | Pick when…                                  |
+|--------------------------|---------|---------------|---------------------------------------------|
+| `INIConfigGenerator`     | INI     | `; ...`       | legacy ecosystems, stdlib-only stack        |
+| `TOMLConfigGenerator`    | TOML    | `# ...`       | comments + nested sections, modern default  |
+| `JSONConfigGenerator`    | JSON    | (dropped)     | machine consumption / pipelines             |
+| `EnvConfigGenerator`     | `.env`  | `# ...`       | Docker, systemd, CI, secret managers        |
 
-<!--- name: test_config_gen_env_in_dump --->
-```python
-import os
-import argclass
+All four are interchangeable from the user's perspective — switch
+`generator=...` and rerun.
 
-os.environ["APP_HOST"] = "from-env.example.com"
-os.environ["APP_PORT"] = "9999"
+## What lands in the dump
 
-class CLI(argclass.Parser):
-    host: str = "localhost"
-    port: int = 8080
+The dump reflects the parser's CURRENT resolved state at the moment
+`--generate-config` fires. argclass's usual priority applies
+(`defaults < config files < env vars < CLI args`), so all four
+sources can shape the output.
 
-parser = CLI(auto_env_var_prefix="APP_")
-parser.parse_args([])
+### CLI flags
 
-ini = argclass.INIConfigGenerator().dump_to_string(parser)
-assert "host = from-env.example.com" in ini
-assert "port = 9999" in ini
+CLI args parsed BEFORE `--generate-config` end up in the dump
+(argparse processes flags left-to-right; the action exits before
+later flags are seen):
 
-del os.environ["APP_HOST"]
-del os.environ["APP_PORT"]
+```
+myapp --host=10.0.0.1 --port=9090 --generate-config -
 ```
 
-The same env-aware behaviour kicks in when the dump runs from
-`GenerateConfigAction` mid-parse (i.e. when the user passes
-`--generate-config -` on the command line). `os.environ` is consulted
-directly at dump time, so you don't need to call `parse_args([])`
-first.
+produces a config with `host = 10.0.0.1` and `port = 9090`. Putting
+`--generate-config` last is the safe convention.
 
-## Migrating between config formats
+### Environment variables
 
-A common need: an app already ships an INI config and you want to
-move to TOML (or JSON, or `.env`). Because the same parser class
-reads with `AbstractDefaultsParser` and writes with
-`ConfigGenerator`, conversion is "load with reader X, dump with
-generator Y". The values flow through your typed schema, so the
-result is structurally identical even if the syntax changes.
+When the parser uses `auto_env_var_prefix=` (or arguments declare
+explicit `env_var=`), values from `os.environ` reach the dump too:
 
-Three ways to do it, depending on context.
+```
+APP_HOST=prod.example.com APP_PORT=9999 myapp --generate-config -
+```
 
-### One-shot script (recommended for migration)
+writes `host = prod.example.com`, `port = 9999`.
 
-Write a small Python script that uses your real parser class. This
-catches schema mismatches — if a key in the source config has no
-corresponding argument, you'll see it (it's dropped from the dump).
+### Config-file defaults
+
+A parser instantiated with `config_files=[…]` loads those values
+during `parse_args`. Whatever the file contained ends up in the
+dump alongside any CLI overrides. This is the building block for
+**format conversion** (next section).
+
+## Converting between config formats
+
+Format conversion happens through your own parser class — load
+through reader X, dump through generator Y. There's no built-in
+`--config` flag in argclass that loads a config file, so this is
+best expressed as a small script (or a `__main__` entry point):
 
 <!--- name: test_config_gen_migrate_oneshot --->
 ```python
@@ -258,7 +137,7 @@ class App(argclass.Parser):
     name: str = "myapp"
     db: Database = Database()
 
-# Existing INI (in real life: shipped with the app).
+# Existing INI (shipped with the app in real life).
 with NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as f:
     f.write(
         "[DEFAULT]\n"
@@ -271,18 +150,17 @@ with NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as f:
     )
     ini_path = f.name
 
-# Load the existing INI through the same parser class.
+# Load through the same parser class.
 parser = App(config_files=[ini_path])
 parser.parse_args([])
 
 # Dump as TOML.
 toml_path = Path(ini_path).with_suffix(".toml")
-argclass.TOMLConfigGenerator().dump(parser, str(toml_path))
+argclass.TOMLConfigGenerator().dump(parser, toml_path)
 
-# Sanity-check: read the new TOML back through the same parser
-# and confirm we got the same resolved state.
+# Round-trip check: reload the TOML, confirm the same state.
 reloaded = App(
-    config_files=[str(toml_path)],
+    config_files=[toml_path],
     config_parser_class=argclass.TOMLDefaultsParser,
 )
 reloaded.parse_args([])
@@ -295,35 +173,7 @@ Path(ini_path).unlink()
 toml_path.unlink()
 ```
 
-This approach is the one to ship in a release note ("run
-`python -m myapp.migrate config.ini`") — users get a deterministic,
-schema-validated conversion. Add a `--dry-run` flag that prints to
-stdout instead of writing if you want to be polite.
-
-### Mid-flight conversion via `--generate-config`
-
-If your app already wires `GenerateConfigAction` (see the
-"`--generate-config` flag" section above) and reads `config_files=`,
-users can convert in a single command without any extra script:
-
-```
-# Read the old INI, write the new TOML, exit.
-myapp --config /etc/myapp.ini --generate-toml /etc/myapp.toml
-
-# Inspect first by streaming to stdout.
-myapp --config /etc/myapp.ini --generate-toml -
-```
-
-The Action runs after argparse has applied env vars and
-config-file values to the namespace, so the dump captures the
-full resolved state — including any CLI overrides the user typed
-before `--generate-toml`.
-
-### Bulk conversion with `tmp_path` / pipelines
-
-For converting many files (e.g. as part of a release migration
-script), wrap the one-shot pattern in a loop. Stream straight to
-the target file with `dump(parser, dest)` to keep memory flat:
+Bulk conversion is the same in a loop:
 
 ```python
 import argclass
@@ -333,39 +183,22 @@ for src in Path("configs").glob("*.ini"):
     parser = App(config_files=[src])
     parser.parse_args([])
     dst = src.with_suffix(".toml")
-    argclass.TOMLConfigGenerator().dump(parser, str(dst))
+    argclass.TOMLConfigGenerator().dump(parser, dst)
 ```
 
-### Choosing the target format
-
-| If you want…                         | Pick                  |
-|--------------------------------------|-----------------------|
-| Comments + nested sections           | TOML                  |
-| Stdlib-only, simplest legacy fit     | INI                   |
-| Programmatic post-processing         | JSON                  |
-| `.env` for Docker / systemd / CI     | `EnvConfigGenerator`  |
-
-Notes:
-
-- JSON has no comments — your help text will be lost. INI, TOML,
-  and `.env` preserve it as `;`/`#` comment lines.
-- Secrets are emitted as plain values (see the "Security note"
-  section below). When converting, write the new file
-  with restrictive permissions and delete the source if it
-  contained credentials.
-- Subparsers aren't included in the dump. If your CLI has
-  subcommands with their own config-relevant args, dump each
-  subparser separately (pass the subparser instance to the
-  generator).
+The conversion is **schema-validated**: keys in the source that have
+no corresponding argument in the parser are silently dropped from
+the output, and missing keys fall back to argument defaults. That's
+usually what you want for a migration script — anything weird in
+the source surfaces as a missing field in the dump.
 
 ## Generating env-var listings
 
-`EnvConfigGenerator` emits a `.env`-style listing — one
-`KEY=value` line per argument, using the env var name argclass
-would read (explicit `env_var=` or computed from
-`auto_env_var_prefix=`). Arguments without a resolvable env var are
-skipped — set `auto_env_var_prefix=` on the parser to get full
-coverage.
+`EnvConfigGenerator` emits one `KEY=value` line per argument, using
+the env var name argclass would read (explicit `env_var=` or computed
+from `auto_env_var_prefix=`). Arguments without a resolvable env var
+are skipped — set `auto_env_var_prefix=` on the parser to cover
+everything.
 
 <!--- name: test_config_gen_env --->
 ```python
@@ -386,15 +219,16 @@ assert "APP_DB_HOST=localhost" in text
 assert "APP_DB_PORT=5432" in text
 ```
 
-Lists are emitted as Python literal syntax so argclass can read them
-back via `ast.literal_eval`:
+Lists serialise to Python literal syntax so argclass can
+`ast.literal_eval` them on read:
 
 ```
 APP_TAGS=['alpha', 'beta', 'gamma']
 ```
 
-Strings are quoted only when they contain whitespace, `=`, `#`, or
-other characters that would confuse a typical `.env` parser.
+Strings get quoted only when they contain whitespace, `=`, `#`,
+control chars, or other shell-significant characters; newlines and
+tabs are escaped (`\n`, `\t`) so each entry stays on one line.
 
 ## Excluding arguments from dumps
 
@@ -409,10 +243,9 @@ subclasses, pick one of two equivalent opt-outs:
 
 ### Option 1 — inherit from `argclass.NonConfigAction`
 
-The cleanest choice if you're writing a new action from scratch.
-`NonConfigAction` is a thin `argparse.Action` subclass that just
-sets the `__emit_config__ = False` marker for you, and it keeps
-intent visible at the class declaration:
+The cleanest choice for a new action. `NonConfigAction` sets
+`__emit_config__ = False` for you and keeps intent visible at the
+class declaration:
 
 <!--- name: test_config_gen_non_config_action --->
 ```python
@@ -439,9 +272,8 @@ assert "ping" not in text
 
 ### Option 2 — set `__emit_config__ = False` on an existing action
 
-Useful when you already inherit from something else (a third-party
-`argparse.Action` subclass, your own base, etc.) and would rather not
-add another base class. The marker is just a class attribute:
+Useful when you already inherit from a third-party `argparse.Action`
+and would rather not add another base class:
 
 <!--- name: test_config_gen_marker_attribute --->
 ```python
@@ -467,14 +299,78 @@ text = argclass.INIConfigGenerator().dump_to_string(CLI())
 assert "ping" not in text
 ```
 
-Both forms are honoured by the generator the same way — pick
-whichever fits your inheritance chain. If you forget both, your
-action will end up in dumps as an empty value, which is what tells
-you to opt out.
+Both forms are honoured the same way. If you forget both, the
+action shows up in dumps as an empty value — that's the smell test
+that tells you to opt out.
+
+## Dumping from code
+
+The CLI-level `--generate-config` flag is the right entry point for
+end users. If you're writing tests, a migration script, or a hook
+that uses the generators directly, use `dump_to_string(parser)` or
+`dump(parser, dest)`:
+
+<!--- name: test_config_gen_basic --->
+```python
+import argclass
+
+class Database(argclass.Group):
+    host: str = "localhost"
+    port: int = 5432
+
+class CLI(argclass.Parser):
+    debug: bool = False
+    name: str = argclass.Argument(default="app", help="App name")
+    db: Database = Database()
+
+parser = CLI()
+ini_text = argclass.INIConfigGenerator().dump_to_string(parser)
+assert "[DEFAULT]" in ini_text
+assert "name = app" in ini_text
+assert "[db]" in ini_text
+assert "host = localhost" in ini_text
+```
+
+`dump(parser, dest)` accepts a path (`str` or `pathlib.Path`), a
+file-like object, or the string `"-"` for stdout:
+
+<!--- name: test_config_gen_dump_file --->
+```python
+import argclass
+from pathlib import Path
+from tempfile import NamedTemporaryFile
+
+class CLI(argclass.Parser):
+    host: str = "localhost"
+    port: int = 8080
+
+with NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
+    config_path = f.name
+
+argclass.TOMLConfigGenerator().dump(CLI(), config_path)
+
+loaded = CLI(
+    config_files=[config_path],
+    config_parser_class=argclass.TOMLDefaultsParser,
+)
+loaded.parse_args([])
+assert loaded.host == "localhost"
+assert loaded.port == 8080
+
+Path(config_path).unlink()
+```
+
+You can also pass a generator INSTANCE instead of a class when you
+need to construct it with extra arguments (e.g.
+`generator=argclass.JSONConfigGenerator()`).
 
 ## Custom formats
 
-Subclass `ConfigGenerator` and override `render`:
+A `ConfigGenerator` walks the parser tree once and yields
+`ConfigField` records (one per leaf argument) containing the
+current value, attribute path, help text, and env var metadata.
+Subclasses consume that stream and produce text — that's the only
+thing you need to override:
 
 <!--- name: test_config_gen_custom --->
 ```python
@@ -504,8 +400,10 @@ assert "host=localhost" in text
 assert "port=8080" in text
 ```
 
-Field records already include metadata such as env var names, so even
-formats like `.env` can usually implement only `render(fields)`.
+Field records already carry env var names, so even `.env`-style
+formats are typically a one-method override. See
+`argclass.ConfigField` in the [API reference](api.md) for the full
+record shape.
 
 ## Security note
 
@@ -514,19 +412,22 @@ Generators emit values as-is, including those marked
 credentials. Treat the output file like any credential-bearing file:
 
 - Set restrictive permissions when writing to disk.
-- Avoid dumping to shared locations or sending to stdout in
-  contexts where logs may be captured.
-- Prefer the `EnvConfigGenerator` form when you want to record
-  config in a way that's easy to load via a secret-manager wrapper.
+- Avoid dumping to shared locations or to stdout in contexts where
+  logs may be captured.
+- Prefer `EnvConfigGenerator` when you want to record config in a
+  way that's easy to load via a secret-manager wrapper.
 
 ## Limitations
 
-- **Subparsers are skipped.** Subparsers represent runtime branches,
-  not config-time state. Mixing them into one file blurs the model.
-  Each subparser can be dumped separately by passing the subparser
+- **Subparsers are skipped.** They represent runtime branches, not
+  config-time state. Dump each subparser separately by passing its
   instance to the generator.
 - **JSON has no comments.** Help text is dropped in JSON output;
   INI, TOML, and `.env` formats include it.
+- **Mid-parse ordering.** CLI flags appearing AFTER
+  `--generate-config` are not reflected in the dump — argparse
+  invokes the action synchronously and the action exits. Put
+  overrides before the generation flag.
 - **TOML is emitted by a minimal hand-rolled writer.** It covers
   the types argclass supports (`str`, `int`, `float`, `bool`,
   `list`, `None`). Exotic values fall back to `str()`.

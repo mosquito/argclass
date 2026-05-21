@@ -195,53 +195,38 @@ del os.environ["APP_DEBUG"]
 ### Generating Config Files
 
 argclass can WRITE config files for a parser — the inverse of
-reading them. Useful for scaffolding sample configs, dumping the
-running state, or exporting env-var listings.
+reading them. Wire a `--generate-config` flag and end users dump
+a working config straight from the CLI:
 
 <!--- name: test_readme_config_gen --->
 ```python
 import argclass
 
-class Database(argclass.Group):
-    host: str = "localhost"
-    port: int = 5432
-
-class CLI(argclass.Parser):
-    debug: bool = False
-    db: Database = Database()
-
-parser = CLI()
-ini = argclass.INIConfigGenerator().dump_to_string(parser)
-assert "[DEFAULT]" in ini
-assert "[db]" in ini
-
-env = argclass.EnvConfigGenerator().dump_to_string(
-    CLI(auto_env_var_prefix="APP_"),
-)
-assert "APP_DEBUG=false" in env
-assert "APP_DB_HOST=localhost" in env
-```
-
-Ship a `--generate-config FILE` flag with the built-in action
-(supply `-` for stdout):
-
-```python
-import argclass
-
 class CLI(argclass.Parser):
     host: str = "localhost"
-    generate = argclass.Argument(
-        "--generate-config",
+    port: int = 8080
+    generate_config = argclass.Argument(
         action=argclass.GenerateConfigAction,
         generator=argclass.TOMLConfigGenerator,
+        metavar="FILE",
     )
 ```
 
+```
+myapp --generate-config /etc/myapp.toml   # write a file
+myapp --generate-config -                 # print to stdout
+```
+
+The action captures values from class defaults, `config_files=`,
+env vars, and any CLI flags that appear BEFORE
+`--generate-config`, then exits with status 0.
+
 Four built-in generators: `INIConfigGenerator`,
 `JSONConfigGenerator`, `TOMLConfigGenerator`, `EnvConfigGenerator`.
-Subclass `ConfigGenerator` for custom formats. See [Generating
+Subclass `ConfigGenerator` to add your own. See [Generating
 Config Files](https://docs.argclass.com/config-generation.html)
-for the full guide.
+for the full guide (multi-format wiring, env-listings, format
+conversion, `NonConfigAction` opt-out for fire-and-exit actions).
 
 ### Subcommands
 

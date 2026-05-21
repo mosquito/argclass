@@ -15,14 +15,14 @@ Usage::
 
     class CLI(argclass.Parser):
         host: str = "localhost"
-        generate = argclass.Argument(
-            "--generate-config",
+        generate_config = argclass.Argument(
             action=GenerateConfigAction,
             generator=INIConfigGenerator,
             metavar="FILE",
         )
 
-Run ``myapp --generate-config /etc/myapp.ini`` to write the file, or
+The attribute name auto-derives the CLI flag, so end users run
+``myapp --generate-config /etc/myapp.ini`` to write the file, or
 ``myapp --generate-config -`` to print to stdout.
 
 Security note: secret values are emitted as-is. Treat generated files
@@ -617,20 +617,22 @@ class EnvConfigGenerator(ConfigGenerator):
 
 
 class GenerateConfigAction(NonConfigAction):
-    """Argparse Action: ``--generate-config FILE``.
+    """Argparse Action that writes a parser's state as a config file.
 
-    ``FILE`` may be a filesystem path or ``-`` for stdout. Pass the
-    generator class (or instance) via the ``generator=`` passthrough
-    kwarg::
+    Declare an attribute on your Parser and let argclass derive the
+    flag from its name::
 
-        argclass.Argument(
-            "--generate-config",
-            action=GenerateConfigAction,
-            generator=INIConfigGenerator,
-        )
+        class CLI(argclass.Parser):
+            generate_config = argclass.Argument(
+                action=GenerateConfigAction,
+                generator=INIConfigGenerator,
+                metavar="FILE",
+            )
 
-    On invocation, walks the parser, renders the config, writes to the
-    destination, and exits the process with status 0.
+    End users then run ``myapp --generate-config /etc/myapp.ini``
+    (or ``-`` for stdout). The action walks the parser, renders the
+    config via the supplied ``generator=`` (class or instance), writes
+    to the destination, and exits with status 0.
     """
 
     def __init__(

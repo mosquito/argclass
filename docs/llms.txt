@@ -178,14 +178,15 @@ class Database(argclass.Group):
 class CLI(argclass.Parser):
     debug: bool = False
     db: Database = Database()
-    # Built-in argparse Action: --generate-config FILE (or - for stdout)
-    generate = argclass.Argument(
-        "--generate-config",
+    # Attribute name auto-derives --generate-config FILE
+    # (use - for stdout). Action exits after writing.
+    generate_config = argclass.Argument(
         action=argclass.GenerateConfigAction,
         generator=argclass.INIConfigGenerator,
+        metavar="FILE",
     )
 
-# Programmatic
+# Programmatic dump (for tests / migration scripts / hooks):
 print(argclass.INIConfigGenerator().dump_to_string(CLI()))
 print(argclass.EnvConfigGenerator().dump_to_string(
     CLI(auto_env_var_prefix="APP_"),

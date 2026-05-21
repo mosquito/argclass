@@ -448,16 +448,15 @@ class SubcommandDemo(argclass.Parser):
 class GenerateConfigDemo(argclass.Parser):
     """Demonstrates argclass.GenerateConfigAction in every format.
 
-    Four flags, one Action class, one Generator class per format:
+    Four attributes, one Action class, one Generator class per
+    format. Attribute names auto-derive the CLI flag:
 
       class CLI(argclass.Parser):
-          ini  = argclass.Argument(
-              "--generate-ini",
+          generate_ini = argclass.Argument(
               action=argclass.GenerateConfigAction,
               generator=argclass.INIConfigGenerator,
           )
-          toml = argclass.Argument(
-              "--generate-toml",
+          generate_toml = argclass.Argument(
               action=argclass.GenerateConfigAction,
               generator=argclass.TOMLConfigGenerator,
           )
@@ -492,28 +491,25 @@ class GenerateConfigDemo(argclass.Parser):
     # objects in JSON/.env.
     server: ServerGroup = ServerGroup(title="Server options")
 
-    # Four flags, one per format. The Action exits after writing, so
-    # only one of these can be invoked per run.
+    # Four flags, one per format. Attribute names auto-derive the
+    # CLI flag (generate_ini -> --generate-ini, etc.). The Action
+    # exits after writing, so only one can be invoked per run.
     generate_ini = argclass.Argument(
-        "--generate-ini",
         action=argclass.GenerateConfigAction,
         generator=argclass.INIConfigGenerator,
         help="Write INI to FILE (use - for stdout)",
     )
     generate_toml = argclass.Argument(
-        "--generate-toml",
         action=argclass.GenerateConfigAction,
         generator=argclass.TOMLConfigGenerator,
         help="Write TOML to FILE (use - for stdout)",
     )
     generate_json = argclass.Argument(
-        "--generate-json",
         action=argclass.GenerateConfigAction,
         generator=argclass.JSONConfigGenerator,
         help="Write JSON to FILE (use - for stdout)",
     )
     generate_env = argclass.Argument(
-        "--generate-env",
         action=argclass.GenerateConfigAction,
         generator=argclass.EnvConfigGenerator,
         help="Write .env to FILE (use - for stdout)",
