@@ -587,6 +587,8 @@ class Parser(AbstractParser, Base):
                 **self._parser_kwargs,
             )
 
+        parser.argclass_parser = self  # type: ignore[attr-defined]
+
         destinations: DestinationsType = defaultdict(set)
         self._fill_arguments(destinations, parser)
         self._fill_groups(destinations, parser)

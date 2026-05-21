@@ -192,6 +192,57 @@ del os.environ["APP_HOST"]
 del os.environ["APP_DEBUG"]
 ```
 
+### Generating Config Files
+
+argclass can WRITE config files for a parser — the inverse of
+reading them. Useful for scaffolding sample configs, dumping the
+running state, or exporting env-var listings.
+
+<!--- name: test_readme_config_gen --->
+```python
+import argclass
+
+class Database(argclass.Group):
+    host: str = "localhost"
+    port: int = 5432
+
+class CLI(argclass.Parser):
+    debug: bool = False
+    db: Database = Database()
+
+parser = CLI()
+ini = argclass.INIConfigGenerator().dump_to_string(parser)
+assert "[DEFAULT]" in ini
+assert "[db]" in ini
+
+env = argclass.EnvConfigGenerator().dump_to_string(
+    CLI(auto_env_var_prefix="APP_"),
+)
+assert "APP_DEBUG=false" in env
+assert "APP_DB_HOST=localhost" in env
+```
+
+Ship a `--generate-config FILE` flag with the built-in action
+(supply `-` for stdout):
+
+```python
+import argclass
+
+class CLI(argclass.Parser):
+    host: str = "localhost"
+    generate = argclass.Argument(
+        "--generate-config",
+        action=argclass.GenerateConfigAction,
+        generator=argclass.TOMLConfigGenerator,
+    )
+```
+
+Four built-in generators: `INIConfigGenerator`,
+`JSONConfigGenerator`, `TOMLConfigGenerator`, `EnvConfigGenerator`.
+Subclass `ConfigGenerator` for custom formats. See [Generating
+Config Files](https://docs.argclass.com/config-generation.html)
+for the full guide.
+
 ### Subcommands
 
 ```python

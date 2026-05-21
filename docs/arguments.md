@@ -683,3 +683,9 @@ Run `python myapp.py --check-updates` to see the live PyPI check.
 The pattern generalises to any custom action: declare your own constructor
 parameters, consume them in `__init__` before calling `super().__init__`,
 and pass them through `argclass.Argument(action=YourAction, your_param=...)`.
+
+The same passthrough drives argclass's built-in `GenerateConfigAction`,
+which takes a `generator=` kwarg and dumps the current parser state to a
+file (or stdout). For "fire and exit" actions that should not appear in
+generated configs, inherit from `NonConfigAction`. See [Generating
+Config Files](config-generation.md) for the full guide.

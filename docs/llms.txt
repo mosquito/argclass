@@ -15,6 +15,7 @@ content extraction.
 - [Groups](https://docs.argclass.com/_sources/groups.md.txt): Reusable argument groups with prefix support
 - [Subparsers](https://docs.argclass.com/_sources/subparsers.md.txt): Hierarchical subcommands and nested parsers
 - [Config Files](https://docs.argclass.com/_sources/config-files.md.txt): INI, JSON, and TOML configuration file support
+- [Generating Config Files](https://docs.argclass.com/_sources/config-generation.md.txt): Writing INI/JSON/TOML/.env from a parser, the inverse of reading
 - [Environment Variables](https://docs.argclass.com/_sources/environment.md.txt): Automatic env var binding with prefixes
 - [Secrets](https://docs.argclass.com/_sources/secrets.md.txt): Secret masking to prevent accidental exposure in logs
 - [API Reference](https://docs.argclass.com/api.html): Full API documentation with all classes and functions
@@ -162,6 +163,36 @@ class CLI(argclass.Parser):
         search_paths=["/etc/myapp.ini", "~/.myapp.ini"],
     )
 ```
+
+### Generating config files (the inverse of reading)
+
+argclass can WRITE a config file from a Parser. Four built-in generators: `INIConfigGenerator`, `JSONConfigGenerator`, `TOMLConfigGenerator`, `EnvConfigGenerator` (the `.env`-style emitter uses each argument's env var name, computed from explicit `env_var=` or the parser's `auto_env_var_prefix`). Subclass `ConfigGenerator` to add new formats. `NonConfigAction` marks actions that should NOT appear in dumps (used internally by `GenerateConfigAction` and `Actions.VERSION` / `Actions.HELP`). Generators reflect the parser's current state, so dumping after `parse_args` snapshots resolved values (defaults < config < env < CLI).
+
+```python
+import argclass
+
+class Database(argclass.Group):
+    host: str = "localhost"
+    port: int = 5432
+
+class CLI(argclass.Parser):
+    debug: bool = False
+    db: Database = Database()
+    # Built-in argparse Action: --generate-config FILE (or - for stdout)
+    generate = argclass.Argument(
+        "--generate-config",
+        action=argclass.GenerateConfigAction,
+        generator=argclass.INIConfigGenerator,
+    )
+
+# Programmatic
+print(argclass.INIConfigGenerator().dump_to_string(CLI()))
+print(argclass.EnvConfigGenerator().dump_to_string(
+    CLI(auto_env_var_prefix="APP_"),
+))
+```
+
+Notes for users: secrets are emitted as-is (treat the output like a credential file); subparsers are skipped; JSON has no comments (help text is dropped there). See https://docs.argclass.com/config-generation.html for the full guide.
 
 ### Argparse passthrough kwargs
 
