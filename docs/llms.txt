@@ -192,7 +192,7 @@ print(argclass.EnvConfigGenerator().dump_to_string(
 ))
 ```
 
-Notes for users: secrets are emitted as-is (treat the output like a credential file); subparsers are skipped; JSON has no comments (help text is dropped there). See https://docs.argclass.com/config-generation.html for the full guide.
+Notes for users: secrets are emitted as-is (treat the output like a credential file); subparsers are skipped; JSON has no comments (help text is dropped there). Dumps reflect the parser's CURRENT state, so they pick up values from `config_files=`, env vars (explicit `env_var=` or `auto_env_var_prefix=`), and CLI args. This makes generation useful for format conversion (load INI, dump TOML), snapshotting a live config, or materialising env-based config to a file. See https://docs.argclass.com/config-generation.html for the full guide.
 
 ### Argparse passthrough kwargs
 

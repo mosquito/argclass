@@ -120,6 +120,22 @@ config-file values, env vars, or CLI overrides. The usual priority
 order (`defaults < config < env < CLI`) is preserved, so dumping
 after `parse_args` gives you a full snapshot.
 
+This makes config generation useful for more than just scaffolding
+defaults — you can also use it to:
+
+- **Convert between formats.** Load an existing INI, dump as TOML.
+- **Snapshot a deployed configuration.** After `parse_args`, dump to
+  inspect what the parser actually resolved (defaults plus
+  config file plus env vars plus CLI).
+- **Materialise env-based config to a file.** Run the parser with
+  env vars set, dump as INI/TOML/JSON, commit the file.
+
+### Including CLI values
+
+CLI arguments parsed by `parse_args` end up in the dump. After parse,
+the parser's attributes carry the resolved values; dumping just reads
+them out.
+
 <!--- name: test_config_gen_cli_in_dump --->
 ```python
 import argclass
@@ -135,6 +151,211 @@ text = argclass.INIConfigGenerator().dump_to_string(parser)
 assert "host = 10.0.0.1" in text
 assert "port = 9090" in text
 ```
+
+When `--generate-config` is invoked via `GenerateConfigAction`, the
+action also captures CLI arguments that argparse has already
+processed at that point in the command line — order matters. Put
+overrides BEFORE the generation flag to make sure they reach the
+dump.
+
+### Including existing config-file values
+
+A parser configured with `config_files=` loads those values during
+`parse_args`. Dump after parse and the source config-file values
+appear in the output, which makes converting between formats
+trivial:
+
+<!--- name: test_config_gen_format_conversion --->
+```python
+import argclass
+from pathlib import Path
+from tempfile import NamedTemporaryFile
+
+class CLI(argclass.Parser):
+    host: str = "localhost"
+    port: int = 8080
+
+# Pretend the user already ships an INI; convert it to TOML.
+with NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as f:
+    f.write("[DEFAULT]\nhost = prod.example.com\nport = 9000\n")
+    src = f.name
+
+parser = CLI(config_files=[src])
+parser.parse_args([])
+toml_text = argclass.TOMLConfigGenerator().dump_to_string(parser)
+
+assert 'host = "prod.example.com"' in toml_text
+assert "port = 9000" in toml_text
+
+Path(src).unlink()
+```
+
+### Including environment variables
+
+When `auto_env_var_prefix=` is set on the parser (or arguments
+declare explicit `env_var=`), values from `os.environ` are resolved
+just like config or CLI values, and they land in the dump too.
+
+<!--- name: test_config_gen_env_in_dump --->
+```python
+import os
+import argclass
+
+os.environ["APP_HOST"] = "from-env.example.com"
+os.environ["APP_PORT"] = "9999"
+
+class CLI(argclass.Parser):
+    host: str = "localhost"
+    port: int = 8080
+
+parser = CLI(auto_env_var_prefix="APP_")
+parser.parse_args([])
+
+ini = argclass.INIConfigGenerator().dump_to_string(parser)
+assert "host = from-env.example.com" in ini
+assert "port = 9999" in ini
+
+del os.environ["APP_HOST"]
+del os.environ["APP_PORT"]
+```
+
+The same env-aware behaviour kicks in when the dump runs from
+`GenerateConfigAction` mid-parse (i.e. when the user passes
+`--generate-config -` on the command line). `os.environ` is consulted
+directly at dump time, so you don't need to call `parse_args([])`
+first.
+
+## Migrating between config formats
+
+A common need: an app already ships an INI config and you want to
+move to TOML (or JSON, or `.env`). Because the same parser class
+reads with `AbstractDefaultsParser` and writes with
+`ConfigGenerator`, conversion is "load with reader X, dump with
+generator Y". The values flow through your typed schema, so the
+result is structurally identical even if the syntax changes.
+
+Three ways to do it, depending on context.
+
+### One-shot script (recommended for migration)
+
+Write a small Python script that uses your real parser class. This
+catches schema mismatches — if a key in the source config has no
+corresponding argument, you'll see it (it's dropped from the dump).
+
+<!--- name: test_config_gen_migrate_oneshot --->
+```python
+import argclass
+from pathlib import Path
+from tempfile import NamedTemporaryFile
+
+class Database(argclass.Group):
+    host: str = "localhost"
+    port: int = 5432
+
+class App(argclass.Parser):
+    debug: bool = False
+    name: str = "myapp"
+    db: Database = Database()
+
+# Existing INI (in real life: shipped with the app).
+with NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as f:
+    f.write(
+        "[DEFAULT]\n"
+        "debug = true\n"
+        "name = prod\n"
+        "\n"
+        "[db]\n"
+        "host = db.prod.example.com\n"
+        "port = 6432\n",
+    )
+    ini_path = f.name
+
+# Load the existing INI through the same parser class.
+parser = App(config_files=[ini_path])
+parser.parse_args([])
+
+# Dump as TOML.
+toml_path = Path(ini_path).with_suffix(".toml")
+argclass.TOMLConfigGenerator().dump(parser, str(toml_path))
+
+# Sanity-check: read the new TOML back through the same parser
+# and confirm we got the same resolved state.
+reloaded = App(
+    config_files=[str(toml_path)],
+    config_parser_class=argclass.TOMLDefaultsParser,
+)
+reloaded.parse_args([])
+assert reloaded.debug is True
+assert reloaded.name == "prod"
+assert reloaded.db.host == "db.prod.example.com"
+assert reloaded.db.port == 6432
+
+Path(ini_path).unlink()
+toml_path.unlink()
+```
+
+This approach is the one to ship in a release note ("run
+`python -m myapp.migrate config.ini`") — users get a deterministic,
+schema-validated conversion. Add a `--dry-run` flag that prints to
+stdout instead of writing if you want to be polite.
+
+### Mid-flight conversion via `--generate-config`
+
+If your app already wires `GenerateConfigAction` (see the
+"`--generate-config` flag" section above) and reads `config_files=`,
+users can convert in a single command without any extra script:
+
+```
+# Read the old INI, write the new TOML, exit.
+myapp --config /etc/myapp.ini --generate-toml /etc/myapp.toml
+
+# Inspect first by streaming to stdout.
+myapp --config /etc/myapp.ini --generate-toml -
+```
+
+The Action runs after argparse has applied env vars and
+config-file values to the namespace, so the dump captures the
+full resolved state — including any CLI overrides the user typed
+before `--generate-toml`.
+
+### Bulk conversion with `tmp_path` / pipelines
+
+For converting many files (e.g. as part of a release migration
+script), wrap the one-shot pattern in a loop. Stream straight to
+the target file with `dump(parser, dest)` to keep memory flat:
+
+```python
+import argclass
+from pathlib import Path
+
+for src in Path("configs").glob("*.ini"):
+    parser = App(config_files=[src])
+    parser.parse_args([])
+    dst = src.with_suffix(".toml")
+    argclass.TOMLConfigGenerator().dump(parser, str(dst))
+```
+
+### Choosing the target format
+
+| If you want…                         | Pick                  |
+|--------------------------------------|-----------------------|
+| Comments + nested sections           | TOML                  |
+| Stdlib-only, simplest legacy fit     | INI                   |
+| Programmatic post-processing         | JSON                  |
+| `.env` for Docker / systemd / CI     | `EnvConfigGenerator`  |
+
+Notes:
+
+- JSON has no comments — your help text will be lost. INI, TOML,
+  and `.env` preserve it as `;`/`#` comment lines.
+- Secrets are emitted as plain values (see the "Security note"
+  section below). When converting, write the new file
+  with restrictive permissions and delete the source if it
+  contained credentials.
+- Subparsers aren't included in the dump. If your CLI has
+  subcommands with their own config-relevant args, dump each
+  subparser separately (pass the subparser instance to the
+  generator).
 
 ## Generating env-var listings
 
