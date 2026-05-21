@@ -30,6 +30,7 @@ like any credential-bearing file.
 
 import argparse
 import json
+import os
 import sys
 from typing import Any, Dict, IO, List, Optional, Tuple, Union, cast
 
@@ -78,16 +79,44 @@ def current_value(
     target: Any,
     name: str,
     argument: TypedArgument,
+    *,
+    namespace: Optional[argparse.Namespace] = None,
+    dest: Optional[str] = None,
+    env_var: Optional[str] = None,
 ) -> Any:
     """Read the current value for ``name`` on a Parser/Group instance.
 
-    After ``parse_args`` the value lives in ``__dict__``. Before
-    parsing, the instance attribute aliases the class attribute (which
-    argclass replaces with a sentinel), so we fall back to the
-    declared default on the TypedArgument.
+    Priority (highest first):
+
+    1. The instance ``__dict__`` (set when ``parse_args`` has
+       completed).
+    2. An argparse ``Namespace`` under ``dest`` — used when called
+       mid-parse from :class:`GenerateConfigAction`, so CLI flags
+       already processed by argparse land in the dump.
+    3. ``os.environ[env_var]`` — covers env vars when the dump runs
+       before argclass has applied them to ``__dict__``.
+    4. The argument's declared default.
+
+    Env values arrive as strings; we apply ``argument.type`` when it
+    is callable, so the dump reflects the same type argclass would
+    bind at parse time.
     """
     if name in target.__dict__:
         return target.__dict__[name]
+    if namespace is not None and dest is not None and hasattr(namespace, dest):
+        value = getattr(namespace, dest)
+        if value is not None:
+            return value
+    if env_var:
+        raw = os.environ.get(env_var)
+        if raw is not None:
+            type_func = argument.type
+            if type_func is not None and not isinstance(raw, type_func):
+                try:
+                    return type_func(raw)
+                except Exception:
+                    return raw
+            return raw
     return argument.default
 
 
@@ -131,32 +160,82 @@ class ConfigGenerator:
     #: File extension hint. Subclasses set this.
     extension: str = ""
 
-    def build_dict(self, parser: AbstractParser) -> Dict[str, Any]:
+    def build_dict(
+        self,
+        parser: AbstractParser,
+        *,
+        namespace: Optional[argparse.Namespace] = None,
+    ) -> Dict[str, Any]:
         """Walk the parser, return a nested dict mirroring its tree.
 
         Top-level arguments become root keys; each group becomes a
         nested dict under its attribute name. Subparsers are skipped
         (they represent runtime branches, not config-time state).
+
+        When ``namespace`` is provided, values are read from it (and
+        from ``os.environ`` for args with env vars) — used by
+        :class:`GenerateConfigAction` so the dump reflects CLI flags
+        and env vars even when triggered mid-parse.
         """
         node = cast(Any, parser)
+        auto_prefix = getattr(parser, "_auto_env_var_prefix", None)
         result: Dict[str, Any] = {}
         for name, argument in node.__arguments__.items():
             if not should_emit(argument):
                 continue
-            result[name] = current_value(parser, name, argument)
+            env = derive_env_var(auto_prefix, name, argument)
+            result[name] = current_value(
+                parser,
+                name,
+                argument,
+                namespace=namespace,
+                dest=name,
+                env_var=env,
+            )
         for group_name, group in node.__argument_groups__.items():
-            result[group_name] = self.build_group_dict(group)
+            seg = group_cli_segment(group, group_name)
+            cli_path = (seg,) if seg else ()
+            result[group_name] = self.build_group_dict(
+                group,
+                cli_path=cli_path,
+                auto_prefix=auto_prefix,
+                namespace=namespace,
+            )
         return result
 
-    def build_group_dict(self, group: AbstractGroup) -> Dict[str, Any]:
+    def build_group_dict(
+        self,
+        group: AbstractGroup,
+        *,
+        cli_path: Tuple[str, ...] = (),
+        auto_prefix: Optional[str] = None,
+        namespace: Optional[argparse.Namespace] = None,
+    ) -> Dict[str, Any]:
         node = cast(Any, group)
+        cli_prefix = "_".join(cli_path)
         out: Dict[str, Any] = {}
         for name, argument in node.__arguments__.items():
             if not should_emit(argument):
                 continue
-            out[name] = current_value(group, name, argument)
+            dest = f"{cli_prefix}_{name}" if cli_prefix else name
+            env = derive_env_var(auto_prefix, dest, argument)
+            out[name] = current_value(
+                group,
+                name,
+                argument,
+                namespace=namespace,
+                dest=dest,
+                env_var=env,
+            )
         for child_name, child_group in node.__argument_groups__.items():
-            out[child_name] = self.build_group_dict(child_group)
+            seg = group_cli_segment(child_group, child_name)
+            child_cli = cli_path + ((seg,) if seg else ())
+            out[child_name] = self.build_group_dict(
+                child_group,
+                cli_path=child_cli,
+                auto_prefix=auto_prefix,
+                namespace=namespace,
+            )
         return out
 
     def build_help_map(self, parser: AbstractParser) -> HelpMap:
@@ -249,10 +328,15 @@ class ConfigGenerator:
         """Render the dict to a config-format string. Override me."""
         raise NotImplementedError
 
-    def dump_to_string(self, parser: AbstractParser) -> str:
+    def dump_to_string(
+        self,
+        parser: AbstractParser,
+        *,
+        namespace: Optional[argparse.Namespace] = None,
+    ) -> str:
         """Convenience: build_dict + render in one call."""
         return self.render(
-            self.build_dict(parser),
+            self.build_dict(parser, namespace=namespace),
             self.build_help_map(parser),
         )
 
@@ -260,13 +344,15 @@ class ConfigGenerator:
         self,
         parser: AbstractParser,
         dest: Union[str, IO[str]],
+        *,
+        namespace: Optional[argparse.Namespace] = None,
     ) -> None:
         """Write the rendered config to ``dest``.
 
         ``dest`` may be a path, a file-like object, or the string
         ``"-"`` (writes to stdout).
         """
-        content = self.dump_to_string(parser)
+        content = self.dump_to_string(parser, namespace=namespace)
         if dest == "-":
             sys.stdout.write(content)
         elif isinstance(dest, str):
@@ -463,8 +549,13 @@ class EnvConfigGenerator(ConfigGenerator):
     extension = ".env"
     QUOTE_CHARS = frozenset(' \t\n"\\#=')
 
-    def dump_to_string(self, parser: AbstractParser) -> str:
-        data = self.build_dict(parser)
+    def dump_to_string(
+        self,
+        parser: AbstractParser,
+        *,
+        namespace: Optional[argparse.Namespace] = None,
+    ) -> str:
+        data = self.build_dict(parser, namespace=namespace)
         help_map = self.build_help_map(parser)
         env_map = self.build_env_map(parser)
         lines: List[str] = []
@@ -574,5 +665,5 @@ class GenerateConfigAction(NonConfigAction):
                 "through argclass.Parser.parse_args",
             )
         path = values[0] if isinstance(values, list) else values
-        self.generator.dump(argclass_parser, path)
+        self.generator.dump(argclass_parser, path, namespace=namespace)
         parser.exit(0)

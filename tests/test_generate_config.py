@@ -409,6 +409,86 @@ class TestHelpers:
         arg = p.__arguments__["name"]
         assert current_value(p, "name", arg) == "hello"
 
+    def test_current_value_reads_env_var_with_type_conversion(
+        self,
+        make_cli,
+        monkeypatch,
+    ):
+        """Env values arrive as strings; ``current_value`` applies
+        ``argument.type`` so the dump reflects the same value
+        argclass would bind."""
+        CLI = make_cli()
+        p = CLI()
+        monkeypatch.setenv("APP_ENDPOINT_PORT", "9999")
+        arg = p.endpoint.__arguments__["port"]
+        result = current_value(
+            p.endpoint,
+            "port",
+            arg,
+            env_var="APP_ENDPOINT_PORT",
+        )
+        assert result == 9999
+        assert isinstance(result, int)
+
+    def test_current_value_env_type_conversion_failure_returns_raw(
+        self,
+        monkeypatch,
+    ):
+        """If env value cannot be coerced, fall back to the raw
+        string rather than crashing the dump."""
+        monkeypatch.setenv("PORT_BAD", "not-a-number")
+        arg = argclass.TypedArgument(type=int, default=8080)
+        result = current_value(
+            type("Stub", (), {"__dict__": {}})(),
+            "port",
+            arg,
+            env_var="PORT_BAD",
+        )
+        assert result == "not-a-number"
+
+    def test_current_value_reads_namespace_when_provided(self):
+        ns = argparse.Namespace(host="from-cli")
+        arg = argclass.TypedArgument(default="localhost")
+        result = current_value(
+            type("Stub", (), {"__dict__": {}})(),
+            "host",
+            arg,
+            namespace=ns,
+            dest="host",
+        )
+        assert result == "from-cli"
+
+    def test_current_value_namespace_none_falls_through(self):
+        """A namespace dest with value None means argparse hasn't
+        recorded that arg yet (e.g. SUPPRESS default) — fall back
+        to env / default."""
+        ns = argparse.Namespace(host=None)
+        arg = argclass.TypedArgument(default="localhost")
+        result = current_value(
+            type("Stub", (), {"__dict__": {}})(),
+            "host",
+            arg,
+            namespace=ns,
+            dest="host",
+        )
+        assert result == "localhost"
+
+    def test_current_value_namespace_already_correct_type(
+        self,
+        monkeypatch,
+    ):
+        """``isinstance(raw, type_func)`` guard avoids redundant
+        coercion when env value comes back as the right type."""
+        monkeypatch.setenv("FOO", "abc")
+        arg = argclass.TypedArgument(type=str, default="x")
+        result = current_value(
+            type("Stub", (), {"__dict__": {}})(),
+            "foo",
+            arg,
+            env_var="FOO",
+        )
+        assert result == "abc"
+
 
 class TestSourcesInfluenceDump:
     """The dumped config must reflect whichever source argclass
