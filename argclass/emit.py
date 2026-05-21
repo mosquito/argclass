@@ -103,25 +103,28 @@ def current_value(
 
     Priority (highest first):
 
-    1. The instance ``__dict__`` (set when ``parse_args`` has
-       completed).
-    2. An argparse ``Namespace`` under ``dest`` — used when called
-       mid-parse from :class:`GenerateConfigAction`, so CLI flags
-       already processed by argparse land in the dump.
-    3. ``os.environ[env_var]`` — covers env vars when the dump runs
-       before argclass has applied them to ``__dict__``.
+    1. An argparse ``Namespace`` under ``dest`` — when provided, it
+       represents the active parse and wins over stale instance
+       state. Used by :class:`GenerateConfigAction` so a reused
+       parser doesn't dump values from an earlier ``parse_args``
+       call.
+    2. The instance ``__dict__`` (set when an earlier
+       ``parse_args`` completed, or when the field is a Group whose
+       attributes argclass populated after parsing).
+    3. ``os.environ[env_var]`` — covers env vars when the dump
+       runs before argclass has applied them to ``__dict__``.
     4. The argument's declared default.
 
     Env values arrive as strings; we apply ``argument.type`` when it
     is callable, so the dump reflects the same type argclass would
     bind at parse time.
     """
-    if name in target.__dict__:
-        return target.__dict__[name]
     if namespace is not None and dest is not None and hasattr(namespace, dest):
         value = getattr(namespace, dest)
         if value is not None:
             return value
+    if name in target.__dict__:
+        return target.__dict__[name]
     if env_var:
         raw = os.environ.get(env_var)
         if raw is not None:
@@ -152,6 +155,22 @@ def group_cli_segment(group: AbstractGroup, attr_name: str) -> str:
     the group's ``prefix=`` override."""
     prefix = getattr(group, "_prefix", None)
     return prefix if prefix is not None else attr_name
+
+
+def escape_inline_string(value: str) -> str:
+    """Escape a string for embedding inside double-quoted literals.
+
+    Used by both TOML (always quoted) and the ``.env`` emitter
+    (quoted on demand) so multi-line / tab / quote-bearing values
+    stay on a single line and survive a shell parser.
+    """
+    return (
+        value.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+        .replace("\t", "\\t")
+    )
 
 
 def normalize_value(value: Any) -> Any:
@@ -545,15 +564,7 @@ class TOMLConfigGenerator(ConfigGenerator):
 
     @staticmethod
     def render_string(value: Any) -> str:
-        s = str(value)
-        escaped = (
-            s.replace("\\", "\\\\")
-            .replace('"', '\\"')
-            .replace("\n", "\\n")
-            .replace("\r", "\\r")
-            .replace("\t", "\\t")
-        )
-        return f'"{escaped}"'
+        return f'"{escape_inline_string(str(value))}"'
 
 
 class EnvConfigGenerator(ConfigGenerator):
@@ -574,7 +585,7 @@ class EnvConfigGenerator(ConfigGenerator):
     """
 
     extension = ".env"
-    QUOTE_CHARS = frozenset(' \t\n"\\#=')
+    QUOTE_CHARS = frozenset(' \t\n\r"\\#=')
 
     def render(self, fields: Sequence[ConfigField]) -> str:
         lines: List[str] = []
@@ -601,8 +612,7 @@ class EnvConfigGenerator(ConfigGenerator):
         if not value:
             return ""
         if any(c in self.QUOTE_CHARS for c in value):
-            escaped = value.replace("\\", "\\\\").replace('"', '\\"')
-            return f'"{escaped}"'
+            return f'"{escape_inline_string(value)}"'
         return value
 
 

@@ -1563,6 +1563,73 @@ class TestCoerceEnvValue:
         assert coerce_env_default(None, arg) is None
 
 
+class TestCurrentValueNamespacePriority:
+    """``current_value`` must prefer the supplied argparse namespace
+    over the instance ``__dict__``. Otherwise a parser that was
+    already parsed once would dump stale values when
+    ``GenerateConfigAction`` runs during a later parse."""
+
+    def test_namespace_overrides_stale_instance_dict(self):
+        """Simulate: parse once with host=old; reuse the parser and
+        parse again with host=new + --generate-config. The dump must
+        reflect 'new', not the stale 'old' on the instance."""
+        arg = argclass.TypedArgument(default="x")
+        target = type("Stub", (), {"__dict__": {"host": "old"}})()
+        ns = argparse.Namespace(host="new")
+        result = current_value(
+            target,
+            "host",
+            arg,
+            namespace=ns,
+            dest="host",
+        )
+        assert result == "new"
+
+    def test_namespace_absent_falls_back_to_instance_dict(self):
+        """Programmatic post-parse dump (no namespace) reads from
+        the instance state — that's the only place the parsed
+        values live."""
+        arg = argclass.TypedArgument(default="x")
+        target = type("Stub", (), {"__dict__": {"host": "parsed"}})()
+        assert current_value(target, "host", arg) == "parsed"
+
+
+class TestEnvStringEscaping:
+    """``.env`` files are line-oriented; any value with a literal
+    newline / CR / tab must be escaped, not emitted raw."""
+
+    def test_newline_escaped(self):
+        gen = EnvConfigGenerator()
+        assert gen.quote_string("a\nb") == r'"a\nb"'
+
+    def test_carriage_return_escaped(self):
+        gen = EnvConfigGenerator()
+        assert gen.quote_string("a\rb") == r'"a\rb"'
+
+    def test_tab_escaped(self):
+        gen = EnvConfigGenerator()
+        assert gen.quote_string("a\tb") == r'"a\tb"'
+
+    def test_dump_with_multiline_value_stays_one_line(self):
+        """End-to-end: env dump of a multi-line value must still
+        produce a single KEY=value line."""
+
+        class App(argclass.Parser):
+            banner: str = argclass.Argument(
+                default="line1\nline2",
+                env_var="BANNER",
+            )
+
+        text = EnvConfigGenerator().dump_to_string(App())
+        body_lines = [
+            line
+            for line in text.splitlines()
+            if line and not line.startswith("#")
+        ]
+        assert len(body_lines) == 1
+        assert body_lines[0] == r'BANNER="line1\nline2"'
+
+
 class TestDumpAcceptsPath:
     def test_dump_to_path_object(self, tmp_path: Path):
         """``dump(parser, Path(...))`` must work, not just ``str``."""
