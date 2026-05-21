@@ -97,6 +97,43 @@ del os.environ["APP_DATABASE_HOST"]
 del os.environ["APP_DATABASE_PORT"]
 ```
 
+### Nested Groups
+
+Nested group fields use the full attribute path joined with `_`, then
+uppercased:
+
+<!--- name: test_env_nested_groups --->
+```python
+import os
+import argclass
+
+os.environ["APP_ENDPOINT_HOST"] = "api.example.com"
+os.environ["APP_ENDPOINT_CREDENTIALS_USERNAME"] = "root"
+os.environ["APP_ENDPOINT_CREDENTIALS_PASSWORD"] = "hunter2"
+
+class Credentials(argclass.Group):
+    username: str = "admin"
+    password: str = "secret"
+
+class Endpoint(argclass.Group):
+    host: str = "localhost"
+    credentials: Credentials = Credentials()
+
+class Parser(argclass.Parser):
+    endpoint: Endpoint = Endpoint()
+
+parser = Parser(auto_env_var_prefix="APP_")
+parser.parse_args([])
+
+assert parser.endpoint.host == "api.example.com"
+assert parser.endpoint.credentials.username == "root"
+assert parser.endpoint.credentials.password == "hunter2"
+
+del os.environ["APP_ENDPOINT_HOST"]
+del os.environ["APP_ENDPOINT_CREDENTIALS_USERNAME"]
+del os.environ["APP_ENDPOINT_CREDENTIALS_PASSWORD"]
+```
+
 ## Priority
 
 Environment variables override config files but are overridden by CLI arguments:

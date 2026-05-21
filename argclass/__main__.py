@@ -83,6 +83,17 @@ class DatabaseGroup(argclass.Group):
     name: str = "mydb"
 
 
+class Credentials(argclass.Group):
+    username: str = "admin"
+    password: str = "secret"
+
+
+class Endpoint(argclass.Group):
+    host: str = "localhost"
+    port: int = 9000
+    credentials: Credentials = Credentials()
+
+
 # -- Subcommand: basic -------------------------------------------
 
 
@@ -192,30 +203,31 @@ class TypesDemo(argclass.Parser):
 
 
 class GroupsDemo(argclass.Parser):
-    """Demonstrates argument groups with prefixes.
+    """Demonstrates argument groups, including nesting.
 
     Groups organize related arguments and add prefixes
-    to avoid name collisions:
+    to avoid name collisions. Groups can also contain
+    other Groups for arbitrary nesting:
 
-      class ServerGroup(argclass.Group):
-          host: str = "localhost"
-          port: int = 8080
+      class Credentials(argclass.Group):
+          username: str = "admin"
+          password: str = "secret"
 
-      class DatabaseGroup(argclass.Group):
+      class Endpoint(argclass.Group):
           host: str = "localhost"
-          port: int = 5432
+          credentials: Credentials = Credentials()
 
       class CLI(argclass.Parser):
-          server = ServerGroup(title="Server options")
-          db = DatabaseGroup(
-              title="Database options", prefix="db",
-          )
+          endpoint: Endpoint = Endpoint()
 
-    Both groups have 'host' and 'port', but CLI flags
-    are --server-host/--server-port vs --db-host/--db-port.
+    Nested groups join segments with `-` for CLI flags
+    (--endpoint-credentials-username), `_` for env vars
+    (PREFIX_ENDPOINT_CREDENTIALS_USERNAME), and `.` for INI
+    sections ([endpoint.credentials]).
 
     Try: groups --server-host 0.0.0.0 --server-port 9090 \\
-               --db-host db.local --db-port 3306 --db-name app
+               --db-host db.local --db-port 3306 --db-name app \\
+               --endpoint-credentials-username root
     """
 
     server: ServerGroup = ServerGroup(title="Server options")
@@ -223,9 +235,10 @@ class GroupsDemo(argclass.Parser):
         title="Database options",
         prefix="db",
     )
+    endpoint: Endpoint = Endpoint(title="Endpoint (nested groups demo)")
 
     def __call__(self) -> int:
-        print_source(self.server, self.db, self)
+        print_source(self.server, self.db, self.endpoint, Credentials, self)
         print("== Argument Groups ==\n")
         print("  Server group (prefix='server'):")
         print(f"    --server-host = {self.server.host!r}")
@@ -236,10 +249,25 @@ class GroupsDemo(argclass.Parser):
         print(f"    --db-port     = {self.db.port!r}")
         print(f"    --db-name     = {self.db.name!r}")
         print()
+        print("  Endpoint group with nested Credentials:")
+        print(
+            f"    --endpoint-host                    = {self.endpoint.host!r}"
+        )
+        print(
+            f"    --endpoint-credentials-username    = "
+            f"{self.endpoint.credentials.username!r}"
+        )
+        print(
+            f"    --endpoint-credentials-password    = "
+            f"{self.endpoint.credentials.password!r}"
+        )
+        print()
         print("How it works:")
         print("  - Group name or explicit prefix= avoids")
         print("    collisions when fields have the same name")
         print("  - Each group gets its own section in --help")
+        print("  - Groups can contain other Groups; CLI/env/INI")
+        print("    names join with -, _, or . respectively")
         return 0
 
 

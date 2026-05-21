@@ -64,6 +64,43 @@ parser.parse_args()
 print(parser.db.host, parser.db.port)
 ```
 
+### Nested groups (Group inside Group)
+
+Groups can contain other Groups for arbitrary nesting:
+
+```python
+import argclass
+
+class Credentials(argclass.Group):
+    username: str = "admin"
+    password: str = "secret"
+
+class Endpoint(argclass.Group):
+    host: str = "localhost"
+    credentials: Credentials = Credentials()
+
+class CLI(argclass.Parser):
+    endpoint: Endpoint = Endpoint()
+
+parser = CLI()
+parser.parse_args([
+    "--endpoint-host=10.0.0.1",
+    "--endpoint-credentials-username=root",
+])
+```
+
+Naming follows the attribute path:
+
+- CLI: `--endpoint-credentials-username`
+- ENV (with `auto_env_var_prefix="APP_"`): `APP_ENDPOINT_CREDENTIALS_USERNAME`
+- INI: section `[endpoint.credentials]`, key `username`
+- JSON/TOML: nested objects/tables
+
+`Group(prefix=...)` overrides only the CLI/env segment for that group;
+config section names always follow the attribute path. Reusing the
+same Group instance in two places raises `ArgclassError` (instantiate
+a separate Group per attribute).
+
 ### Subcommands
 
 ```python

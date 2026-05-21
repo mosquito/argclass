@@ -97,6 +97,12 @@ class AbstractDefaultsParser(ABC):
     ) -> Any:
         """Get value with type validation.
 
+        The ``section`` argument may contain dots to address nested
+        groups (e.g. ``"endpoint.credentials"``). Resolution tries a
+        literal key match first (so INI section names with dots work),
+        then falls back to splitting on ``.`` and descending through
+        nested dicts (JSON/TOML).
+
         Args:
             key: The config key name.
             kind: Expected value type for validation.
@@ -109,9 +115,17 @@ class AbstractDefaultsParser(ABC):
             UnexpectedConfigValue: If value doesn't match expected kind.
         """
         if section is not None:
-            source = self._values.get(section, {})
+            source: Any = self._values.get(section)
             if not isinstance(source, dict):
-                return None
+                source = self._values
+                for part in section.split("."):
+                    if not isinstance(source, dict):
+                        return None
+                    source = source.get(part)
+                    if source is None:
+                        return None
+                if not isinstance(source, dict):
+                    return None
         else:
             source = self._values
 
