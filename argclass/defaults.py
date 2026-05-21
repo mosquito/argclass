@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping, Optional, Tuple, Union
 
 from .exceptions import ConfigurationError
+from .utils import own_section_items
 
 try:
     import tomllib
@@ -191,9 +192,8 @@ class INIDefaultsParser(AbstractDefaultsParser):
         result: Dict[str, Any] = dict(
             parser.items(parser.default_section, raw=True),
         )
-
         for section in parser.sections():
-            result[section] = dict(parser.items(section, raw=True))
+            result[section] = own_section_items(parser, section)
 
         self._values = result
         return result

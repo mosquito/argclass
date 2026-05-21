@@ -683,3 +683,43 @@ Run `python myapp.py --check-updates` to see the live PyPI check.
 The pattern generalises to any custom action: declare your own constructor
 parameters, consume them in `__init__` before calling `super().__init__`,
 and pass them through `argclass.Argument(action=YourAction, your_param=...)`.
+
+The same passthrough drives argclass's built-in `GenerateConfigAction`,
+which takes a `generator=` kwarg and dumps the current parser state to a
+file (or stdout). See [Generating Config Files](config-generation.md) for
+the full guide.
+
+### Custom Actions and config generation
+
+If your custom action is the "fire and exit" kind — `--version`,
+`--check-updates`, `--health`, anything that prints something and calls
+`parser.exit()` — argclass's config generators must skip it from dumps.
+Otherwise it would end up as a noisy empty entry. Two equivalent opt-outs:
+
+1. **Inherit from `argclass.NonConfigAction`** — cleanest if you're
+   defining a new action from scratch. The base class just sets the
+   `__emit_config__ = False` marker.
+
+2. **Set `__emit_config__ = False` on the action class directly** —
+   useful if you already inherit from something else (a third-party
+   action, your own base).
+
+```python
+import argparse, argclass
+
+# Option 1: subclass NonConfigAction.
+class CheckUpdatesAction(argclass.NonConfigAction):
+    ...
+
+# Option 2: mark an existing action class.
+class CheckUpdatesAction(argparse.Action):
+    __emit_config__ = False
+    ...
+```
+
+argclass's built-in `--help` and `--version` (`Actions.HELP` /
+`Actions.VERSION`) are recognised automatically and skipped without
+either marker. Stateful custom actions (counters, accumulators, etc.)
+are kept in dumps — only "fire and exit" style actions need to opt out.
+See [Excluding arguments from dumps](config-generation.md#excluding-arguments-from-dumps)
+for the full discussion.

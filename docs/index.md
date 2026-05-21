@@ -499,6 +499,7 @@ arguments
 groups
 subparsers
 config-files
+config-generation
 environment
 secrets
 security

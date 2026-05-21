@@ -57,6 +57,8 @@ Examples:
   %(prog)s secrets --api-key my-secret
   DEMO_HOST=example.com %(prog)s env
   %(prog)s subcommands hello --user Alice
+  %(prog)s genconfig --generate-ini -
+  %(prog)s genconfig --generate-toml /tmp/myapp.toml
 """
 
 
@@ -440,6 +442,104 @@ class SubcommandDemo(argclass.Parser):
         return 1
 
 
+# -- Subcommand: generate-config ---------------------------------
+
+
+class GenerateConfigDemo(argclass.Parser):
+    """Demonstrates argclass.GenerateConfigAction in every format.
+
+    Four flags, one Action class, one Generator class per format:
+
+      class CLI(argclass.Parser):
+          ini  = argclass.Argument(
+              "--generate-ini",
+              action=argclass.GenerateConfigAction,
+              generator=argclass.INIConfigGenerator,
+          )
+          toml = argclass.Argument(
+              "--generate-toml",
+              action=argclass.GenerateConfigAction,
+              generator=argclass.TOMLConfigGenerator,
+          )
+          # ... and so on for JSON and ENV
+
+    Each flag takes a FILE (or "-" for stdout), writes the rendered
+    config, and exits. The actions inherit NonConfigAction, so they
+    never appear in the generated output themselves.
+
+    Try:
+      %(prog)s genconfig --generate-ini -
+      %(prog)s genconfig --generate-toml /tmp/argclass-demo.toml
+      %(prog)s genconfig --generate-json -
+      DEMO_HOST=h %(prog)s genconfig --generate-env -
+    """
+
+    # Demo state that ends up in the generated config.
+    host: str = argclass.Argument(
+        default="localhost",
+        env_var="DEMO_HOST",
+        help="Server host",
+    )
+    port: int = argclass.Argument(default=8080, help="Server port")
+    debug: bool = argclass.Argument(default=False, help="Debug mode")
+    tags: list[str] = argclass.Argument(
+        nargs=argclass.Nargs.ZERO_OR_MORE,
+        default=["alpha", "beta"],
+        help="Free-form tags",
+    )
+
+    # Nested group — verifies dotted sections in INI/TOML and nested
+    # objects in JSON/.env.
+    server: ServerGroup = ServerGroup(title="Server options")
+
+    # Four flags, one per format. The Action exits after writing, so
+    # only one of these can be invoked per run.
+    generate_ini = argclass.Argument(
+        "--generate-ini",
+        action=argclass.GenerateConfigAction,
+        generator=argclass.INIConfigGenerator,
+        help="Write INI to FILE (use - for stdout)",
+    )
+    generate_toml = argclass.Argument(
+        "--generate-toml",
+        action=argclass.GenerateConfigAction,
+        generator=argclass.TOMLConfigGenerator,
+        help="Write TOML to FILE (use - for stdout)",
+    )
+    generate_json = argclass.Argument(
+        "--generate-json",
+        action=argclass.GenerateConfigAction,
+        generator=argclass.JSONConfigGenerator,
+        help="Write JSON to FILE (use - for stdout)",
+    )
+    generate_env = argclass.Argument(
+        "--generate-env",
+        action=argclass.GenerateConfigAction,
+        generator=argclass.EnvConfigGenerator,
+        help="Write .env to FILE (use - for stdout)",
+    )
+
+    def __call__(self) -> int:
+        # The Action subclasses exit on use, so reaching __call__
+        # means the user invoked the subcommand without any
+        # --generate-* flag. Show source + help.
+        print_source(ServerGroup, self)
+        print("== Config Generation ==\n")
+        print(
+            "Pick a format flag and a destination ('-' for stdout):",
+        )
+        print()
+        print("  --generate-ini  FILE   →  INIConfigGenerator")
+        print("  --generate-toml FILE   →  TOMLConfigGenerator")
+        print("  --generate-json FILE   →  JSONConfigGenerator")
+        print("  --generate-env  FILE   →  EnvConfigGenerator")
+        print()
+        print("Tip: try setting DEMO_HOST=... and rerunning")
+        print("--generate-env - to see env-resolved values land in")
+        print("the output.")
+        return 0
+
+
 # -- Top-level parser --------------------------------------------
 
 
@@ -453,6 +553,7 @@ class DemoParser(argclass.Parser):
     secrets = SecretsDemo()
     env = EnvDemo()
     subcommands = SubcommandDemo()
+    genconfig = GenerateConfigDemo(auto_env_var_prefix="DEMO_")
 
     def __call__(self) -> int:
         result = super().__call__()

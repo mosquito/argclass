@@ -1,7 +1,7 @@
 """Core parser classes for argclass."""
 
-import ast
 import os
+import weakref
 from abc import ABCMeta
 from argparse import Action, ArgumentParser
 from collections import defaultdict
@@ -41,6 +41,7 @@ from .store import AbstractGroup, AbstractParser, TypedArgument
 from .types import Actions, Nargs
 from .utils import (
     _unwrap_container_type,
+    coerce_env_default,
     deep_getattr,
     parse_bool,
     resolve_annotations,
@@ -399,6 +400,30 @@ class Group(AbstractGroup, Base):
 ParserType = TypeVar("ParserType", bound="Parser")
 
 
+# Out-of-band back-references: argparse_parser -> argclass Parser.
+# Lets custom actions (e.g. ``GenerateConfigAction``) recover the
+# argclass Parser without mutating any argparse object. Auto-cleans
+# entries when the argparse parser is garbage-collected.
+_BackRefMap = weakref.WeakKeyDictionary
+_argclass_back_refs: "_BackRefMap[ArgumentParser, AbstractParser]" = (
+    _BackRefMap()
+)
+
+
+def get_argclass_parser(
+    argparse_parser: ArgumentParser,
+) -> Optional["Parser"]:
+    """Return the :class:`argclass.Parser` that built
+    ``argparse_parser``, or ``None`` if it wasn't built through
+    argclass (e.g. a bare ``argparse.ArgumentParser``).
+
+    Useful for writing custom argparse Actions that need access to
+    the argclass-level parser at invocation time —
+    :class:`argclass.GenerateConfigAction` uses this internally.
+    """
+    return _argclass_back_refs.get(argparse_parser)  # type: ignore[return-value]
+
+
 # noinspection PyProtectedMember
 class Parser(AbstractParser, Base):
     """Main parser class for command-line argument parsing."""
@@ -437,49 +462,21 @@ class Parser(AbstractParser, Base):
                 f"{kwargs.get('help', '')} (default: {argument.default})"
             ).strip()
 
-        # Check if nargs produces a list
-        nargs_is_list = (
-            argument.nargs in (Nargs.ONE_OR_MORE, Nargs.ZERO_OR_MORE, "*", "+")
-            or isinstance(argument.nargs, int)
-            and argument.nargs >= 1
-        )
-
         if argument.env_var is not None:
-            default = kwargs.get("default")
-            kwargs["default"] = os.getenv(argument.env_var, default)
-
-            # Parse env var string for nargs (only if still a string)
-            if (
-                isinstance(kwargs["default"], str)
-                and kwargs["default"]
-                and nargs_is_list
-            ):
-                kwargs["default"] = list(
-                    map(
-                        argument.type or str,
-                        ast.literal_eval(kwargs["default"]),
-                    ),
-                )
-
-            kwargs["help"] = (
-                f"{kwargs.get('help', '')} [ENV: {argument.env_var}]"
-            ).strip()
-
-            if argument.env_var in os.environ:
+            # Only coerce when the env var was actually set; an
+            # absent env must not retype the existing default
+            # (a string ``"0"`` default with ``type=int`` would
+            # otherwise silently become the integer ``0`` here).
+            raw = os.environ.get(argument.env_var)
+            if raw is not None:
+                kwargs["default"] = coerce_env_default(raw, argument)
                 self._used_env_vars.add(argument.env_var)
                 if argument.secret:
                     self._used_secret_env_vars.add(argument.env_var)
 
-        # Convert string boolean values from config/env to proper bools
-        action = kwargs.get("action")
-        default = kwargs.get("default")
-        if isinstance(default, str) and action in (
-            Actions.STORE_TRUE,
-            Actions.STORE_FALSE,
-            "store_true",
-            "store_false",
-        ):
-            kwargs["default"] = parse_bool(default)
+            kwargs["help"] = (
+                f"{kwargs.get('help', '')} [ENV: {argument.env_var}]"
+            ).strip()
 
         # Safety net: env vars are read above, so default may have changed.
         # If we now have a default, remove the required flag.
@@ -586,6 +583,8 @@ class Parser(AbstractParser, Base):
                 epilog=self._epilog,
                 **self._parser_kwargs,
             )
+
+        _argclass_back_refs[parser] = self
 
         destinations: DestinationsType = defaultdict(set)
         self._fill_arguments(destinations, parser)

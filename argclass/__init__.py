@@ -21,6 +21,16 @@ from .defaults import (
     UnexpectedConfigValue,
     ValueKind,
 )
+from .emit import (
+    ConfigField,
+    ConfigGenerator,
+    EnvConfigGenerator,
+    GenerateConfigAction,
+    INIConfigGenerator,
+    JSONConfigGenerator,
+    NonConfigAction,
+    TOMLConfigGenerator,
+)
 from .exceptions import (
     ArgclassError,
     ArgumentDefinitionError,
@@ -113,6 +123,19 @@ __all__ = [
     "TOMLDefaultsParser",
     "ValueKind",
     "UnexpectedConfigValue",
+    # Config generators (write configs from a parser).
+    # ``ConfigGenerator`` is exposed for typing / subclassing;
+    # ``ConfigField`` is the record type custom ``render`` impls
+    # consume; ``NonConfigAction`` lets user-defined actions opt
+    # out of dumps. Other helpers stay in ``argclass.emit``.
+    "ConfigField",
+    "ConfigGenerator",
+    "INIConfigGenerator",
+    "JSONConfigGenerator",
+    "TOMLConfigGenerator",
+    "EnvConfigGenerator",
+    "GenerateConfigAction",
+    "NonConfigAction",
     # Factory functions
     "Argument",
     "ArgumentSingle",

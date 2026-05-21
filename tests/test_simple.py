@@ -2092,6 +2092,42 @@ class TestMainModule:
         out = capsys.readouterr().out
         assert "usage" in out.lower()
 
+    def test_generate_config_demo_no_flag_prints_help(self, capsys):
+        """Calling genconfig without --generate-* flag shows the
+        help/source dump and returns 0."""
+        from argclass.__main__ import GenerateConfigDemo
+
+        cmd = GenerateConfigDemo()
+        cmd.parse_args([])
+        assert cmd() == 0
+        out = capsys.readouterr().out
+        assert "Config Generation" in out
+        assert "--generate-ini" in out
+        assert "--generate-toml" in out
+        assert "--generate-json" in out
+        assert "--generate-env" in out
+
+    def test_generate_config_demo_writes_ini(self, capsys):
+        from argclass.__main__ import GenerateConfigDemo
+
+        cmd = GenerateConfigDemo()
+        with pytest.raises(SystemExit):
+            cmd.parse_args(["--generate-ini", "-"])
+        out = capsys.readouterr().out
+        assert "host = localhost" in out
+        assert "[server]" in out
+
+    def test_generate_config_demo_cli_affects_dump(self, capsys):
+        from argclass.__main__ import GenerateConfigDemo
+
+        cmd = GenerateConfigDemo()
+        with pytest.raises(SystemExit):
+            cmd.parse_args(
+                ["--port", "9999", "--generate-toml", "-"],
+            )
+        out = capsys.readouterr().out
+        assert "port = 9999" in out
+
 
 class TestStoreRequiredArgument:
     """Test Store required argument validation."""
