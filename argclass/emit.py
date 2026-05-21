@@ -1,11 +1,12 @@
-"""Config-file generators: render an argclass Parser to INI/JSON/TOML.
+"""Config-file generators: render an argclass Parser to INI/JSON/TOML/.env.
 
 Symmetric counterpart to ``argclass/defaults.py`` (which READS configs).
-Generators walk the parser tree (mirroring the recursion used by
-``Parser._fill_group``), produce a nested dict, and render it.
+The parser tree is walked once, yielding :class:`ConfigField` records;
+generators consume that iterator and produce a format-specific string.
 
-Subclass ``ConfigGenerator`` and override ``render`` to add a new
-format. The walking + Action wiring are shared.
+Subclass :class:`ConfigGenerator` and override :meth:`render` to add a
+new format. The walking + Action wiring are shared — your subclass only
+decides how to turn a stream of fields into text.
 
 Usage::
 
@@ -32,7 +33,21 @@ import argparse
 import json
 import os
 import sys
-from typing import Any, Dict, IO, List, Optional, Tuple, Union, cast
+from dataclasses import dataclass
+from enum import Enum
+from pathlib import Path, PurePath
+from typing import (
+    Any,
+    Dict,
+    IO,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Tuple,
+    Union,
+    cast,
+)
 
 from .parser import get_argclass_parser
 from .store import AbstractGroup, AbstractParser, TypedArgument
@@ -68,9 +83,6 @@ def should_emit(argument: TypedArgument) -> bool:
     action = argument.action
     if isinstance(action, type):
         return bool(getattr(action, "__emit_config__", True))
-    # Actions enum members compare equal to their string values, so
-    # one membership test covers both Actions.HELP / Actions.VERSION
-    # and the raw "help" / "version" strings argparse accepts.
     if action in (Actions.VERSION, Actions.HELP):
         return False
     return True
@@ -121,10 +133,6 @@ def current_value(
     return argument.default
 
 
-HelpMap = Dict[Tuple[str, ...], str]
-EnvMap = Dict[Tuple[str, ...], str]
-
-
 def derive_env_var(
     auto_prefix: Optional[str],
     dest: str,
@@ -150,183 +158,213 @@ def group_cli_segment(group: AbstractGroup, attr_name: str) -> str:
     return prefix if prefix is not None else attr_name
 
 
+def normalize_value(value: Any) -> Any:
+    """Convert non-config-native types to round-trippable forms.
+
+    - ``Enum`` / ``IntEnum`` → ``.name`` (matches ``EnumArgument``
+      which accepts member names).
+    - ``set`` / ``frozenset`` → ``list`` (sorted when comparable, so
+      output stays stable).
+    - ``Path`` → ``str``.
+
+    Already-native types (``str``/``int``/``float``/``bool``/``list``/
+    ``tuple``/``None``) pass through. ``SecretString`` passes through
+    too since it subclasses ``str``.
+    """
+    if isinstance(value, Enum):
+        return value.name
+    if isinstance(value, (set, frozenset)):
+        try:
+            return sorted(value)
+        except TypeError:
+            return list(value)
+    if isinstance(value, PurePath):
+        return str(value)
+    return value
+
+
+@dataclass(frozen=True)
+class ConfigField:
+    """A single leaf argument from the parser tree, ready to emit.
+
+    A generator iterates these and writes them in the target format.
+    Sections are derived from ``attr_path[:-1]``; the field key is
+    ``attr_path[-1]``.
+
+    Attributes
+    ----------
+    attr_path:
+        Tuple of attribute names from the parser root down to the
+        leaf (``("endpoint", "credentials", "username")``). The last
+        element is the field name; everything before it forms the
+        section path used by INI / TOML.
+    cli_path:
+        Same shape as ``attr_path`` but respecting per-group
+        ``prefix=`` overrides — useful when reconstructing CLI flag
+        names.
+    dest:
+        argparse ``dest`` for the field
+        (``"endpoint_credentials_username"``). Joins ``cli_path``
+        with underscores.
+    argument:
+        The owning :class:`TypedArgument`. Carries declared type,
+        help, env_var, etc.
+    target:
+        The Parser or Group instance that owns this attribute. Lets
+        renderers reach back into the source if needed.
+    value:
+        The resolved value, already :func:`normalize_value`-d so it
+        round-trips through every supported format.
+    env_var:
+        Env var name argclass would read (explicit ``env_var=`` or
+        derived from ``auto_env_var_prefix=``). ``None`` when no env
+        var is configured.
+    help:
+        Help text declared on the argument, or ``None``.
+    """
+
+    attr_path: Tuple[str, ...]
+    cli_path: Tuple[str, ...]
+    dest: str
+    argument: TypedArgument
+    target: Any
+    value: Any
+    env_var: Optional[str]
+    help: Optional[str]
+
+    @property
+    def section_path(self) -> Tuple[str, ...]:
+        """Path to the enclosing section, derived from ``attr_path``."""
+        return self.attr_path[:-1]
+
+    @property
+    def key(self) -> str:
+        """Bare leaf attribute name."""
+        return self.attr_path[-1]
+
+
+def iter_config_fields(
+    parser: AbstractParser,
+    *,
+    namespace: Optional[argparse.Namespace] = None,
+) -> Iterator[ConfigField]:
+    """Walk ``parser`` and yield one :class:`ConfigField` per leaf.
+
+    Subparsers are skipped (they're runtime branches, not config
+    state). Non-emittable arguments (``--help``, ``--version``, any
+    :class:`NonConfigAction` subclass) are filtered out by
+    :func:`should_emit`.
+
+    ``namespace``, when provided, lets fields pick up CLI args that
+    argparse has already parsed — used by
+    :class:`GenerateConfigAction` mid-parse.
+    """
+    auto_prefix = getattr(parser, "_auto_env_var_prefix", None)
+    yield from iter_subtree_fields(
+        parser,
+        attr_path=(),
+        cli_path=(),
+        auto_prefix=auto_prefix,
+        namespace=namespace,
+    )
+
+
+def iter_subtree_fields(
+    target: Any,
+    *,
+    attr_path: Tuple[str, ...] = (),
+    cli_path: Tuple[str, ...] = (),
+    auto_prefix: Optional[str] = None,
+    namespace: Optional[argparse.Namespace] = None,
+) -> Iterator[ConfigField]:
+    """Recursive walker used by :func:`iter_config_fields`.
+
+    Power-users can call this directly to walk a sub-tree (for example
+    to dump just one nested group). Pass the cumulative ``attr_path``
+    and ``cli_path`` you want the yielded fields to carry.
+    """
+    node = cast(Any, target)
+    cli_prefix = "_".join(cli_path)
+    for name, argument in node.__arguments__.items():
+        if not should_emit(argument):
+            continue
+        dest = f"{cli_prefix}_{name}" if cli_prefix else name
+        env_var = derive_env_var(auto_prefix, dest, argument)
+        raw = current_value(
+            target,
+            name,
+            argument,
+            namespace=namespace,
+            dest=dest,
+            env_var=env_var,
+        )
+        yield ConfigField(
+            attr_path=attr_path + (name,),
+            cli_path=cli_path + (name,),
+            dest=dest,
+            argument=argument,
+            target=target,
+            value=normalize_value(raw),
+            env_var=env_var,
+            help=argument.help if argument.help else None,
+        )
+    for group_name, group in node.__argument_groups__.items():
+        seg = group_cli_segment(group, group_name)
+        child_cli = cli_path + ((seg,) if seg else ())
+        yield from iter_subtree_fields(
+            group,
+            attr_path=attr_path + (group_name,),
+            cli_path=child_cli,
+            auto_prefix=auto_prefix,
+            namespace=namespace,
+        )
+
+
+def fields_to_nested_dict(
+    fields: Iterable[ConfigField],
+    *,
+    skip_none: bool = False,
+) -> Dict[str, Any]:
+    """Build a nested dict from a stream of :class:`ConfigField`.
+
+    Used by :class:`JSONConfigGenerator`. Each section path becomes a
+    nested dict layer; the leaf attribute is set to ``field.value``.
+    When ``skip_none`` is true, ``None`` values are omitted entirely
+    so reloading falls back to the argument's own default.
+    """
+    out: Dict[str, Any] = {}
+    for field in fields:
+        if skip_none and field.value is None:
+            continue
+        target = out
+        for segment in field.section_path:
+            sub = target.get(segment)
+            if not isinstance(sub, dict):
+                sub = {}
+                target[segment] = sub
+            target = sub
+        target[field.key] = field.value
+    return out
+
+
 class ConfigGenerator:
     """Walks an argclass Parser and renders its state to a config
-    string. Subclass and override :meth:`render` for a new format.
+    string.
 
-    The walking + Action wiring live here; subclasses only need to
-    implement ``render(data, help_map) -> str``.
+    Subclasses override :meth:`render`. The base
+    :meth:`dump_to_string` and :meth:`dump` methods take care of
+    walking the parser and writing to disk / stdout / a file object.
     """
 
     #: File extension hint. Subclasses set this.
     extension: str = ""
 
-    def build_dict(
-        self,
-        parser: AbstractParser,
-        *,
-        namespace: Optional[argparse.Namespace] = None,
-    ) -> Dict[str, Any]:
-        """Walk the parser, return a nested dict mirroring its tree.
+    def render(self, fields: Iterable[ConfigField]) -> str:
+        """Render a stream of :class:`ConfigField` records to text.
 
-        Top-level arguments become root keys; each group becomes a
-        nested dict under its attribute name. Subparsers are skipped
-        (they represent runtime branches, not config-time state).
-
-        When ``namespace`` is provided, values are read from it (and
-        from ``os.environ`` for args with env vars) — used by
-        :class:`GenerateConfigAction` so the dump reflects CLI flags
-        and env vars even when triggered mid-parse.
+        Override this for a new format. Default implementation just
+        raises — every format has to decide how to lay out fields.
         """
-        node = cast(Any, parser)
-        auto_prefix = getattr(parser, "_auto_env_var_prefix", None)
-        result: Dict[str, Any] = {}
-        for name, argument in node.__arguments__.items():
-            if not should_emit(argument):
-                continue
-            env = derive_env_var(auto_prefix, name, argument)
-            result[name] = current_value(
-                parser,
-                name,
-                argument,
-                namespace=namespace,
-                dest=name,
-                env_var=env,
-            )
-        for group_name, group in node.__argument_groups__.items():
-            seg = group_cli_segment(group, group_name)
-            cli_path = (seg,) if seg else ()
-            result[group_name] = self.build_group_dict(
-                group,
-                cli_path=cli_path,
-                auto_prefix=auto_prefix,
-                namespace=namespace,
-            )
-        return result
-
-    def build_group_dict(
-        self,
-        group: AbstractGroup,
-        *,
-        cli_path: Tuple[str, ...] = (),
-        auto_prefix: Optional[str] = None,
-        namespace: Optional[argparse.Namespace] = None,
-    ) -> Dict[str, Any]:
-        node = cast(Any, group)
-        cli_prefix = "_".join(cli_path)
-        out: Dict[str, Any] = {}
-        for name, argument in node.__arguments__.items():
-            if not should_emit(argument):
-                continue
-            dest = f"{cli_prefix}_{name}" if cli_prefix else name
-            env = derive_env_var(auto_prefix, dest, argument)
-            out[name] = current_value(
-                group,
-                name,
-                argument,
-                namespace=namespace,
-                dest=dest,
-                env_var=env,
-            )
-        for child_name, child_group in node.__argument_groups__.items():
-            seg = group_cli_segment(child_group, child_name)
-            child_cli = cli_path + ((seg,) if seg else ())
-            out[child_name] = self.build_group_dict(
-                child_group,
-                cli_path=child_cli,
-                auto_prefix=auto_prefix,
-                namespace=namespace,
-            )
-        return out
-
-    def build_help_map(self, parser: AbstractParser) -> HelpMap:
-        """Return ``{path: help_text}`` for every leaf argument with
-        a help string. ``path`` is the tuple of attribute names from
-        the parser root down to the leaf."""
-        node = cast(Any, parser)
-        out: HelpMap = {}
-        for name, argument in node.__arguments__.items():
-            if argument.help and should_emit(argument):
-                out[(name,)] = argument.help
-        for group_name, group in node.__argument_groups__.items():
-            self.collect_group_help(group, (group_name,), out)
-        return out
-
-    def collect_group_help(
-        self,
-        group: AbstractGroup,
-        prefix: Tuple[str, ...],
-        out: HelpMap,
-    ) -> None:
-        node = cast(Any, group)
-        for name, argument in node.__arguments__.items():
-            if argument.help and should_emit(argument):
-                out[prefix + (name,)] = argument.help
-        for child_name, child in node.__argument_groups__.items():
-            self.collect_group_help(child, prefix + (child_name,), out)
-
-    def build_env_map(self, parser: AbstractParser) -> EnvMap:
-        """Return ``{path: env_var_name}`` for every leaf argument
-        that has an env var — either an explicit one on the argument
-        or one derived from the parser's ``auto_env_var_prefix``.
-
-        Arguments without a resolvable env var are omitted.
-        """
-        node = cast(Any, parser)
-        auto_prefix = getattr(parser, "_auto_env_var_prefix", None)
-        out: EnvMap = {}
-        for name, argument in node.__arguments__.items():
-            if not should_emit(argument):
-                continue
-            env = derive_env_var(auto_prefix, name, argument)
-            if env:
-                out[(name,)] = env
-        for group_name, group in node.__argument_groups__.items():
-            seg = group_cli_segment(group, group_name)
-            cli_path = (seg,) if seg else ()
-            self.collect_group_env(
-                group,
-                (group_name,),
-                cli_path,
-                auto_prefix,
-                out,
-            )
-        return out
-
-    def collect_group_env(
-        self,
-        group: AbstractGroup,
-        attr_path: Tuple[str, ...],
-        cli_path: Tuple[str, ...],
-        auto_prefix: Optional[str],
-        out: EnvMap,
-    ) -> None:
-        node = cast(Any, group)
-        cli_prefix = "_".join(cli_path)
-        for name, argument in node.__arguments__.items():
-            if not should_emit(argument):
-                continue
-            dest = f"{cli_prefix}_{name}" if cli_prefix else name
-            env = derive_env_var(auto_prefix, dest, argument)
-            if env:
-                out[attr_path + (name,)] = env
-        for child_name, child in node.__argument_groups__.items():
-            seg = group_cli_segment(child, child_name)
-            child_cli = cli_path + ((seg,) if seg else ())
-            self.collect_group_env(
-                child,
-                attr_path + (child_name,),
-                child_cli,
-                auto_prefix,
-                out,
-            )
-
-    def render(
-        self,
-        data: Dict[str, Any],
-        help_map: Optional[HelpMap] = None,
-    ) -> str:
-        """Render the dict to a config-format string. Override me."""
         raise NotImplementedError
 
     def dump_to_string(
@@ -335,96 +373,93 @@ class ConfigGenerator:
         *,
         namespace: Optional[argparse.Namespace] = None,
     ) -> str:
-        """Convenience: build_dict + render in one call."""
+        """Walk ``parser`` and return the rendered config as a
+        string."""
         return self.render(
-            self.build_dict(parser, namespace=namespace),
-            self.build_help_map(parser),
+            iter_config_fields(parser, namespace=namespace),
         )
 
     def dump(
         self,
         parser: AbstractParser,
-        dest: Union[str, IO[str]],
+        dest: Union[str, Path, IO[str]],
         *,
         namespace: Optional[argparse.Namespace] = None,
     ) -> None:
         """Write the rendered config to ``dest``.
 
-        ``dest`` may be a path, a file-like object, or the string
-        ``"-"`` (writes to stdout).
+        ``dest`` may be a filesystem path (as ``str`` or
+        :class:`pathlib.Path`), a file-like object, or the string
+        ``"-"`` for stdout.
         """
         content = self.dump_to_string(parser, namespace=namespace)
         if dest == "-":
             sys.stdout.write(content)
-        elif isinstance(dest, str):
+            return
+        if isinstance(dest, (str, Path)):
             with open(dest, "w") as fp:
                 fp.write(content)
-        else:
-            dest.write(content)
+            return
+        dest.write(content)
 
 
-def flatten_sections(
-    path: Tuple[str, ...],
-    value: Dict[str, Any],
-    sections: Dict[str, Dict[str, Any]],
-) -> None:
-    """Recursively flatten nested-dict groups into dotted section names.
+def group_fields_by_section(
+    fields: Iterable[ConfigField],
+) -> "Dict[Tuple[str, ...], List[ConfigField]]":
+    """Group a stream of fields by ``section_path``.
 
-    Shared helper for INI and TOML emitters, which both use
-    ``[parent.child]`` style section headers.
+    Preserves the original order both for sections and for fields
+    within each section.
     """
-    section_name = ".".join(path)
-    scalars: Dict[str, Any] = {}
-    for k, v in value.items():
-        if isinstance(v, dict):
-            flatten_sections(path + (k,), v, sections)
-        else:
-            scalars[k] = v
-    sections[section_name] = scalars
+    sections: Dict[Tuple[str, ...], List[ConfigField]] = {}
+    for field in fields:
+        sections.setdefault(field.section_path, []).append(field)
+    return sections
 
 
 class INIConfigGenerator(ConfigGenerator):
-    """Render a parser to INI. Help text is emitted as ``; <text>``
-    comments above each key. Nested groups use dotted section names
-    (``[parent.child]``)."""
+    """Render a parser to INI.
+
+    Top-level arguments go under ``[DEFAULT]`` (read by
+    :class:`argclass.INIDefaultsParser`); nested groups become dotted
+    sections (``[endpoint.credentials]``). Help text is emitted as
+    ``; <text>`` comments above each key.
+
+    Caveat: configparser's ``[DEFAULT]`` section cascades into every
+    other section. If a top-level argument shares a name with a group
+    attribute, the top-level value will be inherited by the group on
+    reload. Rename one of the colliding attributes to avoid this.
+    """
 
     extension = ".ini"
 
-    def render(
-        self,
-        data: Dict[str, Any],
-        help_map: Optional[HelpMap] = None,
-    ) -> str:
-        help_map = help_map or {}
-        root: Dict[str, Any] = {}
-        sections: Dict[str, Dict[str, Any]] = {}
-        for key, value in data.items():
-            if isinstance(value, dict):
-                flatten_sections((key,), value, sections)
-            else:
-                root[key] = value
-
+    def render(self, fields: Iterable[ConfigField]) -> str:
+        sections = group_fields_by_section(fields)
         lines: List[str] = []
-        if root:
+        root_fields = sections.pop((), [])
+        if root_fields:
             lines.append("[DEFAULT]")
-            for key, value in root.items():
-                if value is None:
-                    continue
-                if text := help_map.get((key,)):
-                    lines.append(f"; {text}")
-                lines.append(f"{key} = {self.render_scalar(value)}")
+            self._emit_fields(root_fields, lines)
             lines.append("")
-        for section_name, items in sections.items():
-            section_path = tuple(section_name.split("."))
-            lines.append(f"[{section_name}]")
-            for key, value in items.items():
-                if value is None:
-                    continue
-                if text := help_map.get(section_path + (key,)):
-                    lines.append(f"; {text}")
-                lines.append(f"{key} = {self.render_scalar(value)}")
+        for path, items in sections.items():
+            lines.append(f"[{'.'.join(path)}]")
+            self._emit_fields(items, lines)
             lines.append("")
         return "\n".join(lines)
+
+    def _emit_fields(
+        self,
+        fields: List[ConfigField],
+        lines: List[str],
+    ) -> None:
+        for field in fields:
+            if field.value is None:
+                # configparser has no native None; dropping the key
+                # lets the reloaded parser fall back to its default.
+                continue
+            if field.help:
+                lines.append(f"; {field.help}")
+            lines.append(f"{field.key} = {self.render_scalar(field.value)}")
 
     @staticmethod
     def render_scalar(value: Any) -> str:
@@ -436,20 +471,17 @@ class INIConfigGenerator(ConfigGenerator):
 
 
 class JSONConfigGenerator(ConfigGenerator):
-    """Render a parser to JSON. Comments are not supported by JSON,
-    so help text is dropped. Nested groups become nested objects."""
+    """Render a parser to JSON.
+
+    Comments are not supported by JSON, so help text is dropped.
+    Nested groups become nested objects.
+    """
 
     extension = ".json"
 
-    def render(
-        self,
-        data: Dict[str, Any],
-        help_map: Optional[HelpMap] = None,
-    ) -> str:
-        return (
-            json.dumps(self.coerce_value(data), indent=2, sort_keys=False)
-            + "\n"
-        )
+    def render(self, fields: Iterable[ConfigField]) -> str:
+        data = fields_to_nested_dict(fields)
+        return json.dumps(self.coerce_value(data), indent=2) + "\n"
 
     def coerce_value(self, value: Any) -> Any:
         """Convert non-JSON-native types to serialisable equivalents."""
@@ -463,48 +495,39 @@ class JSONConfigGenerator(ConfigGenerator):
 
 
 class TOMLConfigGenerator(ConfigGenerator):
-    """Render a parser to TOML. Help text is emitted as ``# <text>``
-    comments above each key. Nested groups use dotted table headers
-    (``[parent.child]``).
+    """Render a parser to TOML.
 
-    Minimal hand-rolled emitter — covers str, int, float, bool, list,
-    None. Other types are coerced via ``str()``.
+    Help text is emitted as ``# <text>`` comments above each key.
+    Nested groups use dotted table headers (``[parent.child]``).
+
+    Minimal hand-rolled emitter — covers ``str``/``int``/``float``/
+    ``bool``/``list``/``None``. Other types are coerced via ``str()``.
     """
 
     extension = ".toml"
 
-    def render(
-        self,
-        data: Dict[str, Any],
-        help_map: Optional[HelpMap] = None,
-    ) -> str:
-        help_map = help_map or {}
-        root: Dict[str, Any] = {}
-        sections: Dict[str, Dict[str, Any]] = {}
-        for key, value in data.items():
-            if isinstance(value, dict):
-                flatten_sections((key,), value, sections)
-            else:
-                root[key] = value
-
+    def render(self, fields: Iterable[ConfigField]) -> str:
+        sections = group_fields_by_section(fields)
         lines: List[str] = []
-        for key, value in root.items():
-            if value is None:
+        root_fields = sections.pop((), [])
+        for field in root_fields:
+            if field.value is None:
                 continue
-            if text := help_map.get((key,)):
-                lines.append(f"# {text}")
-            lines.append(f"{key} = {self.render_value(value)}")
-        if root and sections:
+            if field.help:
+                lines.append(f"# {field.help}")
+            lines.append(f"{field.key} = {self.render_value(field.value)}")
+        if root_fields and sections:
             lines.append("")
-        for section_name, items in sections.items():
-            section_path = tuple(section_name.split("."))
-            lines.append(f"[{section_name}]")
-            for key, value in items.items():
-                if value is None:
+        for path, items in sections.items():
+            lines.append(f"[{'.'.join(path)}]")
+            for field in items:
+                if field.value is None:
                     continue
-                if text := help_map.get(section_path + (key,)):
-                    lines.append(f"# {text}")
-                lines.append(f"{key} = {self.render_value(value)}")
+                if field.help:
+                    lines.append(f"# {field.help}")
+                lines.append(
+                    f"{field.key} = {self.render_value(field.value)}",
+                )
             lines.append("")
         return "\n".join(lines)
 
@@ -534,73 +557,34 @@ class TOMLConfigGenerator(ConfigGenerator):
 class EnvConfigGenerator(ConfigGenerator):
     """Render a parser to a ``.env``-style listing.
 
-    Emits one ``KEY=value`` line per argument, where ``KEY`` is the
-    env var name argclass would read (explicit ``env_var=`` on the
-    argument, or computed from the parser's ``auto_env_var_prefix``).
-    Arguments without a resolvable env var are skipped — set
-    ``auto_env_var_prefix=`` on the parser to get full coverage.
+    Emits one ``KEY=value`` line per argument that has a resolvable
+    env var (explicit ``env_var=`` on the argument or computed from
+    the parser's ``auto_env_var_prefix=``). Arguments without an env
+    var are skipped.
 
-    Help text is emitted as ``# <text>`` comments above each key.
-    Lists are serialised as Python literal syntax (e.g. ``['a','b']``)
-    so argclass can ``ast.literal_eval`` them when reading back.
+    Help text appears as ``# <text>`` comments above each key.
+    ``None`` values are dropped. Lists serialise to Python literal
+    syntax so argclass can ``ast.literal_eval`` them on read.
 
-    Strings are quoted only when they contain whitespace or special
-    characters — most ``.env`` parsers accept either form, but quoting
-    when needed avoids accidental tokenisation.
+    Strings are quoted only when they contain whitespace, ``=``,
+    ``#``, or other characters that would confuse a typical ``.env``
+    parser.
     """
 
     extension = ".env"
     QUOTE_CHARS = frozenset(' \t\n"\\#=')
 
-    def dump_to_string(
-        self,
-        parser: AbstractParser,
-        *,
-        namespace: Optional[argparse.Namespace] = None,
-    ) -> str:
-        data = self.build_dict(parser, namespace=namespace)
-        help_map = self.build_help_map(parser)
-        env_map = self.build_env_map(parser)
+    def render(self, fields: Iterable[ConfigField]) -> str:
         lines: List[str] = []
-        self.walk_env(data, (), env_map, help_map, lines)
+        for field in fields:
+            if field.env_var is None:
+                continue
+            if field.value is None:
+                continue
+            if field.help:
+                lines.append(f"# {field.help}")
+            lines.append(f"{field.env_var}={self.render_value(field.value)}")
         return "\n".join(lines) + ("\n" if lines else "")
-
-    def render(
-        self,
-        data: Dict[str, Any],
-        help_map: Optional[HelpMap] = None,
-    ) -> str:
-        # ``render`` cannot supply env names from the dict alone;
-        # the .env emitter overrides ``dump_to_string`` to compose
-        # data + help + env maps. Direct ``render`` calls would lose
-        # env_var info, so we explicitly forbid that path.
-        raise NotImplementedError(
-            "EnvConfigGenerator.render needs env metadata; use "
-            "dump_to_string(parser) or dump(parser, dest) instead.",
-        )
-
-    def walk_env(
-        self,
-        data: Dict[str, Any],
-        path: Tuple[str, ...],
-        env_map: EnvMap,
-        help_map: HelpMap,
-        lines: List[str],
-    ) -> None:
-        for key, value in data.items():
-            full_path = path + (key,)
-            if isinstance(value, dict):
-                self.walk_env(value, full_path, env_map, help_map, lines)
-                continue
-            env_name = env_map.get(full_path)
-            if env_name is None:
-                continue
-            if value is None:
-                continue
-            help_text = help_map.get(full_path)
-            if help_text:
-                lines.append(f"# {help_text}")
-            lines.append(f"{env_name}={self.render_value(value)}")
 
     def render_value(self, value: Any) -> str:
         if isinstance(value, bool):

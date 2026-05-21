@@ -478,29 +478,22 @@ Subclass `ConfigGenerator` and override `render`:
 <!--- name: test_config_gen_custom --->
 ```python
 import argclass
-from typing import Any, Dict, Optional
-from argclass.emit import HelpMap
+from argclass.emit import ConfigField
+from typing import Iterable
 
 class KeyValueGenerator(argclass.ConfigGenerator):
     """Flat KEY=VALUE format with dotted paths for nested groups."""
 
     extension = ".kv"
 
-    def render(
-        self,
-        data: Dict[str, Any],
-        help_map: Optional[HelpMap] = None,
-    ) -> str:
+    def render(self, fields: Iterable[ConfigField]) -> str:
         lines = []
-        self._walk(data, (), lines)
+        for field in fields:
+            if field.value is None:
+                continue
+            key = ".".join(field.attr_path)
+            lines.append(f"{key}={field.value}")
         return "\n".join(lines) + "\n"
-
-    def _walk(self, data, path, lines):
-        for key, value in data.items():
-            if isinstance(value, dict):
-                self._walk(value, path + (key,), lines)
-            else:
-                lines.append(f"{'.'.join(path + (key,))}={value}")
 
 class CLI(argclass.Parser):
     host: str = "localhost"

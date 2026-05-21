@@ -15,22 +15,24 @@ import argparse
 import io
 import json
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Type
+from typing import Any, Callable, List, Optional, Type
 
 import pytest
 
 import argclass
 from argclass.emit import (
+    ConfigField,
     ConfigGenerator,
     EnvConfigGenerator,
     GenerateConfigAction,
-    HelpMap,
     INIConfigGenerator,
     JSONConfigGenerator,
     NonConfigAction,
     TOMLConfigGenerator,
     current_value,
     derive_env_var,
+    iter_config_fields,
+    normalize_value,
     should_emit,
 )
 
@@ -376,27 +378,15 @@ class TestCustomGenerator:
         class KeyValueGenerator(ConfigGenerator):
             extension = ".kv"
 
-            def render(
-                self,
-                data: Dict[str, Any],
-                help_map: Optional[HelpMap] = None,
-            ) -> str:
+            def render(self, fields) -> str:
                 lines: List[str] = []
-                self.walk(data, (), lines)
+                for field in fields:
+                    if field.value is None:
+                        continue
+                    lines.append(
+                        f"{'.'.join(field.attr_path)}={field.value}",
+                    )
                 return "\n".join(lines) + "\n"
-
-            def walk(
-                self,
-                data: Dict[str, Any],
-                path: tuple,
-                lines: List[str],
-            ) -> None:
-                for key, value in data.items():
-                    if isinstance(value, dict):
-                        self.walk(value, path + (key,), lines)
-                    else:
-                        full_key = ".".join(path + (key,))
-                        lines.append(f"{full_key}={value}")
 
         CLI = make_cli()
         out = tmp_path / "cfg.kv"
@@ -915,10 +905,10 @@ class TestEnvConfigGenerator:
         assert gen.render_value("has spaces") == '"has spaces"'
         assert gen.render_value('has "quote"') == r'"has \"quote\""'
 
-    def test_render_raises_when_called_without_env_metadata(self):
-        gen = EnvConfigGenerator()
-        with pytest.raises(NotImplementedError):
-            gen.render({})
+    def test_render_empty_fields_returns_empty(self):
+        """``render([])`` is a valid call now — every subclass
+        honours the same ``Iterable[ConfigField]`` contract."""
+        assert EnvConfigGenerator().render([]) == ""
 
     def test_action_wires_env_generator(self, tmp_path: Path):
         class App(argclass.Parser):
@@ -978,7 +968,16 @@ class TestEnvIntrospection:
         arg = argclass.TypedArgument()
         assert derive_env_var(None, "host", arg) is None
 
-    def test_build_env_map_with_prefix_override(self):
+    def env_map_from_fields(self, parser: argclass.Parser) -> dict:
+        """Build {attr_path: env_var} by walking ConfigField stream
+        — exercises the new single-walk introspection contract."""
+        return {
+            f.attr_path: f.env_var
+            for f in iter_config_fields(parser)
+            if f.env_var
+        }
+
+    def test_iter_fields_with_prefix_override(self):
         """Group(prefix=...) overrides the env-var path segment."""
 
         class Inner(argclass.Group):
@@ -988,10 +987,10 @@ class TestEnvIntrospection:
             inner: Inner = Inner(prefix="i")
 
         p = App(auto_env_var_prefix="APP_")
-        env_map = EnvConfigGenerator().build_env_map(p)
+        env_map = self.env_map_from_fields(p)
         assert env_map[("inner", "value")] == "APP_I_VALUE"
 
-    def test_build_env_map_with_empty_prefix(self):
+    def test_iter_fields_with_empty_prefix(self):
         class Inner(argclass.Group):
             value: str = "x"
 
@@ -999,12 +998,12 @@ class TestEnvIntrospection:
             inner: Inner = Inner(prefix="")
 
         p = App(auto_env_var_prefix="APP_")
-        env_map = EnvConfigGenerator().build_env_map(p)
+        env_map = self.env_map_from_fields(p)
         assert env_map[("inner", "value")] == "APP_VALUE"
 
     def test_nested_group_skips_non_config_action(self):
         """NonConfigAction marker on an arg inside a nested group
-        keeps it out of the env_map too."""
+        keeps it out of the field stream too."""
 
         class MetaAction(NonConfigAction):
             def __init__(self, option_strings, dest, **kw):
@@ -1022,15 +1021,18 @@ class TestEnvIntrospection:
         class App(argclass.Parser):
             inner: Inner = Inner()
 
-        env_map = EnvConfigGenerator().build_env_map(
-            App(auto_env_var_prefix="APP_"),
-        )
-        assert ("inner", "host") in env_map
-        assert ("inner", "meta") not in env_map
+        paths = {
+            f.attr_path
+            for f in iter_config_fields(
+                App(auto_env_var_prefix="APP_"),
+            )
+        }
+        assert ("inner", "host") in paths
+        assert ("inner", "meta") not in paths
 
     def test_nested_group_skips_arg_without_resolvable_env(self):
         """No auto_env_var_prefix AND no explicit env_var on an arg
-        inside a group — that arg is absent from the env_map."""
+        inside a group — that arg has no env_var in the field stream."""
 
         class Inner(argclass.Group):
             quiet: str = "yes"
@@ -1042,7 +1044,7 @@ class TestEnvIntrospection:
         class App(argclass.Parser):
             inner: Inner = Inner()
 
-        env_map = EnvConfigGenerator().build_env_map(App())
+        env_map = self.env_map_from_fields(App())
         assert env_map.get(("inner", "shouted")) == "SHOUTED"
         assert ("inner", "quiet") not in env_map
 
@@ -1062,6 +1064,172 @@ class TestEnvIntrospection:
 
     def test_quote_empty_string(self):
         assert EnvConfigGenerator().quote_string("") == ""
+
+
+class TestNormalizeValue:
+    """``normalize_value`` is the single round-trip-fix point used by
+    every generator — Enum/set/frozenset/Path all flow through it."""
+
+    def test_enum_member_returns_name(self):
+        from enum import Enum
+
+        class Color(Enum):
+            RED = "red"
+            GREEN = "green"
+
+        assert normalize_value(Color.RED) == "RED"
+
+    def test_int_enum_returns_name(self):
+        from enum import IntEnum
+
+        class Level(IntEnum):
+            INFO = 10
+            DEBUG = 20
+
+        assert normalize_value(Level.DEBUG) == "DEBUG"
+
+    def test_set_returns_sorted_list(self):
+        assert normalize_value({3, 1, 2}) == [1, 2, 3]
+
+    def test_frozenset_returns_sorted_list(self):
+        assert normalize_value(frozenset({"b", "a"})) == ["a", "b"]
+
+    def test_set_of_unorderable_returns_list(self):
+        """Mixed types fall back to unordered ``list``."""
+
+        class Opaque:
+            pass
+
+        items = {Opaque(), Opaque()}
+        out = normalize_value(items)
+        assert isinstance(out, list)
+        assert len(out) == 2
+
+    def test_path_returns_string(self):
+        from pathlib import PurePosixPath
+
+        assert normalize_value(PurePosixPath("/etc/app")) == "/etc/app"
+
+    def test_native_values_pass_through(self):
+        for value in ("s", 1, 1.5, True, False, None, [1, 2], (3, 4)):
+            assert normalize_value(value) == value
+
+
+class TestEnumAndCollectionRoundTrip:
+    """Round-trip Enum / set / frozenset through each format. These
+    used to silently break: ``Color.RED`` would be written as
+    ``"Color.RED"`` and ``frozenset({1, 2})`` as a non-sequence
+    string."""
+
+    @staticmethod
+    def make_parser() -> type:
+        from enum import Enum
+
+        class Color(Enum):
+            RED = "red"
+            GREEN = "green"
+            BLUE = "blue"
+
+        class App(argclass.Parser):
+            color: Color = argclass.EnumArgument(Color, default="GREEN")
+            unique: frozenset = argclass.Argument(  # type: ignore[type-arg]
+                type=int,
+                nargs=argclass.Nargs.ONE_OR_MORE,
+                converter=frozenset,
+                default=frozenset({1, 2, 3}),
+            )
+
+        App._Color = Color  # type: ignore[attr-defined]
+        return App
+
+    def test_enum_in_ini_roundtrip(self, tmp_path: Path):
+        App = self.make_parser()
+        out = tmp_path / "cfg.ini"
+        INIConfigGenerator().dump(App(), str(out))
+        loaded = App(config_files=[out])
+        loaded.parse_args([])
+        assert loaded.color.name == "GREEN"
+
+    def test_enum_in_toml_roundtrip(self, tmp_path: Path):
+        App = self.make_parser()
+        out = tmp_path / "cfg.toml"
+        TOMLConfigGenerator().dump(App(), str(out))
+        loaded = App(
+            config_files=[out],
+            config_parser_class=argclass.TOMLDefaultsParser,
+        )
+        loaded.parse_args([])
+        assert loaded.color.name == "GREEN"
+
+    def test_enum_in_json_roundtrip(self, tmp_path: Path):
+        App = self.make_parser()
+        out = tmp_path / "cfg.json"
+        JSONConfigGenerator().dump(App(), str(out))
+        loaded = App(
+            config_files=[out],
+            config_parser_class=argclass.JSONDefaultsParser,
+        )
+        loaded.parse_args([])
+        assert loaded.color.name == "GREEN"
+
+    def test_frozenset_dumps_as_sorted_list(self):
+        App = self.make_parser()
+        text = TOMLConfigGenerator().dump_to_string(App())
+        # Sorted list, not "frozenset({...})".
+        assert "unique = [1, 2, 3]" in text
+
+
+class TestFieldsToNestedDict:
+    """Direct tests on the field→dict helper used by JSON."""
+
+    @staticmethod
+    def make_field(attr_path: tuple, value: object) -> ConfigField:
+        return ConfigField(
+            attr_path=attr_path,
+            cli_path=attr_path,
+            dest="_".join(attr_path),
+            argument=argclass.TypedArgument(),
+            target=None,
+            value=value,
+            env_var=None,
+            help=None,
+        )
+
+    def test_skip_none_drops_keys(self):
+        from argclass.emit import fields_to_nested_dict
+
+        fields = [
+            self.make_field(("a",), 1),
+            self.make_field(("b",), None),
+            self.make_field(("g", "x"), None),
+            self.make_field(("g", "y"), 2),
+        ]
+        out = fields_to_nested_dict(fields, skip_none=True)
+        assert out == {"a": 1, "g": {"y": 2}}
+
+    def test_intermediate_non_dict_is_overwritten(self):
+        """Edge case: a field collides with a section name. The
+        helper recovers by replacing the leaf with a dict."""
+        from argclass.emit import fields_to_nested_dict
+
+        fields = [
+            self.make_field(("g",), "scalar"),
+            self.make_field(("g", "child"), 1),
+        ]
+        out = fields_to_nested_dict(fields)
+        assert out == {"g": {"child": 1}}
+
+
+class TestDumpAcceptsPath:
+    def test_dump_to_path_object(self, tmp_path: Path):
+        """``dump(parser, Path(...))`` must work, not just ``str``."""
+
+        class App(argclass.Parser):
+            host: str = "localhost"
+
+        path_obj = tmp_path / "cfg.ini"
+        INIConfigGenerator().dump(App(), path_obj)
+        assert path_obj.read_text().startswith("[DEFAULT]")
 
 
 class TestCrossFormatRoundTrip:
