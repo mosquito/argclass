@@ -14,7 +14,7 @@ import pytest
 
 import argclass
 from argclass.defaults import JSONDefaultsParser, TOMLDefaultsParser
-from argclass.exceptions import ArgclassError
+from argclass.exceptions import ArgclassError, ArgumentDefinitionError
 
 
 class Credentials(argclass.Group):
@@ -319,6 +319,104 @@ class TestHelp:
         out = capsys.readouterr().out
         assert "--endpoint-credentials-username" in out
         assert "endpoint.credentials" in out
+
+
+class TestGroupAnnotation:
+    """Annotated Group fields: auto-instantiate, reject Optional/None/etc."""
+
+    def test_annotation_only_auto_instantiates(self):
+        class G(argclass.Group):
+            foo: int = 0
+
+        class P(argclass.Parser):
+            g: G
+
+        parser = P()
+        parser.parse_args(["--g-foo=5"])
+        assert parser.g.foo == 5
+
+    def test_annotation_with_ellipsis_auto_instantiates(self):
+        class G(argclass.Group):
+            foo: int = 0
+
+        class P(argclass.Parser):
+            g: G = ...  # type: ignore[assignment]
+
+        parser = P()
+        parser.parse_args(["--g-foo=7"])
+        assert parser.g.foo == 7
+
+    def test_annotation_with_explicit_instance_works(self):
+        class G(argclass.Group):
+            foo: int = 0
+
+        class P(argclass.Parser):
+            g: G = G()
+
+        parser = P()
+        parser.parse_args(["--g-foo=3"])
+        assert parser.g.foo == 3
+
+    def test_optional_group_rejected(self):
+        class G(argclass.Group):
+            foo: int = 0
+
+        with pytest.raises(ArgumentDefinitionError) as exc_info:
+
+            class P(argclass.Parser):  # noqa: F841
+                g: G | None = None
+
+        assert "cannot be Optional" in str(exc_info.value)
+
+    def test_none_default_with_group_annotation_rejected(self):
+        class G(argclass.Group):
+            foo: int = 0
+
+        with pytest.raises(ArgumentDefinitionError) as exc_info:
+
+            class P(argclass.Parser):  # noqa: F841
+                g: G = None  # type: ignore[assignment]
+
+        assert "non-Group default" in str(exc_info.value)
+
+    def test_non_group_default_rejected(self):
+        class G(argclass.Group):
+            foo: int = 0
+
+        with pytest.raises(ArgumentDefinitionError) as exc_info:
+
+            class P(argclass.Parser):  # noqa: F841
+                g: G = "weird"  # type: ignore[assignment]
+
+        assert "non-Group default" in str(exc_info.value)
+
+    def test_incompatible_group_instance_rejected(self):
+        class G1(argclass.Group):
+            foo: int = 0
+
+        class G2(argclass.Group):
+            bar: int = 0
+
+        with pytest.raises(ArgumentDefinitionError) as exc_info:
+
+            class P(argclass.Parser):  # noqa: F841
+                g: G1 = G2()  # type: ignore[assignment]
+
+        assert "incompatible instance" in str(exc_info.value)
+
+    def test_annotated_nested_group_auto_instantiates(self):
+        class Inner(argclass.Group):
+            value: str = "default"
+
+        class Outer(argclass.Group):
+            inner: Inner
+
+        class P(argclass.Parser):
+            outer: Outer
+
+        parser = P()
+        parser.parse_args(["--outer-inner-value=set"])
+        assert parser.outer.inner.value == "set"
 
 
 class TestSameInstanceReuse:

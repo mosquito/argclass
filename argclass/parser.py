@@ -33,6 +33,7 @@ from .defaults import (
 from .exceptions import (
     ArgclassError,
     ArgumentDefinitionError,
+    ComplexTypeError,
     TypeConversionError,
 )
 from .secret import SecretString
@@ -104,8 +105,61 @@ class Meta(ABCMeta):
 
             try:
                 argument = deep_getattr(key, attrs, *bases)
+                has_explicit_default = True
             except KeyError:
                 argument = None
+                has_explicit_default = False
+
+            annotated_group_cls: Optional[Type[AbstractGroup]] = None
+            if isinstance(kind, type) and issubclass(kind, AbstractGroup):
+                annotated_group_cls = kind
+            else:
+                try:
+                    optional_inner = unwrap_optional(kind)
+                except ComplexTypeError:
+                    optional_inner = None
+                if (
+                    optional_inner is not None
+                    and isinstance(optional_inner, type)
+                    and issubclass(optional_inner, AbstractGroup)
+                ):
+                    raise ArgumentDefinitionError(
+                        f"Group field '{key}' cannot be Optional. Group "
+                        f"instances hold parsed state and cannot be None.",
+                        field_name=key,
+                        hint=(
+                            f"Use '{key}: {optional_inner.__name__}' "
+                            f"(auto-instantiated) or "
+                            f"'{key}: {optional_inner.__name__} = "
+                            f"{optional_inner.__name__}()'."
+                        ),
+                    )
+
+            if annotated_group_cls is not None:
+                if isinstance(argument, AbstractGroup):
+                    if not isinstance(argument, annotated_group_cls):
+                        raise ArgumentDefinitionError(
+                            f"Group field '{key}' annotated as "
+                            f"{annotated_group_cls.__name__} but assigned "
+                            f"an incompatible instance of "
+                            f"{type(argument).__name__}",
+                            field_name=key,
+                        )
+                elif not has_explicit_default or argument is Ellipsis:
+                    argument = annotated_group_cls()
+                    setattr(cls, key, argument)
+                else:
+                    raise ArgumentDefinitionError(
+                        f"Group field '{key}' got a non-Group default "
+                        f"value: {argument!r}",
+                        field_name=key,
+                        hint=(
+                            f"Use '{key}: {annotated_group_cls.__name__}' "
+                            f"(auto-instantiated) or "
+                            f"'{key}: {annotated_group_cls.__name__} = "
+                            f"{annotated_group_cls.__name__}()'."
+                        ),
+                    )
 
             if not isinstance(
                 argument,

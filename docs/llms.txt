@@ -2,6 +2,13 @@
 
 ## Docs markdown files splitted by topic for easier navigation and LLM processing:
 
+The links below point to the **raw Markdown source** of each
+documentation page (`/_sources/<topic>.md.txt` on docs.argclass.com),
+not the rendered HTML. Prefer these for LLM consumption: they are the
+exact authored text — no HTML scaffolding, no navigation chrome, no
+JavaScript — so you can read them directly without HTML parsing or
+content extraction.
+
 - [Quick Start](https://docs.argclass.com/_sources/quickstart.md.txt): 5-minute overview of essential concepts
 - [Tutorial](https://docs.argclass.com/_sources/tutorial.md.txt): 30-minute guide building a complete CLI application
 - [Arguments](https://docs.argclass.com/_sources/arguments.md.txt): Typed arguments, defaults, nargs, enums, boolean flags
