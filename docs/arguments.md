@@ -596,3 +596,90 @@ automatically strips the `type` parameter for `VERSION`, `HELP`, `STORE_TRUE`,
 Extra kwargs are stored as an immutable `MappingProxyType` on the resulting
 argument and merged into the kwargs passed to `add_argument()` at parser
 construction time.
+
+### Custom Actions with passthrough kwargs
+
+The passthrough mechanism is what lets you ship custom `argparse.Action`
+subclasses that take their own constructor parameters. The action receives
+whatever extra kwargs you pass through `Argument(...)` directly in its
+`__init__`. Here is a self-contained example: a `--check-updates` flag that
+queries PyPI for the latest version of a configurable package and prints
+whether an update is available, then exits.
+
+<!--- name: test_args_custom_action_pypi_update --->
+```python
+import argparse
+import json
+import urllib.request
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as get_installed_version
+
+import argclass
+
+
+class CheckPyPIUpdateAction(argparse.Action):
+    """Query PyPI for the latest version of ``package_name`` and exit.
+
+    ``package_name`` is supplied by argclass via passthrough kwargs.
+    The action behaves like ``--version`` — flag-style (``nargs=0``),
+    suppressed from the parsed namespace, and exits the process.
+    """
+
+    def __init__(self, option_strings, dest, package_name, **kwargs):
+        kwargs.setdefault("nargs", 0)
+        kwargs.setdefault("default", argparse.SUPPRESS)
+        kwargs.setdefault(
+            "help",
+            f"Check PyPI for updates to {package_name} and exit",
+        )
+        self.package_name = package_name
+        super().__init__(option_strings, dest, **kwargs)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        try:
+            current = get_installed_version(self.package_name)
+        except PackageNotFoundError:
+            current = None
+        url = f"https://pypi.org/pypi/{self.package_name}/json"
+        try:
+            with urllib.request.urlopen(url, timeout=5) as resp:
+                latest = json.load(resp)["info"]["version"]
+        except Exception as exc:
+            parser.exit(2, f"PyPI check failed: {exc}\n")
+        if current is None:
+            parser.exit(
+                0,
+                f"{self.package_name} {latest} available "
+                "(not installed locally)\n",
+            )
+        if current == latest:
+            parser.exit(
+                0,
+                f"{self.package_name} {current} is up to date\n",
+            )
+        parser.exit(
+            0,
+            f"Update available: {self.package_name} "
+            f"{current} -> {latest}\n",
+        )
+
+
+class CLI(argclass.Parser):
+    # --check-updates is auto-derived from the attribute name
+    check_updates = argclass.Argument(
+        action=CheckPyPIUpdateAction,
+        package_name="argclass",   # passthrough kwarg
+    )
+
+
+# The class definition wires the action up; running --check-updates
+# would hit PyPI and exit. Here we just verify the parser builds.
+parser = CLI()
+parser.parse_args([])
+```
+
+Run `python myapp.py --check-updates` to see the live PyPI check.
+
+The pattern generalises to any custom action: declare your own constructor
+parameters, consume them in `__init__` before calling `super().__init__`,
+and pass them through `argclass.Argument(action=YourAction, your_param=...)`.

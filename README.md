@@ -257,6 +257,41 @@ except SystemExit as exc:
     assert exc.code == 0
 ```
 
+The same passthrough lets you ship custom `argparse.Action` subclasses
+that take their own constructor parameters — for example, a
+`--check-updates` flag that queries PyPI:
+
+```python
+import argparse, json, urllib.request
+from importlib.metadata import version as get_version
+
+class CheckPyPIUpdate(argparse.Action):
+    def __init__(self, option_strings, dest, package_name, **kwargs):
+        kwargs.setdefault("nargs", 0)
+        kwargs.setdefault("default", argparse.SUPPRESS)
+        self.package_name = package_name
+        super().__init__(option_strings, dest, **kwargs)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        url = f"https://pypi.org/pypi/{self.package_name}/json"
+        with urllib.request.urlopen(url, timeout=5) as r:
+            latest = json.load(r)["info"]["version"]
+        current = get_version(self.package_name)
+        if current == latest:
+            parser.exit(0, f"{self.package_name} {current} is up to date\n")
+        parser.exit(0, f"Update available: {current} -> {latest}\n")
+
+class CLI(argclass.Parser):
+    # --check-updates is auto-derived from the attribute name
+    check_updates = argclass.Argument(
+        action=CheckPyPIUpdate,
+        package_name="argclass",  # passthrough kwarg
+    )
+```
+
+See [Argparse Passthrough Kwargs](https://docs.argclass.com/arguments.html#argparse-passthrough-kwargs)
+for the full pattern.
+
 ### Interactive Examples
 
 Run `python -m argclass` to explore all features interactively.
