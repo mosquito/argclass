@@ -9,9 +9,10 @@ try:
 except ImportError:
     import tomli as tomllib  # type: ignore[import-not-found,no-redef]
 
-# Add project root to path for autodoc
+# Add project root to path for autodoc; add docs dir for local extensions
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(Path(__file__).parent))
 
 # Load project metadata from pyproject.toml
 with (ROOT / "pyproject.toml").open("rb") as f:
@@ -40,6 +41,7 @@ extensions = [
     "sphinx_copybutton",
     "sphinx_design",
     "sphinx_sitemap",
+    "llmstxt",
 ]
 
 # Sitemap settings
@@ -62,7 +64,7 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 html_theme = "furo"
 html_static_path = ["_static"]
-html_extra_path = ["llms.txt", "robots.txt"]
+html_extra_path = ["robots.txt"]
 html_title = project
 html_favicon = "_static/icon.svg"
 
