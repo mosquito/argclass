@@ -516,6 +516,101 @@ class TestInheritedDefaultsPreserved:
         assert b.LIMIT == 5
 
 
+class TestPerInstanceState:
+    """Fix 6: groups and subparsers are copied per Parser instance,
+    so parsing one instance never mutates another (or the class-level
+    prototypes)."""
+
+    def test_groups_independent_across_instances(self):
+        class CLI(argclass.Parser):
+            db = SharedDB()
+
+        first = CLI()
+        second = CLI()
+        assert first.db is not second.db
+
+        first.parse_args(["--db-host", "from-first"])
+        second.parse_args(["--db-host", "from-second"])
+        assert first.db.host == "from-first"
+        assert second.db.host == "from-second"
+
+    def test_class_prototype_stays_pristine(self):
+        class CLI(argclass.Parser):
+            db = SharedDB()
+
+        prototype = CLI.__argument_groups__["db"]
+        cli = CLI()
+        cli.parse_args(["--db-host", "parsed"])
+        assert cli.db is not prototype
+        with pytest.raises(AttributeError):
+            prototype.host
+
+    def test_nested_groups_independent(self):
+        class Credentials(argclass.Group):
+            username: str = "admin"
+
+        class Endpoint(argclass.Group):
+            credentials: Credentials = Credentials()
+
+        class CLI(argclass.Parser):
+            endpoint: Endpoint = Endpoint()
+
+        first = CLI()
+        second = CLI()
+        first.parse_args(["--endpoint-credentials-username", "alice"])
+        second.parse_args(["--endpoint-credentials-username", "bob"])
+        assert first.endpoint.credentials.username == "alice"
+        assert second.endpoint.credentials.username == "bob"
+
+    def test_subparsers_independent_across_instances(self):
+        class CLI(argclass.Parser):
+            serve = SharedServe()
+
+        first = CLI()
+        second = CLI()
+        assert first.serve is not second.serve
+
+        first.parse_args(["serve", "--port", "1111"])
+        second.parse_args(["serve", "--port", "2222"])
+        assert first.serve.port == 1111
+        assert second.serve.port == 2222
+        assert first.current_subparser is first.serve
+        assert second.current_subparser is second.serve
+
+    def test_subparser_groups_independent(self):
+        class Sub(argclass.Parser):
+            db = SharedDB()
+
+        class CLI(argclass.Parser):
+            sub = Sub()
+
+        first = CLI()
+        second = CLI()
+        first.parse_args(["sub", "--db-host", "h1"])
+        second.parse_args(["sub", "--db-host", "h2"])
+        assert first.sub.db.host == "h1"
+        assert second.sub.db.host == "h2"
+
+    def test_reparse_same_instance_overwrites(self):
+        class CLI(argclass.Parser):
+            db = SharedDB()
+
+        cli = CLI()
+        cli.parse_args(["--db-host", "one"])
+        cli.parse_args(["--db-host", "two"])
+        assert cli.db.host == "two"
+
+    def test_group_options_preserved_on_copy(self):
+        class CLI(argclass.Parser):
+            db = SharedDB(prefix="dbx", defaults={"host": "preset"})
+
+        cli = CLI()
+        cli.parse_args([])
+        assert cli.db.host == "preset"
+        cli.parse_args(["--dbx-host", "cli-value"])
+        assert cli.db.host == "cli-value"
+
+
 class TestPathTypeUnchanged:
     """Sanity: Path defaults and types keep working end to end."""
 

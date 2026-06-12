@@ -1,5 +1,6 @@
 """Core parser classes for argclass."""
 
+import copy
 import os
 import weakref
 from abc import ABCMeta
@@ -568,6 +569,52 @@ class Group(AbstractGroup, Base):
         self._defaults: Mapping[str, Any] = defaults or {}
 
 
+def _group_reuse_error(path: str) -> ArgclassError:
+    return ArgclassError(
+        "Group instance is referenced more than once in the parser "
+        f"tree (current path: {path}): the group tree must not "
+        "contain cycles.",
+        hint="Remove the self-reference; a group cannot (directly or "
+        "indirectly) contain itself.",
+    )
+
+
+def _clone_group_tree(
+    group: Group,
+    ancestors: set[int],
+    attr_path: tuple[str, ...],
+) -> Group:
+    """Copy ``group`` and its nested groups for one parser instance.
+
+    The group instances registered by the metaclass live on the class
+    body and would otherwise be shared by every instance of the Parser
+    class — a second ``parse_args()`` on another instance would
+    overwrite the first one's values.
+
+    Because every occurrence gets its own copy, assigning one Group
+    instance to several attributes is fine — each binding becomes an
+    independent copy. ``ancestors`` holds the ids along the current
+    path only, so the recursion rejects exactly the unclonable case:
+    a group that (directly or indirectly) contains itself.
+    """
+    if id(group) in ancestors:
+        raise _group_reuse_error(".".join(attr_path))
+    ancestors.add(id(group))
+    try:
+        clone = copy.copy(group)
+        nested: dict[str, Group] = {}
+        for child_name, child in group.__argument_groups__.items():
+            child_clone = _clone_group_tree(
+                child, ancestors, attr_path + (child_name,)
+            )
+            setattr(clone, child_name, child_clone)
+            nested[child_name] = child_clone
+        clone.__argument_groups__ = MappingProxyType(nested)
+        return clone
+    finally:
+        ancestors.discard(id(group))
+
+
 ParserType = TypeVar("ParserType", bound="Parser")
 
 
@@ -737,6 +784,43 @@ class Parser(AbstractParser, Base):
         self._parser_kwargs = kwargs
         self._used_env_vars: set[str] = set()
         self._used_secret_env_vars: set[str] = set()
+        self._materialize_members()
+
+    def _materialize_members(self) -> None:
+        """Give this parser instance its own copies of the declared
+        groups and subparsers.
+
+        The instances collected by the metaclass live on the class
+        body and are shared by every instance of this Parser class;
+        parsing through them would let a second instance overwrite
+        the first one's values. Copying them per instance
+        (recursively, for nested groups and subparser trees) makes
+        every Parser instance own its parsed state, while the
+        class-level prototypes stay pristine.
+        """
+        cls = type(self)
+
+        ancestors: set[int] = set()
+        groups: dict[str, Group] = {}
+        for name, group in cls.__argument_groups__.items():
+            clone = _clone_group_tree(group, ancestors, (name,))
+            setattr(self, name, clone)
+            groups[name] = clone
+        self.__argument_groups__ = MappingProxyType(groups)
+
+        subparsers: dict[str, Any] = {}
+        for name, subparser in cls.__subparsers__.items():
+            sub_clone = copy.copy(subparser)
+            # The shallow copy still references the prototype's own
+            # member clones and env-var bookkeeping; rebuild them.
+            sub_clone._materialize_members()
+            sub_clone._used_env_vars = set(subparser._used_env_vars)
+            sub_clone._used_secret_env_vars = set(
+                subparser._used_secret_env_vars
+            )
+            setattr(self, name, sub_clone)
+            subparsers[name] = sub_clone
+        self.__subparsers__ = MappingProxyType(subparsers)
 
     @property
     def current_subparser(self) -> "AbstractParser | None":
@@ -880,15 +964,11 @@ class Parser(AbstractParser, Base):
         destinations: DestinationsType,
         visited: set[int],
     ) -> None:
+        # Backstop: instance trees are validated at construction time
+        # by ``_clone_group_tree``; this catches cycles wired into the
+        # per-instance mappings after ``__init__``.
         if id(group) in visited:
-            raise ArgclassError(
-                "Group instance is referenced more than once in the parser "
-                f"tree (current path: {'.'.join(attr_path)}). Reusing a "
-                "single Group instance across attributes is not supported "
-                "because state would be shared between locations.",
-                hint="Instantiate a new Group for each attribute, or "
-                "subclass Group to define a dedicated type.",
-            )
+            raise _group_reuse_error(".".join(attr_path))
         visited.add(id(group))
 
         section = ".".join(attr_path)

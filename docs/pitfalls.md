@@ -211,11 +211,12 @@ class Parser(argclass.Parser):
 
 ### Reusing a Group instance across attributes
 
-Each `Group` instance owns the parsed state for one location in the
-parser tree. Assigning the **same instance** to two attributes raises
-`ArgclassError`, because parsed values would otherwise be shared
-between both locations.
+Group instances written in a class body are **prototypes**: every
+parser instance works on its own copies. That makes assigning the
+same instance to several attributes safe — each binding becomes an
+independent copy with its own parsed state:
 
+<!--- name: test_pitfall_group_instance_reuse --->
 ```python
 import argclass
 
@@ -225,26 +226,26 @@ class Credentials(argclass.Group):
 shared = Credentials()
 
 class Parser(argclass.Parser):
-    primary = shared      # OK on its own — single binding
-    secondary = shared    # Together with `primary`, raises ArgclassError
-                          # at parse_args time (same instance bound twice)
+    primary = shared
+    secondary = shared    # fine: each binding gets its own copy
+
+parser = Parser()
+parser.parse_args([
+    "--primary-username", "alice",
+    "--secondary-username", "bob",
+])
+assert parser.primary.username == "alice"
+assert parser.secondary.username == "bob"
 ```
 
-A single attribute bound to an externally-created Group is fine; the
-error only fires when the **same instance** is reachable through two
-or more attributes at parse time.
+Keep in mind that the copies inherit the prototype's `title`,
+`description`, and `prefix`. A reused instance with an explicit
+`prefix=` would produce conflicting CLI flags — give each attribute
+its own instance when they need different options.
 
-Create a separate instance for each attribute instead:
-
-```python
-class Parser(argclass.Parser):
-    primary = Credentials()      # RIGHT - distinct instances
-    secondary = Credentials()
-```
-
-Using the same `Group` **class** twice (with different `Group()` calls)
-is fully supported — only sharing one already-constructed instance is
-disallowed.
+The only forbidden shape is a **cycle** — a group that (directly or
+indirectly) contains itself raises `ArgclassError` at parser
+construction time.
 
 ---
 
@@ -297,14 +298,12 @@ The same applies to names of Parser API methods (`parse_args`,
 define on your own parser classes: an argument cannot shadow them.
 :::
 
-:::{warning}
-Group and subparser attributes are **class-level singletons**: every
-instance of the same Parser class shares the same Group and subparser
-objects. A second `parse_args()` — whether on the same parser instance
-or on another instance of the same class — overwrites the group and
-subcommand values produced by the first one. When you need independent
-results (e.g. parsing several argv sets side by side), keep each
-result before the next parse, or define separate Parser classes.
+:::{note}
+Every Parser instance works on its **own copies** of the declared
+groups and subparsers: the instances written in the class body are
+just prototypes. Parsing one parser instance never affects another
+one, and the prototypes stay pristine. Re-parsing the *same* parser
+instance overwrites its previous values, as expected.
 
 <!--- name: test_pitfall_shared_groups --->
 ```python
@@ -318,11 +317,12 @@ class CLI(argclass.Parser):
 
 first = CLI()
 second = CLI()
-assert first.db is second.db  # the same Group object!
+assert first.db is not second.db  # independent copies
 
 first.parse_args(["--db-host", "from-first"])
 second.parse_args(["--db-host", "from-second"])
-assert first.db.host == "from-second"  # overwritten by the later parse
+assert first.db.host == "from-first"  # not affected by the later parse
+assert second.db.host == "from-second"
 ```
 :::
 
