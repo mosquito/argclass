@@ -1,8 +1,10 @@
 """Tests for edge cases in positional arguments, required flag handling,
 and exceptions."""
 
+import ipaddress
+
 import pytest
-from typing import Optional, List
+from typing import Optional, List, Union
 
 import argclass
 from argclass.store import TypedArgument
@@ -673,3 +675,100 @@ class TestNargsWithConfig:
         parser = Parser(config_files=[str(config)])
         parser.parse_args(["--files", "from_cli.txt"])
         assert parser.files == ["from_cli.txt"]
+
+
+class TestUnionWithExplicitTypeOrConverter:
+    """When the annotation is a complex Union but the user supplies an
+    explicit `type=` or `converter=`, the metaclass must not raise
+    ComplexTypeError — the supplied callable owns the conversion."""
+
+    def test_pep604_union_with_type_callable(self):
+        """`A | B = Argument(type=ip_address)` should define and parse."""
+
+        class Parser(argclass.Parser):
+            dns: ipaddress.IPv4Address | ipaddress.IPv6Address = (
+                argclass.Argument(type=ipaddress.ip_address)
+            )
+
+        parser = Parser()
+        parser.parse_args(["--dns", "8.8.8.8"])
+        assert parser.dns == ipaddress.IPv4Address("8.8.8.8")
+
+    def test_pep604_union_with_type_callable_ipv6(self):
+        """Same Union+type definition resolves IPv6 inputs too."""
+
+        class Parser(argclass.Parser):
+            dns: ipaddress.IPv4Address | ipaddress.IPv6Address = (
+                argclass.Argument(type=ipaddress.ip_address)
+            )
+
+        parser = Parser()
+        parser.parse_args(["--dns", "::1"])
+        assert parser.dns == ipaddress.IPv6Address("::1")
+
+    def test_pep604_union_with_converter(self):
+        """`A | B = Argument(converter=ip_address)` should define and parse."""
+
+        class Parser(argclass.Parser):
+            dns: ipaddress.IPv4Address | ipaddress.IPv6Address = (
+                argclass.Argument(converter=ipaddress.ip_address)
+            )
+
+        parser = Parser()
+        parser.parse_args(["--dns", "8.8.8.8"])
+        assert parser.dns == ipaddress.IPv4Address("8.8.8.8")
+
+    def test_typing_union_with_type_callable(self):
+        """Same behaviour for typing.Union[A, B] form."""
+
+        class Parser(argclass.Parser):
+            dns: Union[
+                ipaddress.IPv4Address, ipaddress.IPv6Address
+            ] = argclass.Argument(type=ipaddress.ip_address)
+
+        parser = Parser()
+        parser.parse_args(["--dns", "10.0.0.1"])
+        assert parser.dns == ipaddress.IPv4Address("10.0.0.1")
+
+    def test_optional_complex_union_with_type(self):
+        """`Optional[A | B] = Argument(type=...)` should also work."""
+
+        class Parser(argclass.Parser):
+            dns: Optional[
+                ipaddress.IPv4Address | ipaddress.IPv6Address
+            ] = argclass.Argument(type=ipaddress.ip_address)
+
+        parser = Parser()
+        parser.parse_args(["--dns", "8.8.8.8"])
+        assert parser.dns == ipaddress.IPv4Address("8.8.8.8")
+
+    def test_three_member_union_with_converter(self):
+        """A union with >2 non-None members must also accept a converter."""
+
+        class Parser(argclass.Parser):
+            value: Union[int, float, str] = argclass.Argument(
+                converter=lambda v: v,
+            )
+
+        parser = Parser()
+        parser.parse_args(["--value", "hello"])
+        assert parser.value == "hello"
+
+    def test_bare_complex_union_still_raises(self):
+        """No type/converter supplied → ComplexTypeError, as before."""
+
+        with pytest.raises(argclass.ComplexTypeError):
+
+            class Parser(argclass.Parser):
+                dns: ipaddress.IPv4Address | ipaddress.IPv6Address
+
+    def test_bare_complex_union_with_empty_argument_still_raises(self):
+        """`Argument()` without type/converter on a complex Union still
+        raises, because there is nothing to drive the conversion."""
+
+        with pytest.raises(argclass.ComplexTypeError):
+
+            class Parser(argclass.Parser):
+                dns: ipaddress.IPv4Address | ipaddress.IPv6Address = (
+                    argclass.Argument()
+                )
