@@ -211,11 +211,12 @@ class Parser(argclass.Parser):
 
 ### Reusing a Group instance across attributes
 
-Each `Group` instance owns the parsed state for one location in the
-parser tree. Assigning the **same instance** to two attributes raises
-`ArgclassError`, because parsed values would otherwise be shared
-between both locations.
+Group instances written in a class body are **prototypes**: every
+parser instance works on its own copies. That makes assigning the
+same instance to several attributes safe — each binding becomes an
+independent copy with its own parsed state:
 
+<!--- name: test_pitfall_group_instance_reuse --->
 ```python
 import argclass
 
@@ -225,34 +226,36 @@ class Credentials(argclass.Group):
 shared = Credentials()
 
 class Parser(argclass.Parser):
-    primary = shared      # OK on its own — single binding
-    secondary = shared    # Together with `primary`, raises ArgclassError
-                          # at parse_args time (same instance bound twice)
+    primary = shared
+    secondary = shared    # fine: each binding gets its own copy
+
+parser = Parser()
+parser.parse_args([
+    "--primary-username", "alice",
+    "--secondary-username", "bob",
+])
+assert parser.primary.username == "alice"
+assert parser.secondary.username == "bob"
 ```
 
-A single attribute bound to an externally-created Group is fine; the
-error only fires when the **same instance** is reachable through two
-or more attributes at parse time.
+Keep in mind that the copies inherit the prototype's `title`,
+`description`, and `prefix`. A reused instance with an explicit
+`prefix=` would produce conflicting CLI flags — give each attribute
+its own instance when they need different options.
 
-Create a separate instance for each attribute instead:
-
-```python
-class Parser(argclass.Parser):
-    primary = Credentials()      # RIGHT - distinct instances
-    secondary = Credentials()
-```
-
-Using the same `Group` **class** twice (with different `Group()` calls)
-is fully supported — only sharing one already-constructed instance is
-disallowed.
+The only forbidden shape is a **cycle** — a group that (directly or
+indirectly) contains itself raises `ArgclassError` at parser
+construction time.
 
 ---
 
 ## Subcommands
 
 When using subcommands, only the selected subcommand's arguments are parsed
-and populated. Other subcommands retain their default values. Don't assume
-all subcommand attributes are populated after parsing.
+and populated. Attributes of subcommands that were **not** selected are not
+populated at all — accessing them raises
+`AttributeError("... was not parsed")`. Don't assume all subcommand
+attributes are available after parsing.
 
 <!--- name: test_pitfall_subparser --->
 ```python
@@ -271,7 +274,12 @@ class CLI(argclass.Parser):
 cli = CLI()
 cli.parse_args(["serve", "--port", "9000"])
 assert cli.serve.port == 9000
-# cli.build.output is still default
+
+# `build` was not selected, so its arguments were never populated:
+try:
+    cli.build.output
+except AttributeError as e:
+    assert "was not parsed" in str(e)
 ```
 
 :::{tip}
@@ -285,6 +293,37 @@ automatically to the selected command.
 for internal parser state — using them as your own argument names raises
 `ArgumentDefinitionError`. See
 [Reserved Attribute Names](subparsers.md#reserved-attribute-names).
+The same applies to names of Parser API methods (`parse_args`,
+`print_help`, `sanitize_env`, `create_parser`, …) and to methods you
+define on your own parser classes: an argument cannot shadow them.
+:::
+
+:::{note}
+Every Parser instance works on its **own copies** of the declared
+groups and subparsers: the instances written in the class body are
+just prototypes. Parsing one parser instance never affects another
+one, and the prototypes stay pristine. Re-parsing the *same* parser
+instance overwrites its previous values, as expected.
+
+<!--- name: test_pitfall_shared_groups --->
+```python
+import argclass
+
+class DB(argclass.Group):
+    host: str = "localhost"
+
+class CLI(argclass.Parser):
+    db = DB()
+
+first = CLI()
+second = CLI()
+assert first.db is not second.db  # independent copies
+
+first.parse_args(["--db-host", "from-first"])
+second.parse_args(["--db-host", "from-second"])
+assert first.db.host == "from-first"  # not affected by the later parse
+assert second.db.host == "from-second"
+```
 :::
 
 ---

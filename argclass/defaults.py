@@ -11,6 +11,7 @@ from typing import Any
 from collections.abc import Iterable, Mapping
 
 from .exceptions import ConfigurationError
+from .types import TEXT_TRUE_VALUES
 from .utils import own_section_items
 
 try:
@@ -166,19 +167,11 @@ class INIDefaultsParser(AbstractDefaultsParser):
     when requested via get_value() with appropriate ValueKind.
     """
 
-    # Values considered as True for boolean conversion
-    BOOL_TRUE_VALUES = frozenset(
-        (
-            "true",
-            "yes",
-            "1",
-            "on",
-            "enable",
-            "enabled",
-            "t",
-            "y",
-        )
-    )
+    # Values considered as True for boolean conversion. Aliased to the
+    # shared constant so this set and ``argclass.parse_bool`` cannot
+    # drift apart; kept as a class attribute so subclasses can still
+    # override it.
+    BOOL_TRUE_VALUES = TEXT_TRUE_VALUES
 
     def parse(self) -> Mapping[str, Any]:
         parser = configparser.ConfigParser(
@@ -186,9 +179,19 @@ class INIDefaultsParser(AbstractDefaultsParser):
             strict=self._strict,
         )
 
-        filenames = self._filter_readable_paths()
-        loaded = parser.read(filenames)
-        self._loaded_files = tuple(Path(f) for f in loaded)
+        loaded: list[Path] = []
+        for path in self._filter_readable_paths():
+            # Mirror the JSON/TOML parsers: in non-strict mode a
+            # malformed file is skipped (best effort), in strict mode
+            # the error propagates.
+            try:
+                read_ok = parser.read([path])
+            except (configparser.Error, OSError):
+                if self._strict:
+                    raise
+                continue
+            loaded.extend(Path(f) for f in read_ok)
+        self._loaded_files = tuple(loaded)
 
         result: dict[str, Any] = dict(
             parser.items(parser.default_section, raw=True),
@@ -275,7 +278,10 @@ class TOMLDefaultsParser(AbstractDefaultsParser):
                     if isinstance(data, dict):
                         result.update(data)
                         loaded_files.append(path)
-            except OSError:
+            # TOMLDecodeError subclasses ValueError in both stdlib
+            # tomllib and the tomli fallback, so a malformed file is
+            # skipped in non-strict mode just like JSON/INI.
+            except (OSError, ValueError):
                 if self._strict:
                     raise
 

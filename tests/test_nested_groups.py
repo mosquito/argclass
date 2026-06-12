@@ -530,7 +530,10 @@ class TestGroupAnnotation:
 
 
 class TestSameInstanceReuse:
-    def test_reused_group_instance_raises(self):
+    def test_reused_group_instance_cloned_independently(self):
+        # Every binding gets its own per-parser-instance copy, so the
+        # same Group instance may be assigned to several attributes —
+        # each location keeps independent parsed state.
         shared = Credentials()
 
         class Outer(argclass.Group):
@@ -541,9 +544,35 @@ class TestSameInstanceReuse:
             outer: Outer = Outer()
 
         parser = App()
-        with pytest.raises(ArgclassError) as exc_info:
-            parser.parse_args([])
-        assert "referenced more than once" in str(exc_info.value)
+        assert parser.outer.primary is not parser.outer.secondary
+        parser.parse_args(
+            [
+                "--outer-primary-username=alice",
+                "--outer-secondary-username=bob",
+            ],
+        )
+        assert parser.outer.primary.username == "alice"
+        assert parser.outer.secondary.username == "bob"
+        # The shared prototype itself is untouched.
+        with pytest.raises(AttributeError):
+            shared.username
+
+    def test_reused_instance_at_parser_level(self):
+        shared = Credentials()
+
+        class App(argclass.Parser):
+            primary: Credentials = shared
+            secondary: Credentials = shared
+
+        parser = App()
+        parser.parse_args(
+            [
+                "--primary-username=alice",
+                "--secondary-username=bob",
+            ],
+        )
+        assert parser.primary.username == "alice"
+        assert parser.secondary.username == "bob"
 
     def test_three_link_cycle_raises(self):
         """A → B → C → A. Synthetic — normal class syntax can't form
@@ -573,9 +602,8 @@ class TestSameInstanceReuse:
             class P(argclass.Parser):
                 root: A = a
 
-            parser = P()
             with pytest.raises(ArgclassError) as exc_info:
-                parser.parse_args([])
+                P()
             assert "referenced more than once" in str(exc_info.value)
             assert "root.b.c.a" in str(exc_info.value)
         finally:
@@ -598,12 +626,29 @@ class TestSameInstanceReuse:
             class P(argclass.Parser):
                 root: Loop = instance
 
-            parser = P()
             with pytest.raises(ArgclassError) as exc_info:
-                parser.parse_args([])
+                P()
             assert "referenced more than once" in str(exc_info.value)
         finally:
             Loop.__argument_groups__ = MappingProxyType({})
+
+    def test_post_init_cycle_caught_at_parse(self):
+        """Cycles wired into the per-instance mappings after
+        construction are caught by the parse-time backstop."""
+        from types import MappingProxyType
+
+        class G(argclass.Group):
+            foo: int = 1
+
+        class P(argclass.Parser):
+            root: G = G()
+
+        parser = P()
+        clone = parser.root
+        clone.__argument_groups__ = MappingProxyType({"again": clone})
+        with pytest.raises(ArgclassError) as exc_info:
+            parser.parse_args([])
+        assert "referenced more than once" in str(exc_info.value)
 
     def test_two_distinct_instances_of_same_class_ok(self):
         class Outer(argclass.Group):
@@ -625,8 +670,7 @@ class TestSameInstanceReuse:
 
     def test_single_external_instance_bound_once_ok(self):
         """An externally-created Group instance assigned to a single
-        attribute is fine. The reuse check only fires when the same
-        instance is bound to two or more attributes."""
+        attribute is fine; the parser works on its own copy."""
         shared = Credentials()
 
         class P(argclass.Parser):
@@ -635,4 +679,8 @@ class TestSameInstanceReuse:
         parser = P()
         parser.parse_args(["--primary-username=alice"])
         assert parser.primary.username == "alice"
-        assert parser.primary is shared
+        # The parser works on its own per-instance copy; the class
+        # body prototype stays pristine.
+        assert parser.primary is not shared
+        with pytest.raises(AttributeError):
+            shared.username

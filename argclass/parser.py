@@ -1,5 +1,6 @@
 """Core parser classes for argclass."""
 
+import copy
 import os
 import weakref
 from abc import ABCMeta
@@ -91,6 +92,59 @@ def reserved_name_error(name: str) -> ArgumentDefinitionError:
     )
 
 
+def shadowed_member_error(name: str, member: Any) -> ArgumentDefinitionError:
+    kind = "property" if isinstance(member, property) else "method"
+    return ArgumentDefinitionError(
+        f"Field {name!r} would shadow the {kind} {name!r} defined on a "
+        f"base class or in the class body; argclass would silently "
+        f"replace it and break the parser API.",
+        field_name=name,
+        hint="Rename the field, or pass the callable explicitly via "
+        "Argument(default=...) if a callable default is intended.",
+    )
+
+
+def _shadowed_api_member(
+    key: str,
+    attrs: Mapping[str, Any],
+    bases: tuple[type, ...],
+) -> Any | None:
+    """Return the method/property that a member named ``key`` would
+    clobber, or ``None`` when the name is safe to use.
+
+    Registering ``key`` as an argument replaces the class attribute
+    (the metaclass stores ``...`` placeholders and ``parse_args``
+    assigns parsed values), so a name that currently resolves to a
+    callable or property — ``parse_args``, a user-defined helper —
+    must be rejected instead of silently destroying the API.
+    Inherited argclass members (arguments, groups, subparsers and
+    their ``...`` placeholders) and plain data defaults remain
+    legitimate redefinition targets.
+    """
+    own = attrs.get(key)
+    if (
+        own is not None
+        and not isinstance(own, (TypedArgument, AbstractGroup, AbstractParser))
+        and (
+            callable(own)
+            or isinstance(own, (property, classmethod, staticmethod))
+        )
+    ):
+        return own
+    for base in bases:
+        if not hasattr(base, key):
+            continue
+        value = getattr(base, key)
+        if value is None or value is Ellipsis:
+            return None
+        if isinstance(value, (TypedArgument, AbstractGroup, AbstractParser)):
+            return None
+        if callable(value) or isinstance(value, property):
+            return value
+        return None
+    return None
+
+
 class Meta(ABCMeta):
     """Metaclass for Parser and Group classes."""
 
@@ -113,9 +167,31 @@ class Meta(ABCMeta):
         # Annotations defined directly on this class (not inherited).
         own_annotations = own_annotation_keys(cls)
 
-        arguments = {}
-        argument_groups = {}
-        subparsers = {}
+        # Seed the registries with inherited members so unannotated
+        # arguments, groups, and subparsers declared on a base class
+        # survive subclassing (annotated fields are re-collected below
+        # from the merged annotations either way).
+        arguments: dict[str, Any] = {}
+        argument_groups: dict[str, Any] = {}
+        subparsers: dict[str, Any] = {}
+        for base in reversed(bases):
+            arguments.update(getattr(base, "__arguments__", {}))
+            argument_groups.update(getattr(base, "__argument_groups__", {}))
+            subparsers.update(getattr(base, "__subparsers__", {}))
+
+        # Keys (re)defined by this class itself, as opposed to seeded.
+        own_keys: set[str] = set()
+
+        def classify(key: str, value: Any, into: dict[str, Any]) -> None:
+            # A redefinition may change category (e.g. an inherited
+            # argument overridden by a group); drop the stale entry
+            # from the other registries.
+            for registry in (arguments, argument_groups, subparsers):
+                if registry is not into:
+                    registry.pop(key, None)
+            into[key] = value
+            own_keys.add(key)
+
         for key, kind in annotations.items():
             if key in RESERVED_ATTRIBUTES:
                 # Inherited internal attributes are skipped; declaring one
@@ -126,12 +202,62 @@ class Meta(ABCMeta):
             if key.startswith("_"):
                 continue
 
+            # A purely inherited member (not re-annotated and not
+            # re-assigned here) is already fully processed in the
+            # seeded registries. Rebuilding it from the annotation
+            # would lose state the base class attrs no longer carry:
+            # plain defaults become ``...`` placeholders on the class,
+            # so a re-build would turn ``name: str = "x"`` into a
+            # required argument in every subclass.
+            if (
+                key not in own_annotations
+                and key not in attrs
+                and (
+                    key in arguments
+                    or key in argument_groups
+                    or key in subparsers
+                )
+            ):
+                continue
+
             try:
                 argument = deep_getattr(key, attrs, *bases)
                 has_explicit_default = True
             except KeyError:
                 argument = None
                 has_explicit_default = False
+
+            shadowed = _shadowed_api_member(key, attrs, bases)
+            if shadowed is not None:
+                raise shadowed_member_error(key, shadowed)
+
+            # Subparsers are defined by instances, not annotations: a
+            # bare ``serve: Serve`` (or ``Serve | None``) would
+            # otherwise fall through and silently become a required
+            # CLI argument with ``type=Serve``.
+            parser_kind: type | None = None
+            if isinstance(kind, type) and issubclass(kind, AbstractParser):
+                parser_kind = kind
+            else:
+                try:
+                    _inner = unwrap_optional(kind)
+                except ComplexTypeError:
+                    _inner = None
+                if isinstance(_inner, type) and issubclass(
+                    _inner, AbstractParser
+                ):
+                    parser_kind = _inner
+            if parser_kind is not None and not isinstance(
+                argument, AbstractParser
+            ):
+                raise ArgumentDefinitionError(
+                    f"Subparser field '{key}' is annotated with parser "
+                    f"class {parser_kind.__name__} but no instance is "
+                    f"assigned; an annotation alone cannot define a "
+                    f"subcommand.",
+                    field_name=key,
+                    hint=f"Use '{key} = {parser_kind.__name__}()'.",
+                )
 
             annotated_group_cls: type[AbstractGroup] | None = None
             if isinstance(kind, type) and issubclass(kind, AbstractGroup):
@@ -292,12 +418,15 @@ class Meta(ABCMeta):
 
             if isinstance(argument, TypedArgument):
                 if argument.type is None and argument.converter is None:
+                    # The same Argument() instance may be shared by
+                    # several fields or classes; mutate a private copy
+                    # so this field's inferred type/nargs/choices do
+                    # not leak into the other bindings.
+                    argument = argument.copy()
                     # First try to unwrap optional
                     optional_inner = unwrap_optional(kind)
                     if optional_inner is not None:
                         kind = optional_inner
-                        if argument.default is None:
-                            argument.default = None
 
                     # Handle bool type: set STORE_TRUE/STORE_FALSE action
                     if kind is bool and argument.action == Actions.default():
@@ -339,9 +468,14 @@ class Meta(ABCMeta):
                             argument.converter = container_type
                     else:
                         argument.type = kind
-                arguments[key] = argument
+                classify(key, argument, arguments)
             elif isinstance(argument, AbstractGroup):
-                argument_groups[key] = argument
+                classify(key, argument, argument_groups)
+            else:
+                # Only Parser instances can reach this point: the
+                # block above converts every non-argclass value into
+                # a TypedArgument.
+                classify(key, argument, subparsers)
 
         for key, value in attrs.items():
             if key in RESERVED_ATTRIBUTES:
@@ -357,15 +491,22 @@ class Meta(ABCMeta):
                 continue
 
             # Skip if already processed from annotations
-            if key in arguments or key in argument_groups or key in subparsers:
+            if key in own_keys:
                 continue
 
+            if isinstance(
+                value, (TypedArgument, AbstractGroup, AbstractParser)
+            ):
+                shadowed = _shadowed_api_member(key, attrs, bases)
+                if shadowed is not None:
+                    raise shadowed_member_error(key, shadowed)
+
             if isinstance(value, TypedArgument):
-                arguments[key] = value
+                classify(key, value, arguments)
             elif isinstance(value, AbstractGroup):
-                argument_groups[key] = value
+                classify(key, value, argument_groups)
             elif isinstance(value, AbstractParser):
-                subparsers[key] = value
+                classify(key, value, subparsers)
 
         setattr(cls, "__arguments__", MappingProxyType(arguments))
         setattr(cls, "__argument_groups__", MappingProxyType(argument_groups))
@@ -426,6 +567,52 @@ class Group(AbstractGroup, Base):
         self._description = description
         self._prefix = prefix
         self._defaults: Mapping[str, Any] = defaults or {}
+
+
+def _group_reuse_error(path: str) -> ArgclassError:
+    return ArgclassError(
+        "Group instance is referenced more than once in the parser "
+        f"tree (current path: {path}): the group tree must not "
+        "contain cycles.",
+        hint="Remove the self-reference; a group cannot (directly or "
+        "indirectly) contain itself.",
+    )
+
+
+def _clone_group_tree(
+    group: Group,
+    ancestors: set[int],
+    attr_path: tuple[str, ...],
+) -> Group:
+    """Copy ``group`` and its nested groups for one parser instance.
+
+    The group instances registered by the metaclass live on the class
+    body and would otherwise be shared by every instance of the Parser
+    class — a second ``parse_args()`` on another instance would
+    overwrite the first one's values.
+
+    Because every occurrence gets its own copy, assigning one Group
+    instance to several attributes is fine — each binding becomes an
+    independent copy. ``ancestors`` holds the ids along the current
+    path only, so the recursion rejects exactly the unclonable case:
+    a group that (directly or indirectly) contains itself.
+    """
+    if id(group) in ancestors:
+        raise _group_reuse_error(".".join(attr_path))
+    ancestors.add(id(group))
+    try:
+        clone = copy.copy(group)
+        nested: dict[str, Group] = {}
+        for child_name, child in group.__argument_groups__.items():
+            child_clone = _clone_group_tree(
+                child, ancestors, attr_path + (child_name,)
+            )
+            setattr(clone, child_name, child_clone)
+            nested[child_name] = child_clone
+        clone.__argument_groups__ = MappingProxyType(nested)
+        return clone
+    finally:
+        ancestors.discard(id(group))
 
 
 ParserType = TypeVar("ParserType", bound="Parser")
@@ -597,6 +784,43 @@ class Parser(AbstractParser, Base):
         self._parser_kwargs = kwargs
         self._used_env_vars: set[str] = set()
         self._used_secret_env_vars: set[str] = set()
+        self._materialize_members()
+
+    def _materialize_members(self) -> None:
+        """Give this parser instance its own copies of the declared
+        groups and subparsers.
+
+        The instances collected by the metaclass live on the class
+        body and are shared by every instance of this Parser class;
+        parsing through them would let a second instance overwrite
+        the first one's values. Copying them per instance
+        (recursively, for nested groups and subparser trees) makes
+        every Parser instance own its parsed state, while the
+        class-level prototypes stay pristine.
+        """
+        cls = type(self)
+
+        ancestors: set[int] = set()
+        groups: dict[str, Group] = {}
+        for name, group in cls.__argument_groups__.items():
+            clone = _clone_group_tree(group, ancestors, (name,))
+            setattr(self, name, clone)
+            groups[name] = clone
+        self.__argument_groups__ = MappingProxyType(groups)
+
+        subparsers: dict[str, Any] = {}
+        for name, subparser in cls.__subparsers__.items():
+            sub_clone = copy.copy(subparser)
+            # The shallow copy still references the prototype's own
+            # member clones and env-var bookkeeping; rebuild them.
+            sub_clone._materialize_members()
+            sub_clone._used_env_vars = set(subparser._used_env_vars)
+            sub_clone._used_secret_env_vars = set(
+                subparser._used_secret_env_vars
+            )
+            setattr(self, name, sub_clone)
+            subparsers[name] = sub_clone
+        self.__subparsers__ = MappingProxyType(subparsers)
 
     @property
     def current_subparser(self) -> "AbstractParser | None":
@@ -740,15 +964,11 @@ class Parser(AbstractParser, Base):
         destinations: DestinationsType,
         visited: set[int],
     ) -> None:
+        # Backstop: instance trees are validated at construction time
+        # by ``_clone_group_tree``; this catches cycles wired into the
+        # per-instance mappings after ``__init__``.
         if id(group) in visited:
-            raise ArgclassError(
-                "Group instance is referenced more than once in the parser "
-                f"tree (current path: {'.'.join(attr_path)}). Reusing a "
-                "single Group instance across attributes is not supported "
-                "because state would be shared between locations.",
-                hint="Instantiate a new Group for each attribute, or "
-                "subclass Group to define a dedicated type.",
-            )
+            raise _group_reuse_error(".".join(attr_path))
         visited.add(id(group))
 
         section = ".".join(attr_path)
@@ -909,8 +1129,16 @@ class Parser(AbstractParser, Base):
                     parsed_value = getattr(parsed_ns, key)
 
                 if argument is not None:
-                    if argument.secret and isinstance(parsed_value, str):
-                        parsed_value = SecretString(parsed_value)
+                    if argument.secret:
+                        if isinstance(parsed_value, str):
+                            parsed_value = SecretString(parsed_value)
+                        elif isinstance(parsed_value, (list, tuple)):
+                            # nargs secrets: wrap each element so a
+                            # repr of the list cannot leak the values.
+                            parsed_value = type(parsed_value)(
+                                SecretString(v) if isinstance(v, str) else v
+                                for v in parsed_value
+                            )
                     if argument.converter is not None:
                         if argument.nargs and parsed_value is None:
                             parsed_value = []

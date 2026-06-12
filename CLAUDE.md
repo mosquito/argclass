@@ -97,9 +97,11 @@ Naming follows the attribute path:
 - JSON/TOML: nested objects/tables
 
 `Group(prefix=...)` overrides only the CLI/env segment for that group;
-config section names always follow the attribute path. Reusing the
-same Group instance in two places raises `ArgclassError` (instantiate
-a separate Group per attribute).
+config section names always follow the attribute path. Class-body
+Group/subparser instances are prototypes: every Parser instance works
+on its own copies, so one Group instance may be bound to several
+attributes (each binding is an independent copy). Only cyclic group
+trees raise `ArgclassError`.
 
 ### Subcommands
 

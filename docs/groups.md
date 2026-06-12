@@ -386,12 +386,14 @@ assert parser.database.port == 5432
 Rejected forms raise `ArgumentDefinitionError` immediately when the
 parser class is defined, with a hint suggesting the correct form.
 
-### Reusing a group instance is an error
+### Reusing a group instance
 
-Passing the same `Group` instance to two different attributes raises
-`ArgclassError`, because that group's parsed state would otherwise be
-shared between locations. Instantiate a separate group per attribute,
-or subclass `Group` to define a dedicated type:
+Group instances in a class body are prototypes — every parser
+instance works on its own copies, so the same `Group` instance may be
+bound to several attributes and each binding keeps independent parsed
+state. Separate instances per attribute remain the clearest style
+(and are required when the attributes need different `title`/`prefix`
+options):
 
 <!--- name: test_groups_nested_separate_instances --->
 ```python
