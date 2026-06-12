@@ -537,9 +537,18 @@ def EnumArgument(
     Returns:
         TypedArgument instance.
     """
+    # Map accepted spellings to members explicitly instead of relying
+    # on ``str.upper()`` round-trips, which break for enums whose
+    # member names are not fully uppercase (``Fast`` -> ``FAST`` ->
+    # KeyError). ``__members__`` includes aliases (e.g. ``WARN`` for
+    # ``WARNING``) so they keep working as inputs; ``choices`` lists
+    # canonical names only.
+    members = enum_class.__members__
     if lowercase:
+        name_map = {n.lower(): m for n, m in members.items()}
         choices = tuple(e.name.lower() for e in enum_class)
     else:
+        name_map = dict(members)
         choices = tuple(e.name for e in enum_class)
 
     if default is not None:
@@ -547,17 +556,17 @@ def EnumArgument(
             pass  # Valid enum member
         elif isinstance(default, str):
             # Validate string is a valid enum member name
-            check_name = default.upper() if lowercase else default
-            valid_names = tuple(e.name for e in enum_class)
-            if check_name not in valid_names:
+            member = members.get(default)
+            if member is None and lowercase:
+                member = name_map.get(default.lower())
+            if member is None:
                 raise EnumValueError(
                     f"default {default!r} is not a valid {enum_class.__name__} "
                     f"member",
                     enum_class=enum_class,
-                    valid_values=valid_names,
+                    valid_values=tuple(e.name for e in enum_class),
                 )
-            # Convert string default to enum member
-            default = enum_class[check_name]
+            default = member
         else:
             raise EnumValueError(
                 f"default must be {enum_class.__name__} member or string, "
@@ -574,9 +583,12 @@ def EnumArgument(
         # Handle existing enum members
         if isinstance(x, enum_class):
             return x.value if use_value else x
-        # Convert string to enum
-        name = x.upper() if lowercase else x
-        member = enum_class[name]
+        # Convert string to enum member via the explicit name map
+        member = name_map.get(x.lower() if lowercase else x)
+        if member is None:
+            # Same failure mode as enum_class[x]; parse_args wraps
+            # converter errors into TypeConversionError.
+            raise KeyError(x)
         return member.value if use_value else member
 
     return TypedArgument(
