@@ -1,5 +1,6 @@
 """Store metaclass and argument classes for argclass."""
 
+import builtins
 import collections
 from argparse import Action
 from pathlib import Path
@@ -145,7 +146,9 @@ class ArgumentBase(Store):
 class TypedArgument(ArgumentBase):
     """Argument with type information."""
 
-    action: Actions | type[Action] = Actions.default()
+    # ``builtins.type`` because the ``type`` field below shadows the
+    # builtin in this class's annotation scope (matters on 3.14/PEP 649).
+    action: Actions | builtins.type[Action] = Actions.default()
     aliases: Iterable[str] = frozenset()
     choices: Iterable[str] | None = None
     const: Any | None = None
@@ -182,19 +185,19 @@ class ConfigArgument(TypedArgument):
     """Argument for configuration file loading."""
 
     search_paths: Iterable[Path | str] | None = None
-    action: type[ConfigAction]
+    action: builtins.type[ConfigAction]
 
 
 class INIConfig(ConfigArgument):
     """Parse INI file and set results as a value."""
 
-    action: type[ConfigAction] = INIConfigAction
+    action: builtins.type[ConfigAction] = INIConfigAction
 
 
 class JSONConfig(ConfigArgument):
     """Parse JSON file and set results as a value."""
 
-    action: type[ConfigAction] = JSONConfigAction
+    action: builtins.type[ConfigAction] = JSONConfigAction
 
 
 class TOMLConfig(ConfigArgument):
@@ -203,7 +206,7 @@ class TOMLConfig(ConfigArgument):
     Uses stdlib tomllib (Python 3.11+) or tomli package as fallback.
     """
 
-    action: type[ConfigAction] = TOMLConfigAction
+    action: builtins.type[ConfigAction] = TOMLConfigAction
 
 
 class AbstractGroup:

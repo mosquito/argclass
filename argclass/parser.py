@@ -34,6 +34,7 @@ from .utils import (
     _unwrap_container_type,
     coerce_env_default,
     deep_getattr,
+    own_annotation_keys,
     parse_bool,
     resolve_annotations,
     unwrap_literal,
@@ -110,7 +111,7 @@ class Meta(ABCMeta):
         # Now get annotations from the created class
         annotations = resolve_annotations(cls)
         # Annotations defined directly on this class (not inherited).
-        own_annotations = cls.__dict__.get("__annotations__", {})
+        own_annotations = own_annotation_keys(cls)
 
         arguments = {}
         argument_groups = {}

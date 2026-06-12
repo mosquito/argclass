@@ -119,6 +119,28 @@ def resolve_annotations(cls: type) -> dict[str, Any]:
         )
 
 
+def own_annotation_keys(cls: type) -> frozenset[str]:
+    """Names annotated directly on ``cls`` (not inherited from bases).
+
+    On Python 3.14+ (PEP 649) ``cls.__dict__['__annotations__']`` may be
+    absent because annotations are evaluated lazily, so fall back to
+    ``annotationlib`` in FORWARDREF format — only the keys are needed, so
+    unresolved forward references must not raise.
+    """
+    ann = cls.__dict__.get("__annotations__")
+    if ann is not None:
+        return frozenset(ann)
+    try:
+        import annotationlib  # type: ignore[import-not-found]
+    except ImportError:
+        return frozenset()
+    return frozenset(
+        annotationlib.get_annotations(
+            cls, format=annotationlib.Format.FORWARDREF
+        )
+    )
+
+
 def parse_bool(value: str) -> bool:
     """Parse a string to boolean."""
     return value.lower() in TEXT_TRUE_VALUES
