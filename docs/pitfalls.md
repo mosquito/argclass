@@ -449,6 +449,7 @@ type mismatches raise `ConfigurationError`.
 | Malformed INI/JSON/TOML | `ConfigurationError` with file path |
 | Value doesn't match type | `ConfigurationError` with field and section |
 | Missing file | Silently ignored (unless `strict_config=True`) |
+| Missing/malformed `config_argument` file | Always `ConfigurationError` (the user asked for it explicitly) |
 
 <!--- name: test_pitfall_config_ok --->
 ```python

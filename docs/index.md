@@ -35,6 +35,9 @@ and seamless integration with configuration files and environment variables.
 - **Multiple config formats** - Load defaults from INI, JSON, or TOML configuration
   files with automatic type conversion. Each format has built-in support with
   no additional dependencies (TOML requires Python 3.11+ or `tomli` package).
+- **User-supplied config** - `config_argument="--config"` adds a CLI flag so
+  the end user can point at a config file whose values become argument
+  defaults at invocation time.
 - **Environment variables** - Read configuration from environment variables
   with optional prefix support for namespacing.
 - **Secret handling** - Built-in support for sensitive values that are masked

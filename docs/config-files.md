@@ -39,6 +39,58 @@ assert parser.debug is True
 Path(config_path).unlink()
 ```
 
+## User-Supplied Config File (`config_argument`)
+
+`config_files=` is chosen by the developer at construction time. To
+let the **end user** point at a config file, pass
+`config_argument="--config"` — argclass adds the flag and applies the
+file's values as argument defaults via two-pass parsing (the flag is
+resolved first, then the real parser is built with the defaults in
+place, so even `--help` shows them):
+
+<!--- name: test_config_argument --->
+```python
+import argclass
+from pathlib import Path
+from tempfile import NamedTemporaryFile
+
+class Parser(argclass.Parser):
+    host: str = "localhost"
+    port: int = 8080
+
+with NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as f:
+    f.write("[DEFAULT]\nhost = example.com\nport = 9000\n")
+    config_path = f.name
+
+parser = Parser(config_argument="--config")
+parser.parse_args(["--config", config_path, "--port", "1234"])
+
+assert parser.host == "example.com"   # default from the file
+assert parser.port == 1234            # CLI still wins
+
+Path(config_path).unlink()
+```
+
+Details:
+
+- The priority chain extends naturally: declared defaults <
+  `config_files` < `config_argument` file < env vars < CLI args.
+- The file format is the shared `config_parser_class` (INI by
+  default; pass `JSONDefaultsParser` / `TOMLDefaultsParser` for other
+  formats).
+- A required argument is satisfied by a value from the file.
+- Several aliases are accepted: `config_argument=("-c", "--config")`.
+- An explicitly passed path that does not exist or cannot be parsed
+  raises `ConfigurationError` — unlike `config_files`, which is a
+  lenient search list.
+- `parser.loaded_config_files` reports which files were applied, in
+  priority order.
+- The flag is resolved by the parser whose `parse_args()` you call;
+  put it before any subcommand on the command line.
+
+This is different from `argclass.Config()`, which loads a file into
+an attribute as raw data without touching other arguments' defaults.
+
 ## Supported Formats
 
 ::::{grid} 3

@@ -202,8 +202,11 @@ Path(config_path).unlink()
 ```
 
 :::{tip}
-For loading defaults into parser attributes, use `config_files` parameter instead.
-See [Config File Parsers](#config-file-parsers).
+For loading defaults into parser attributes, use the `config_files`
+parameter (developer-chosen paths) or `config_argument="--config"`
+(end-user-chosen path) instead. See
+[Config Files](config-files.md#user-supplied-config-file-config_argument)
+and [Config File Parsers](#config-file-parsers).
 :::
 
 ```{eval-rst}

@@ -76,7 +76,10 @@ class ConfigAction(Action):
         if self._result is None:
             filenames: Sequence[Path] = list(self.search_paths)
             if values:
-                filenames = [Path(values)] + list(filenames)
+                # The explicitly passed file goes LAST: parse() merges
+                # files in order with dict.update(), so later files
+                # win and an explicit --config overrides search_paths.
+                filenames = list(filenames) + [Path(values)]
             filenames = list(filter(lambda x: x.exists(), filenames))
 
             if self.required and not filenames:

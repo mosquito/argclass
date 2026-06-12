@@ -2,7 +2,9 @@
 
 ## What is argclass
 
-Declarative CLI parser for Python over `argparse`. Type hints → CLI args automatically. `str`→string, `bool`→flag, `Optional[T]`→optional, `list[T]`→multi-value, `Literal[...]`→choices. Priority: defaults < config files < env vars < CLI args. Zero deps, stdlib only, Python 3.10-3.14.
+Declarative CLI parser for Python over `argparse`. Type hints → CLI args automatically. `str`→string, `bool`→flag, `Optional[T]`→optional, `list[T]`→multi-value, `Literal[...]`→choices. Priority: defaults < config files < `config_argument` file < env vars < CLI args. Zero deps, stdlib only, Python 3.10-3.14.
+
+`Parser(config_argument="--config")` adds a CLI flag whose file becomes argument defaults at invocation time (two-pass parsing); `config_files=` is the developer-preset equivalent.
 
 ## Commands
 

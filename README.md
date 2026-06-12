@@ -169,6 +169,32 @@ parser = Parser(config_files=[
 ])
 ```
 
+To let the **end user** choose the config file, add
+`config_argument="--config"` — the flag's file becomes argument
+defaults (CLI and env vars still win):
+
+<!--- name: test_config_argument_example --->
+```python
+import argclass
+from pathlib import Path
+from tempfile import NamedTemporaryFile
+
+class Parser(argclass.Parser):
+    host: str = "localhost"
+    port: int = 8080
+
+with NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as f:
+    f.write("[DEFAULT]\nhost = example.com\nport = 9000\n")
+    config_path = f.name
+
+parser = Parser(config_argument="--config")
+parser.parse_args(["--config", config_path, "--port", "1234"])
+assert parser.host == "example.com"   # default from the file
+assert parser.port == 1234            # CLI still wins
+
+Path(config_path).unlink()
+```
+
 ### Environment Variables
 
 <!--- name: test_env_example --->

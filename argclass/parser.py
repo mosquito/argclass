@@ -2,6 +2,7 @@
 
 import copy
 import os
+import sys
 import weakref
 from abc import ABCMeta
 from argparse import Action, ArgumentParser
@@ -26,6 +27,7 @@ from .exceptions import (
     ArgclassError,
     ArgumentDefinitionError,
     ComplexTypeError,
+    ConfigurationError,
     TypeConversionError,
 )
 from .secret import SecretString
@@ -618,6 +620,22 @@ def _clone_group_tree(
 ParserType = TypeVar("ParserType", bound="Parser")
 
 
+class PreScanError(Exception):
+    """Raised instead of SystemExit by the config pre-scan parser."""
+
+
+class PreScanParser(ArgumentParser):
+    """ArgumentParser that neither prints to stderr nor exits.
+
+    Used for the lightweight first pass that only extracts the
+    ``config_argument`` value from argv; any syntax problem is left
+    for the real parser to report with the full usage text.
+    """
+
+    def error(self, message: str) -> Any:  # type: ignore[override]
+        raise PreScanError(message)
+
+
 # Out-of-band back-references: argparse_parser -> argclass Parser.
 # Lets custom actions (e.g. ``GenerateConfigAction``) recover the
 # argclass Parser without mutating any argparse object. Auto-cleans
@@ -749,11 +767,61 @@ class Parser(AbstractParser, Base):
         auto_env_var_prefix: str | None = None,
         strict_config: bool = False,
         config_parser_class: type[AbstractDefaultsParser] = INIDefaultsParser,
+        config_argument: str | Iterable[str] | None = None,
         **kwargs: Any,
     ):
+        """
+        Args:
+            config_files: Paths the DEVELOPER presets; existing files
+                are read at construction time and their values become
+                argument defaults (later files override earlier ones).
+            auto_env_var_prefix: Derive an environment variable name
+                for every argument (``PREFIX_ARG_NAME``); env values
+                override config-file defaults.
+            strict_config: Raise on malformed ``config_files`` instead
+                of skipping them.
+            config_parser_class: Format for both ``config_files`` and
+                ``config_argument`` (INI by default; pass
+                ``JSONDefaultsParser`` / ``TOMLDefaultsParser`` or a
+                custom ``AbstractDefaultsParser`` subclass).
+            config_argument: CLI flag (or several aliases, e.g.
+                ``("-c", "--config")``) that lets the END USER point
+                at a config file whose values become argument
+                defaults. Resolved before the main parse, so
+                ``--help`` reflects the file and required arguments
+                are satisfied by it. Priority: declared defaults <
+                ``config_files`` < ``config_argument`` file < env
+                vars < CLI args. An explicitly passed path that is
+                missing or unparsable raises ``ConfigurationError``.
+            kwargs: Passed through to ``argparse.ArgumentParser``
+                (e.g. ``prog``, ``description``, ``epilog``).
+        """
         super().__init__()
         self.current_subparsers: tuple[AbstractParser, ...] = ()
         self._config_files = config_files
+
+        # ``config_argument`` adds a CLI flag (e.g. "--config") that
+        # lets the END USER point at a config file whose values become
+        # argument defaults — same effect as ``config_files``, but the
+        # path is chosen at invocation time. Same format/parser class.
+        if config_argument is None:
+            self._config_argument: tuple[str, ...] = ()
+        elif isinstance(config_argument, str):
+            self._config_argument = (config_argument,)
+        else:
+            self._config_argument = tuple(config_argument)
+        for alias in self._config_argument:
+            if not alias.startswith("-"):
+                raise ArgumentDefinitionError(
+                    f"config_argument aliases must be optional flags "
+                    f"(start with '-'), got {alias!r}",
+                    aliases=self._config_argument,
+                    hint='Use config_argument="--config" or a tuple '
+                    'of flags like ("-c", "--config").',
+                )
+        self._config_parser_class = config_parser_class
+        self._runtime_config_parsers: list[AbstractDefaultsParser] = []
+        self._user_config_files: tuple[Path, ...] = ()
 
         # Parse config files using the specified parser class
         self._config_parser = config_parser_class(
@@ -828,6 +896,82 @@ class Parser(AbstractParser, Base):
             return None
         return self.current_subparsers[0]
 
+    @property
+    def loaded_config_files(self) -> tuple[Path, ...]:
+        """Configuration files whose values were applied as defaults:
+        constructor ``config_files`` first, then the file passed via
+        ``config_argument`` (highest priority last)."""
+        return tuple(self._config_parser.loaded_files) + self._user_config_files
+
+    def _scan_config_argument(self, argv: list[str]) -> str | None:
+        """First pass over argv: extract only the config flag value.
+
+        Defaults must be known before the real parser is built, but
+        the config path is itself a CLI argument — the classic
+        chicken-and-egg of argparse. A throwaway parser that knows
+        only the config flag resolves it.
+        """
+        prescan = PreScanParser(add_help=False)
+        prescan.add_argument(*self._config_argument, dest="path", default=None)
+        try:
+            namespace, _ = prescan.parse_known_args(argv)
+        except PreScanError:
+            # Malformed usage (e.g. the flag without a value); the
+            # real parser will report it with the proper usage text.
+            return None
+        return namespace.path
+
+    def _load_config_argument(
+        self, argv: list[str]
+    ) -> list[AbstractDefaultsParser]:
+        if not self._config_argument:
+            return []
+        self._user_config_files = ()
+        path = self._scan_config_argument(argv)
+        if path is None:
+            return []
+        file = Path(path).expanduser()
+        # The user asked for this file explicitly, so problems are
+        # loud errors — unlike constructor ``config_files``, which
+        # are a search list where absent files are normal.
+        runtime_parser = self._config_parser_class([file], strict=True)
+        try:
+            runtime_parser.parse()
+        except ConfigurationError:
+            raise
+        except Exception as e:
+            raise ConfigurationError(
+                f"failed to parse configuration file: {e}",
+                file_path=str(file),
+            ) from e
+        if not runtime_parser.loaded_files:
+            raise ConfigurationError(
+                "configuration file does not exist or is not readable",
+                file_path=str(file),
+                hint="Check the path passed via "
+                f"{'/'.join(self._config_argument)}.",
+            )
+        self._user_config_files = runtime_parser.loaded_files
+        return [runtime_parser]
+
+    def _get_config_default(
+        self,
+        name: str,
+        kind: ValueKind,
+        section: str | None = None,
+    ) -> Any:
+        """Look up a config-provided default for ``name``.
+
+        The file passed via ``config_argument`` (when present) wins
+        over the constructor ``config_files``; env vars and CLI args
+        still override both later in the chain.
+        """
+        for runtime_parser in self._runtime_config_parsers:
+            value = runtime_parser.get_value(name, kind, section=section)
+            if value is not None:
+                return value
+        return self._config_parser.get_value(name, kind, section=section)
+
     def _make_parser(
         self,
         parser: ArgumentParser | None = None,
@@ -840,6 +984,15 @@ class Parser(AbstractParser, Base):
             )
 
         _argclass_back_refs[parser] = self
+
+        if self._config_argument:
+            parser.add_argument(
+                *self._config_argument,
+                default=None,
+                metavar="FILE",
+                help="Read default values for the other arguments "
+                "from this configuration file",
+            )
 
         destinations: DestinationsType = defaultdict(set)
         self._fill_arguments(destinations, parser)
@@ -893,7 +1046,7 @@ class Parser(AbstractParser, Base):
 
             # Get default from config with type-aware loading
             kind = self._get_value_kind(argument)
-            config_default = self._config_parser.get_value(name, kind)
+            config_default = self._get_config_default(name, kind)
 
             # Apply type converter to config values
             if config_default is not None and argument.type is not None:
@@ -992,7 +1145,7 @@ class Parser(AbstractParser, Base):
 
             # Get default from config with type-aware loading
             kind = self._get_value_kind(argument)
-            config_default = self._config_parser.get_value(
+            config_default = self._get_config_default(
                 name,
                 kind,
                 section=section,
@@ -1099,8 +1252,20 @@ class Parser(AbstractParser, Base):
         args: list[str] | None = None,
         sanitize_secrets: bool = False,
     ) -> ParserType:
-        parser, destinations = self._make_parser()
-        parsed_ns = parser.parse_args(args=args)
+        argv = list(args) if args is not None else sys.argv[1:]
+        # Two-pass parsing: resolve the ``config_argument`` file first
+        # so its values are already baked in as argument defaults when
+        # the real parser is built (this also makes ``--help`` show
+        # the file-provided defaults). The runtime layer lives only
+        # for the duration of this parse.
+        try:
+            self._runtime_config_parsers = self._load_config_argument(
+                argv,
+            )
+            parser, destinations = self._make_parser()
+            parsed_ns = parser.parse_args(args=argv)
+        finally:
+            self._runtime_config_parsers = []
 
         # Get the chain of selected subparsers from the namespace
         selected_subparsers: tuple[AbstractParser, ...] = getattr(
