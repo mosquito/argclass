@@ -5,7 +5,7 @@ import sys
 import textwrap
 from enum import Enum
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal
 
 import argclass
 
@@ -127,7 +127,7 @@ class BasicDemo(argclass.Parser):
         help="A float argument",
     )
     debug: bool = False
-    nickname: Optional[str] = argclass.Argument(
+    nickname: str | None = argclass.Argument(
         default=None,
         help="Optional string (not required)",
     )
@@ -494,22 +494,22 @@ class GenerateConfigDemo(argclass.Parser):
     # Four flags, one per format. Attribute names auto-derive the
     # CLI flag (generate_ini -> --generate-ini, etc.). The Action
     # exits after writing, so only one can be invoked per run.
-    generate_ini = argclass.Argument(
+    generate_ini: str = argclass.Argument(
         action=argclass.GenerateConfigAction,
         generator=argclass.INIConfigGenerator,
         help="Write INI to FILE (use - for stdout)",
     )
-    generate_toml = argclass.Argument(
+    generate_toml: str = argclass.Argument(
         action=argclass.GenerateConfigAction,
         generator=argclass.TOMLConfigGenerator,
         help="Write TOML to FILE (use - for stdout)",
     )
-    generate_json = argclass.Argument(
+    generate_json: str = argclass.Argument(
         action=argclass.GenerateConfigAction,
         generator=argclass.JSONConfigGenerator,
         help="Write JSON to FILE (use - for stdout)",
     )
-    generate_env = argclass.Argument(
+    generate_env: str = argclass.Argument(
         action=argclass.GenerateConfigAction,
         generator=argclass.EnvConfigGenerator,
         help="Write .env to FILE (use - for stdout)",

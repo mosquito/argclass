@@ -6,15 +6,8 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import (
     Any,
-    Dict,
-    Iterable,
-    Iterator,
-    Mapping,
-    Optional,
-    Tuple,
-    Type,
-    Union,
 )
+from collections.abc import Iterable, Iterator, Mapping
 
 from .actions import (
     ConfigAction,
@@ -32,8 +25,8 @@ class StoreMeta(type):
     def __new__(
         mcs,
         name: str,
-        bases: Tuple[Type["StoreMeta"], ...],
-        attrs: Dict[str, Any],
+        bases: tuple[type["StoreMeta"], ...],
+        attrs: dict[str, Any],
     ) -> "StoreMeta":
         # Create the class first to ensure annotations are available
         # Python 3.14+ (PEP 649) defers annotation evaluation
@@ -58,12 +51,12 @@ class Store(metaclass=StoreMeta):
     """Base class for typed storage with field validation."""
 
     _default_value = object()
-    _fields: Tuple[str, ...]
+    _fields: tuple[str, ...]
 
     def __new__(cls, **kwargs: Any) -> "Store":
         obj = super().__new__(cls)
 
-        type_map: Dict[str, Tuple[Type, Any]] = {}
+        type_map: dict[str, tuple[type, Any]] = {}
         # Use cls.__annotations__ instead of obj.__annotations__ to avoid
         # triggering __getattr__ before _values is initialized (Python 3.14+)
         for key, value in cls.__annotations__.items():
@@ -84,7 +77,7 @@ class Store(metaclass=StoreMeta):
             kwargs[key] = value
         return self.__class__(**kwargs)
 
-    def as_dict(self) -> Dict[str, Any]:
+    def as_dict(self) -> dict[str, Any]:
         # noinspection PyProtectedMember
         return {field: getattr(self, field) for field in self._fields}
 
@@ -117,7 +110,7 @@ class ArgumentBase(Store):
                 return False
         return True
 
-    def get_kwargs(self) -> Dict[str, Any]:
+    def get_kwargs(self) -> dict[str, Any]:
         nargs = self.nargs
         if isinstance(nargs, Nargs):
             nargs = nargs.value
@@ -152,19 +145,19 @@ class ArgumentBase(Store):
 class TypedArgument(ArgumentBase):
     """Argument with type information."""
 
-    action: Union[Actions, Type[Action]] = Actions.default()
+    action: Actions | type[Action] = Actions.default()
     aliases: Iterable[str] = frozenset()
-    choices: Optional[Iterable[str]] = None
-    const: Optional[Any] = None
-    converter: Optional[ConverterType] = None
-    default: Optional[Any] = None
+    choices: Iterable[str] | None = None
+    const: Any | None = None
+    converter: ConverterType | None = None
+    default: Any | None = None
     secret: bool = False
-    env_var: Optional[str] = None
+    env_var: str | None = None
     extra_kwargs: Mapping[str, Any] = MappingProxyType({})
-    help: Optional[str] = None
-    metavar: Optional[str] = None
-    nargs: Optional[Union[int, Nargs]] = None
-    required: Optional[bool] = None
+    help: str | None = None
+    metavar: str | None = None
+    nargs: int | Nargs | None = None
+    required: bool | None = None
     type: Any = None
 
     @property
@@ -188,20 +181,20 @@ class TypedArgument(ArgumentBase):
 class ConfigArgument(TypedArgument):
     """Argument for configuration file loading."""
 
-    search_paths: Optional[Iterable[Union[Path, str]]] = None
-    action: Type[ConfigAction]
+    search_paths: Iterable[Path | str] | None = None
+    action: type[ConfigAction]
 
 
 class INIConfig(ConfigArgument):
     """Parse INI file and set results as a value."""
 
-    action: Type[ConfigAction] = INIConfigAction
+    action: type[ConfigAction] = INIConfigAction
 
 
 class JSONConfig(ConfigArgument):
     """Parse JSON file and set results as a value."""
 
-    action: Type[ConfigAction] = JSONConfigAction
+    action: type[ConfigAction] = JSONConfigAction
 
 
 class TOMLConfig(ConfigArgument):
@@ -210,7 +203,7 @@ class TOMLConfig(ConfigArgument):
     Uses stdlib tomllib (Python 3.11+) or tomli package as fallback.
     """
 
-    action: Type[ConfigAction] = TOMLConfigAction
+    action: type[ConfigAction] = TOMLConfigAction
 
 
 class AbstractGroup:
@@ -222,8 +215,8 @@ class AbstractGroup:
 class AbstractParser:
     """Abstract base for parsers."""
 
-    __parent__: Union["AbstractParser", None] = None
-    current_subparsers = ()  # type: Tuple["AbstractParser", ...]
+    __parent__: "AbstractParser | None" = None
+    current_subparsers: tuple["AbstractParser", ...] = ()
 
     def _get_chain(self) -> Iterator["AbstractParser"]:
         yield self

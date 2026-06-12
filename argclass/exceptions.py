@@ -1,6 +1,6 @@
 """Exception classes for argclass with rich context for debugging."""
 
-from typing import Any, Optional, Tuple
+from typing import Any
 
 
 class ArgclassError(Exception):
@@ -31,8 +31,8 @@ class ArgclassError(Exception):
         self,
         message: str,
         *,
-        field_name: Optional[str] = None,
-        hint: Optional[str] = None,
+        field_name: str | None = None,
+        hint: str | None = None,
     ):
         self.message = message
         self.field_name = field_name
@@ -74,10 +74,10 @@ class ArgumentDefinitionError(ArgclassError):
         self,
         message: str,
         *,
-        field_name: Optional[str] = None,
-        aliases: Optional[Tuple[str, ...]] = None,
-        kwargs: Optional[dict] = None,
-        hint: Optional[str] = None,
+        field_name: str | None = None,
+        aliases: tuple[str, ...] | None = None,
+        kwargs: dict | None = None,
+        hint: str | None = None,
     ):
         self.aliases = aliases
         self.kwargs = kwargs
@@ -128,10 +128,10 @@ class TypeConversionError(ArgclassError):
         self,
         message: str,
         *,
-        field_name: Optional[str] = None,
+        field_name: str | None = None,
         value: Any = None,
-        target_type: Optional[type] = None,
-        hint: Optional[str] = None,
+        target_type: type | None = None,
+        hint: str | None = None,
     ):
         self.value = value
         self.target_type = target_type
@@ -181,10 +181,10 @@ class ConfigurationError(ArgclassError):
         self,
         message: str,
         *,
-        field_name: Optional[str] = None,
-        file_path: Optional[str] = None,
-        section: Optional[str] = None,
-        hint: Optional[str] = None,
+        field_name: str | None = None,
+        file_path: str | None = None,
+        section: str | None = None,
+        hint: str | None = None,
     ):
         self.file_path = file_path
         self.section = section
@@ -236,10 +236,10 @@ class EnumValueError(ArgclassError):
         self,
         message: str,
         *,
-        field_name: Optional[str] = None,
-        enum_class: Optional[type] = None,
-        valid_values: Optional[Tuple[str, ...]] = None,
-        hint: Optional[str] = None,
+        field_name: str | None = None,
+        enum_class: type | None = None,
+        valid_values: tuple[str, ...] | None = None,
+        hint: str | None = None,
     ):
         self.enum_class = enum_class
         self.valid_values = valid_values
@@ -281,9 +281,9 @@ class ComplexTypeError(ArgclassError):
         self,
         message: str,
         *,
-        field_name: Optional[str] = None,
+        field_name: str | None = None,
         typespec: Any = None,
-        hint: Optional[str] = None,
+        hint: str | None = None,
     ):
         self.typespec = typespec
         super().__init__(message, field_name=field_name, hint=hint)

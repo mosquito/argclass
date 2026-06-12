@@ -69,11 +69,15 @@ docs = [
 line-length = 80
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "C90"]
+select = ["E", "F", "W", "C90", "UP"]
 ignore = ["C901"]
 
 [tool.ruff.lint.per-file-ignores]
 "docs/conf.py" = ["E501"]
+# Tests intentionally exercise legacy typing forms (typing.Union,
+# Optional, List, ...) to verify backward compatibility alongside the
+# PEP 604/585 forms, so they are exempt from pyupgrade modernization.
+"tests/**" = ["UP"]
 
 [tool.uv]
 default-groups = [
@@ -124,3 +128,8 @@ files = ["argclass", "tests"]
 module = "tests.*"
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
+# Argument()'s fallback overload returns a bare TypeVar so annotated
+# attributes infer their declared type (instead of Any) under strict
+# checkers. Tests assign it to plain locals without annotations, where
+# the TypeVar can't be solved; that's harmless here.
+disable_error_code = ["var-annotated"]

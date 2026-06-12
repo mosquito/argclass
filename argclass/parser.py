@@ -10,19 +10,10 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import (
     Any,
-    Dict,
-    Iterable,
-    List,
-    Mapping,
-    MutableMapping,
     NamedTuple,
-    Optional,
-    Set,
-    Tuple,
-    Type,
     TypeVar,
-    Union,
 )
+from collections.abc import Iterable, Mapping, MutableMapping
 
 from .actions import ConfigAction
 from .defaults import (
@@ -51,11 +42,11 @@ from .utils import (
 
 
 def _make_action_true_argument(
-    kind: Type,
+    kind: type,
     default: Any = None,
 ) -> TypedArgument:
     """Create a TypedArgument for boolean types."""
-    kw: Dict[str, Any] = {"type": kind}
+    kw: dict[str, Any] = {"type": kind}
     if kind is bool:
         if default is False:
             kw["action"] = Actions.STORE_TRUE
@@ -72,9 +63,31 @@ def _make_action_true_argument(
     return TypedArgument(**kw)
 
 
-def _type_is_bool(kind: Type) -> bool:
+def _type_is_bool(kind: type) -> bool:
     """Check if a type is bool or Optional[bool]."""
-    return kind is bool or kind == Optional[bool]
+    return kind is bool or kind == bool | None
+
+
+# Attribute names argclass uses for internal parser state. They are
+# defined on the base classes and must not be shadowed by user-defined
+# arguments, groups, or subparsers.
+RESERVED_ATTRIBUTES = frozenset(
+    {
+        "current_subparsers",
+        "current_subparser",
+        "__parent__",
+    }
+)
+
+
+def reserved_name_error(name: str) -> ArgumentDefinitionError:
+    return ArgumentDefinitionError(
+        f"{name!r} is a reserved argclass attribute and cannot be used "
+        f"as an argument, group, or subparser name.",
+        field_name=name,
+        hint="Rename it; argclass stores internal parser state under "
+        "this name.",
+    )
 
 
 class Meta(ABCMeta):
@@ -83,8 +96,8 @@ class Meta(ABCMeta):
     def __new__(
         mcs,
         name: str,
-        bases: Tuple[Type["Meta"], ...],
-        attrs: Dict[str, Any],
+        bases: tuple[type["Meta"], ...],
+        attrs: dict[str, Any],
     ) -> "Meta":
         # Import here to avoid circular import
         from .factory import EnumArgument
@@ -96,11 +109,19 @@ class Meta(ABCMeta):
 
         # Now get annotations from the created class
         annotations = resolve_annotations(cls)
+        # Annotations defined directly on this class (not inherited).
+        own_annotations = cls.__dict__.get("__annotations__", {})
 
         arguments = {}
         argument_groups = {}
         subparsers = {}
         for key, kind in annotations.items():
+            if key in RESERVED_ATTRIBUTES:
+                # Inherited internal attributes are skipped; declaring one
+                # in this class's own body shadows internal state -> error.
+                if key in own_annotations:
+                    raise reserved_name_error(key)
+                continue
             if key.startswith("_"):
                 continue
 
@@ -111,7 +132,7 @@ class Meta(ABCMeta):
                 argument = None
                 has_explicit_default = False
 
-            annotated_group_cls: Optional[Type[AbstractGroup]] = None
+            annotated_group_cls: type[AbstractGroup] | None = None
             if isinstance(kind, type) and issubclass(kind, AbstractGroup):
                 annotated_group_cls = kind
             else:
@@ -245,7 +266,7 @@ class Meta(ABCMeta):
                         container_type, element_type = ctr_info
                         # Use nargs="+" for required, "*" for optional
                         if is_required:
-                            nargs: Union[str, Nargs] = Nargs.ONE_OR_MORE
+                            nargs: str | Nargs = Nargs.ONE_OR_MORE
                         else:
                             nargs = Nargs.ZERO_OR_MORE
                         # Use converter for non-list containers
@@ -322,6 +343,15 @@ class Meta(ABCMeta):
                 argument_groups[key] = argument
 
         for key, value in attrs.items():
+            if key in RESERVED_ATTRIBUTES:
+                # A reserved name assigned an argument/group/subparser
+                # value shadows internal state; internal properties and
+                # plain defaults are left untouched.
+                if isinstance(
+                    value, (TypedArgument, AbstractGroup, AbstractParser)
+                ):
+                    raise reserved_name_error(key)
+                continue
             if key.startswith("_"):
                 continue
 
@@ -374,11 +404,11 @@ class Destination(NamedTuple):
 
     target: Base
     attribute: str
-    argument: Optional[TypedArgument]
-    action: Optional[Action]
+    argument: TypedArgument | None
+    action: Action | None
 
 
-DestinationsType = MutableMapping[str, Set[Destination]]
+DestinationsType = MutableMapping[str, set[Destination]]
 
 
 class Group(AbstractGroup, Base):
@@ -386,10 +416,10 @@ class Group(AbstractGroup, Base):
 
     def __init__(
         self,
-        title: Optional[str] = None,
-        description: Optional[str] = None,
-        prefix: Optional[str] = None,
-        defaults: Optional[Mapping[str, Any]] = None,
+        title: str | None = None,
+        description: str | None = None,
+        prefix: str | None = None,
+        defaults: Mapping[str, Any] | None = None,
     ):
         self._title = title
         self._description = description
@@ -412,7 +442,7 @@ _argclass_back_refs: "_BackRefMap[ArgumentParser, AbstractParser]" = (
 
 def get_argclass_parser(
     argparse_parser: ArgumentParser,
-) -> Optional["Parser"]:
+) -> "Parser | None":
     """Return the :class:`argclass.Parser` that built
     ``argparse_parser``, or ``None`` if it wasn't built through
     argclass (e.g. a bare ``argparse.ArgumentParser``).
@@ -447,7 +477,7 @@ class Parser(AbstractParser, Base):
         argument: TypedArgument,
         dest: str,
         *aliases: str,
-    ) -> Tuple[str, Action]:
+    ) -> tuple[str, Action]:
         kwargs = argument.get_kwargs()
 
         if not argument.is_positional:
@@ -518,7 +548,7 @@ class Parser(AbstractParser, Base):
     def get_cli_name(name: str) -> str:
         return name.replace("_", "-")
 
-    def get_env_var(self, name: str, argument: TypedArgument) -> Optional[str]:
+    def get_env_var(self, name: str, argument: TypedArgument) -> str | None:
         if argument.env_var is not None:
             return argument.env_var
         if self._auto_env_var_prefix is not None:
@@ -527,14 +557,14 @@ class Parser(AbstractParser, Base):
 
     def __init__(
         self,
-        config_files: Iterable[Union[str, Path]] = (),
-        auto_env_var_prefix: Optional[str] = None,
+        config_files: Iterable[str | Path] = (),
+        auto_env_var_prefix: str | None = None,
         strict_config: bool = False,
-        config_parser_class: Type[AbstractDefaultsParser] = INIDefaultsParser,
+        config_parser_class: type[AbstractDefaultsParser] = INIDefaultsParser,
         **kwargs: Any,
     ):
         super().__init__()
-        self.current_subparsers: Tuple[AbstractParser, ...] = ()
+        self.current_subparsers: tuple[AbstractParser, ...] = ()
         self._config_files = config_files
 
         # Parse config files using the specified parser class
@@ -564,20 +594,20 @@ class Parser(AbstractParser, Base):
 
         self._auto_env_var_prefix = auto_env_var_prefix
         self._parser_kwargs = kwargs
-        self._used_env_vars: Set[str] = set()
-        self._used_secret_env_vars: Set[str] = set()
+        self._used_env_vars: set[str] = set()
+        self._used_secret_env_vars: set[str] = set()
 
     @property
-    def current_subparser(self) -> Optional["AbstractParser"]:
+    def current_subparser(self) -> "AbstractParser | None":
         if not self.current_subparsers:
             return None
         return self.current_subparsers[0]
 
     def _make_parser(
         self,
-        parser: Optional[ArgumentParser] = None,
-        parent_chain: Tuple["AbstractParser", ...] = (),
-    ) -> Tuple[ArgumentParser, DestinationsType]:
+        parser: ArgumentParser | None = None,
+        parent_chain: tuple["AbstractParser", ...] = (),
+    ) -> tuple[ArgumentParser, DestinationsType]:
         if parser is None:
             parser = ArgumentParser(
                 epilog=self._epilog,
@@ -687,10 +717,10 @@ class Parser(AbstractParser, Base):
         destinations: DestinationsType,
         parser: ArgumentParser,
     ) -> None:
-        visited: Set[int] = set()
+        visited: set[int] = set()
         for group_name, group in self.__argument_groups__.items():
             cli_seg = group._prefix if group._prefix is not None else group_name
-            cli_path: Tuple[str, ...] = (cli_seg,) if cli_seg else ()
+            cli_path: tuple[str, ...] = (cli_seg,) if cli_seg else ()
             self._fill_group(
                 group=group,
                 parser=parser,
@@ -704,10 +734,10 @@ class Parser(AbstractParser, Base):
         self,
         group: "Group",
         parser: ArgumentParser,
-        attr_path: Tuple[str, ...],
-        cli_path: Tuple[str, ...],
+        attr_path: tuple[str, ...],
+        cli_path: tuple[str, ...],
         destinations: DestinationsType,
-        visited: Set[int],
+        visited: set[int],
     ) -> None:
         if id(group) in visited:
             raise ArgclassError(
@@ -813,7 +843,7 @@ class Parser(AbstractParser, Base):
         self,
         destinations: DestinationsType,
         parser: ArgumentParser,
-        parent_chain: Tuple["AbstractParser", ...] = (),
+        parent_chain: tuple["AbstractParser", ...] = (),
     ) -> None:
         subparsers = parser.add_subparsers()
         subparser: AbstractParser
@@ -845,14 +875,14 @@ class Parser(AbstractParser, Base):
 
     def parse_args(
         self: ParserType,
-        args: Optional[List[str]] = None,
+        args: list[str] | None = None,
         sanitize_secrets: bool = False,
     ) -> ParserType:
         parser, destinations = self._make_parser()
         parsed_ns = parser.parse_args(args=args)
 
         # Get the chain of selected subparsers from the namespace
-        selected_subparsers: Tuple[AbstractParser, ...] = getattr(
+        selected_subparsers: tuple[AbstractParser, ...] = getattr(
             parsed_ns, "current_subparsers", ()
         )
 

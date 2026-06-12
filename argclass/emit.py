@@ -43,17 +43,10 @@ from enum import Enum
 from pathlib import Path, PurePath
 from typing import (
     Any,
-    Dict,
     IO,
-    Iterable,
-    Iterator,
-    List,
-    Optional,
-    Sequence,
-    Tuple,
-    Union,
     cast,
 )
+from collections.abc import Iterable, Iterator, Sequence
 
 from .parser import get_argclass_parser
 from .secret import SecretString
@@ -101,9 +94,9 @@ def current_value(
     name: str,
     argument: TypedArgument,
     *,
-    namespace: Optional[argparse.Namespace] = None,
-    dest: Optional[str] = None,
-    env_var: Optional[str] = None,
+    namespace: argparse.Namespace | None = None,
+    dest: str | None = None,
+    env_var: str | None = None,
 ) -> Any:
     """Read the current value for ``name`` on a Parser/Group instance.
 
@@ -139,10 +132,10 @@ def current_value(
 
 
 def derive_env_var(
-    auto_prefix: Optional[str],
+    auto_prefix: str | None,
     dest: str,
     argument: TypedArgument,
-) -> Optional[str]:
+) -> str | None:
     """Compute the env-var name argclass would read for ``dest``.
 
     Mirrors :meth:`argclass.Parser.get_env_var`. Returns ``None`` when
@@ -244,17 +237,17 @@ class ConfigField:
         Help text declared on the argument, or ``None``.
     """
 
-    attr_path: Tuple[str, ...]
-    cli_path: Tuple[str, ...]
+    attr_path: tuple[str, ...]
+    cli_path: tuple[str, ...]
     dest: str
     argument: TypedArgument
     target: Any
     value: Any
-    env_var: Optional[str]
-    help: Optional[str]
+    env_var: str | None
+    help: str | None
 
     @property
-    def section_path(self) -> Tuple[str, ...]:
+    def section_path(self) -> tuple[str, ...]:
         """Path to the enclosing section, derived from ``attr_path``."""
         return self.attr_path[:-1]
 
@@ -267,7 +260,7 @@ class ConfigField:
 def iter_config_fields(
     parser: AbstractParser,
     *,
-    namespace: Optional[argparse.Namespace] = None,
+    namespace: argparse.Namespace | None = None,
     mask_secrets: bool = False,
 ) -> Iterator[ConfigField]:
     """Walk ``parser`` and yield one :class:`ConfigField` per leaf.
@@ -301,10 +294,10 @@ def iter_config_fields(
 def iter_subtree_fields(
     target: Any,
     *,
-    attr_path: Tuple[str, ...] = (),
-    cli_path: Tuple[str, ...] = (),
-    auto_prefix: Optional[str] = None,
-    namespace: Optional[argparse.Namespace] = None,
+    attr_path: tuple[str, ...] = (),
+    cli_path: tuple[str, ...] = (),
+    auto_prefix: str | None = None,
+    namespace: argparse.Namespace | None = None,
     mask_secrets: bool = False,
 ) -> Iterator[ConfigField]:
     """Recursive walker used by :func:`iter_config_fields`.
@@ -361,7 +354,7 @@ def fields_to_nested_dict(
     fields: Iterable[ConfigField],
     *,
     skip_none: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Build a nested dict from a stream of :class:`ConfigField`.
 
     Used by :class:`JSONConfigGenerator`. Each section path becomes a
@@ -369,7 +362,7 @@ def fields_to_nested_dict(
     When ``skip_none`` is true, ``None`` values are omitted entirely
     so reloading falls back to the argument's own default.
     """
-    out: Dict[str, Any] = {}
+    out: dict[str, Any] = {}
     for field in fields:
         if skip_none and field.value is None:
             continue
@@ -427,7 +420,7 @@ class ConfigGenerator:
         self,
         parser: AbstractParser,
         *,
-        namespace: Optional[argparse.Namespace] = None,
+        namespace: argparse.Namespace | None = None,
     ) -> str:
         """Walk ``parser`` and return the rendered config as a
         string."""
@@ -445,9 +438,9 @@ class ConfigGenerator:
     def dump(
         self,
         parser: AbstractParser,
-        dest: Union[str, Path, IO[str]],
+        dest: str | Path | IO[str],
         *,
-        namespace: Optional[argparse.Namespace] = None,
+        namespace: argparse.Namespace | None = None,
     ) -> None:
         """Write the rendered config to ``dest``.
 
@@ -468,13 +461,13 @@ class ConfigGenerator:
 
 def group_fields_by_section(
     fields: Iterable[ConfigField],
-) -> "Dict[Tuple[str, ...], List[ConfigField]]":
+) -> "dict[tuple[str, ...], list[ConfigField]]":
     """Group a stream of fields by ``section_path``.
 
     Preserves the original order both for sections and for fields
     within each section.
     """
-    sections: Dict[Tuple[str, ...], List[ConfigField]] = {}
+    sections: dict[tuple[str, ...], list[ConfigField]] = {}
     for field in fields:
         sections.setdefault(field.section_path, []).append(field)
     return sections
@@ -498,7 +491,7 @@ class INIConfigGenerator(ConfigGenerator):
 
     def render(self, fields: Sequence[ConfigField]) -> str:
         sections = group_fields_by_section(fields)
-        lines: List[str] = []
+        lines: list[str] = []
         root_fields = sections.pop((), [])
         if root_fields:
             lines.append("[DEFAULT]")
@@ -512,8 +505,8 @@ class INIConfigGenerator(ConfigGenerator):
 
     def _emit_fields(
         self,
-        fields: List[ConfigField],
-        lines: List[str],
+        fields: list[ConfigField],
+        lines: list[str],
     ) -> None:
         for field in fields:
             if field.value is None:
@@ -571,7 +564,7 @@ class TOMLConfigGenerator(ConfigGenerator):
 
     def render(self, fields: Sequence[ConfigField]) -> str:
         sections = group_fields_by_section(fields)
-        lines: List[str] = []
+        lines: list[str] = []
         root_fields = sections.pop((), [])
         for field in root_fields:
             if field.value is None:
@@ -630,7 +623,7 @@ class EnvConfigGenerator(ConfigGenerator):
     QUOTE_CHARS = frozenset(' \t\n\r"\\#=')
 
     def render(self, fields: Sequence[ConfigField]) -> str:
-        lines: List[str] = []
+        lines: list[str] = []
         for field in fields:
             if field.env_var is None:
                 continue
@@ -679,9 +672,9 @@ class GenerateConfigAction(NonConfigAction):
 
     def __init__(
         self,
-        option_strings: List[str],
+        option_strings: list[str],
         dest: str,
-        generator: Union[type, ConfigGenerator],
+        generator: type | ConfigGenerator,
         **kwargs: Any,
     ):
         kwargs.setdefault("nargs", 1)
@@ -698,7 +691,7 @@ class GenerateConfigAction(NonConfigAction):
         parser: argparse.ArgumentParser,
         namespace: argparse.Namespace,
         values: Any,
-        option_string: Optional[str] = None,
+        option_string: str | None = None,
     ) -> None:
         # Out-of-band back-reference avoids touching argparse_parser.
         argclass_parser = get_argclass_parser(parser)

@@ -190,6 +190,35 @@ assert cli.current_subparsers[0].value == 10
 assert cli() == 10
 ```
 
+## Reserved Attribute Names
+
+argclass stores parser state under a few attribute names. These are
+**reserved** and cannot be used as your own argument, group, or
+subparser names:
+
+| Name | Holds |
+|------|-------|
+| `current_subparsers` | The selected subcommand chain (a tuple) |
+| `current_subparser` | The most specific selected subparser |
+| `__parent__` | Back-reference to the parent parser |
+
+Declaring one of them on a `Parser` or `Group` raises
+`ArgumentDefinitionError` at class-definition time, so the clash is
+caught immediately instead of silently corrupting parser state.
+
+<!--- name: test_subparsers_reserved --->
+```python
+import argclass
+
+try:
+    class CLI(argclass.Parser):
+        current_subparsers: str = "oops"  # reserved name
+except argclass.ArgumentDefinitionError as exc:
+    assert "reserved" in str(exc)
+else:
+    raise AssertionError("expected ArgumentDefinitionError")
+```
+
 ## Shared Arguments with Groups
 
 When multiple subcommands need the same options (like output format
