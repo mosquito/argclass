@@ -251,8 +251,10 @@ disallowed.
 ## Subcommands
 
 When using subcommands, only the selected subcommand's arguments are parsed
-and populated. Other subcommands retain their default values. Don't assume
-all subcommand attributes are populated after parsing.
+and populated. Attributes of subcommands that were **not** selected are not
+populated at all — accessing them raises
+`AttributeError("... was not parsed")`. Don't assume all subcommand
+attributes are available after parsing.
 
 <!--- name: test_pitfall_subparser --->
 ```python
@@ -271,7 +273,12 @@ class CLI(argclass.Parser):
 cli = CLI()
 cli.parse_args(["serve", "--port", "9000"])
 assert cli.serve.port == 9000
-# cli.build.output is still default
+
+# `build` was not selected, so its arguments were never populated:
+try:
+    cli.build.output
+except AttributeError as e:
+    assert "was not parsed" in str(e)
 ```
 
 :::{tip}
@@ -285,6 +292,38 @@ automatically to the selected command.
 for internal parser state — using them as your own argument names raises
 `ArgumentDefinitionError`. See
 [Reserved Attribute Names](subparsers.md#reserved-attribute-names).
+The same applies to names of Parser API methods (`parse_args`,
+`print_help`, `sanitize_env`, `create_parser`, …) and to methods you
+define on your own parser classes: an argument cannot shadow them.
+:::
+
+:::{warning}
+Group and subparser attributes are **class-level singletons**: every
+instance of the same Parser class shares the same Group and subparser
+objects. A second `parse_args()` — whether on the same parser instance
+or on another instance of the same class — overwrites the group and
+subcommand values produced by the first one. When you need independent
+results (e.g. parsing several argv sets side by side), keep each
+result before the next parse, or define separate Parser classes.
+
+<!--- name: test_pitfall_shared_groups --->
+```python
+import argclass
+
+class DB(argclass.Group):
+    host: str = "localhost"
+
+class CLI(argclass.Parser):
+    db = DB()
+
+first = CLI()
+second = CLI()
+assert first.db is second.db  # the same Group object!
+
+first.parse_args(["--db-host", "from-first"])
+second.parse_args(["--db-host", "from-second"])
+assert first.db.host == "from-second"  # overwritten by the later parse
+```
 :::
 
 ---

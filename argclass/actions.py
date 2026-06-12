@@ -70,7 +70,10 @@ class ConfigAction(Action):
         values: str | Any | None,
         option_string: str | None = None,
     ) -> None:
-        if not self._result:
+        # ``None`` is the not-yet-parsed sentinel; an empty dict is a
+        # valid cached result (truthiness would re-parse it and, on a
+        # second invocation, try Path() on the mapping in values).
+        if self._result is None:
             filenames: Sequence[Path] = list(self.search_paths)
             if values:
                 filenames = [Path(values)] + list(filenames)
