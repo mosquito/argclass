@@ -7,7 +7,8 @@ import os
 from abc import ABC, abstractmethod
 from enum import IntEnum
 from pathlib import Path
-from typing import Any, Dict, Iterable, Mapping, Optional, Tuple, Union
+from typing import Any
+from collections.abc import Iterable, Mapping
 
 from .exceptions import ConfigurationError
 from .utils import own_section_items
@@ -57,16 +58,16 @@ class AbstractDefaultsParser(ABC):
 
     def __init__(
         self,
-        paths: Iterable[Union[str, Path]],
+        paths: Iterable[str | Path],
         strict: bool = False,
     ):
         self._paths = list(paths)
         self._strict = strict
-        self._loaded_files: Tuple[Path, ...] = ()
-        self._values: Dict[str, Any] = {}
+        self._loaded_files: tuple[Path, ...] = ()
+        self._values: dict[str, Any] = {}
 
     @property
-    def loaded_files(self) -> Tuple[Path, ...]:
+    def loaded_files(self) -> tuple[Path, ...]:
         """Return tuple of successfully loaded file paths."""
         return self._loaded_files
 
@@ -94,7 +95,7 @@ class AbstractDefaultsParser(ABC):
         self,
         key: str,
         kind: ValueKind = ValueKind.STRING,
-        section: Optional[str] = None,
+        section: str | None = None,
     ) -> Any:
         """Get value with type validation.
 
@@ -189,7 +190,7 @@ class INIDefaultsParser(AbstractDefaultsParser):
         loaded = parser.read(filenames)
         self._loaded_files = tuple(Path(f) for f in loaded)
 
-        result: Dict[str, Any] = dict(
+        result: dict[str, Any] = dict(
             parser.items(parser.default_section, raw=True),
         )
         for section in parser.sections():
@@ -226,7 +227,7 @@ class JSONDefaultsParser(AbstractDefaultsParser):
     """
 
     def parse(self) -> Mapping[str, Any]:
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
         loaded_files = []
 
         for path in self._filter_readable_paths():
@@ -264,7 +265,7 @@ class TOMLDefaultsParser(AbstractDefaultsParser):
                 "or 'tomli' package: pip install tomli"
             )
 
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
         loaded_files = []
 
         for path in self._filter_readable_paths():

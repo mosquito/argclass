@@ -722,9 +722,9 @@ class TestUnionWithExplicitTypeOrConverter:
         """Same behaviour for typing.Union[A, B] form."""
 
         class Parser(argclass.Parser):
-            dns: Union[
-                ipaddress.IPv4Address, ipaddress.IPv6Address
-            ] = argclass.Argument(type=ipaddress.ip_address)
+            dns: Union[ipaddress.IPv4Address, ipaddress.IPv6Address] = (
+                argclass.Argument(type=ipaddress.ip_address)
+            )
 
         parser = Parser()
         parser.parse_args(["--dns", "10.0.0.1"])
@@ -734,9 +734,9 @@ class TestUnionWithExplicitTypeOrConverter:
         """`Optional[A | B] = Argument(type=...)` should also work."""
 
         class Parser(argclass.Parser):
-            dns: Optional[
-                ipaddress.IPv4Address | ipaddress.IPv6Address
-            ] = argclass.Argument(type=ipaddress.ip_address)
+            dns: Optional[ipaddress.IPv4Address | ipaddress.IPv6Address] = (
+                argclass.Argument(type=ipaddress.ip_address)
+            )
 
         parser = Parser()
         parser.parse_args(["--dns", "8.8.8.8"])

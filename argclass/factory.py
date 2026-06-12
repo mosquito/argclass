@@ -5,17 +5,12 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import (
     Any,
-    Callable,
-    Iterable,
-    List,
     Literal,
-    Optional,
-    Type,
     TypeVar,
-    Union,
     cast,
     overload,
 )
+from collections.abc import Callable, Iterable
 
 from argparse import Action
 
@@ -29,6 +24,7 @@ from .types import (
     Nargs,
     NargsType,
 )
+import builtins
 
 T = TypeVar("T")
 
@@ -36,16 +32,16 @@ T = TypeVar("T")
 # noinspection PyShadowingBuiltins
 def ArgumentSingle(
     *aliases: str,
-    type: Type[T],
-    action: Union[Actions, Type[Action]] = Actions.default(),
-    choices: Optional[Iterable[str]] = None,
-    const: Optional[Any] = None,
-    converter: Optional[Callable[[T], T]] = None,
-    default: Optional[T] = None,
-    env_var: Optional[str] = None,
-    help: Optional[str] = None,
-    metavar: Optional[MetavarType] = None,
-    required: Optional[bool] = None,
+    type: type[T],
+    action: Actions | type[Action] = Actions.default(),
+    choices: Iterable[str] | None = None,
+    const: Any | None = None,
+    converter: Callable[[T], T] | None = None,
+    default: T | None = None,
+    env_var: str | None = None,
+    help: str | None = None,
+    metavar: MetavarType | None = None,
+    required: bool | None = None,
     secret: bool = False,
     **extra_kwargs: Any,
 ) -> T:
@@ -88,20 +84,20 @@ def ArgumentSingle(
 # noinspection PyShadowingBuiltins
 def ArgumentSequence(
     *aliases: str,
-    type: Type[T],
+    type: type[T],
     nargs: NargsType = Nargs.ONE_OR_MORE,
-    action: Union[Actions, Type[Action]] = Actions.default(),
-    choices: Optional[Iterable[str]] = None,
-    const: Optional[Any] = None,
-    converter: Optional[Callable[[List[T]], Any]] = None,
-    default: Optional[List[T]] = None,
-    env_var: Optional[str] = None,
-    help: Optional[str] = None,
-    metavar: Optional[MetavarType] = None,
-    required: Optional[bool] = None,
+    action: Actions | type[Action] = Actions.default(),
+    choices: Iterable[str] | None = None,
+    const: Any | None = None,
+    converter: Callable[[list[T]], Any] | None = None,
+    default: list[T] | None = None,
+    env_var: str | None = None,
+    help: str | None = None,
+    metavar: MetavarType | None = None,
+    required: bool | None = None,
     secret: bool = False,
     **extra_kwargs: Any,
-) -> List[T]:
+) -> list[T]:
     """
     Create a multi-value argument with precise typing.
 
@@ -124,7 +120,7 @@ def ArgumentSequence(
             )
     """
     return cast(
-        List[T],
+        list[T],
         TypedArgument(
             action=action,
             aliases=aliases,
@@ -154,14 +150,14 @@ def Argument(
     type: ConverterType,
     nargs: NargsType,
     converter: Callable[..., R],
-    action: Union[Actions, Type[Action]] = ...,
-    choices: Optional[Iterable[str]] = ...,
-    const: Optional[Any] = ...,
-    default: Optional[Any] = ...,
-    env_var: Optional[str] = ...,
-    help: Optional[str] = ...,
-    metavar: Optional[MetavarType] = ...,
-    required: Optional[bool] = ...,
+    action: Actions | type[Action] = ...,
+    choices: Iterable[str] | None = ...,
+    const: Any | None = ...,
+    default: Any | None = ...,
+    env_var: str | None = ...,
+    help: str | None = ...,
+    metavar: MetavarType | None = ...,
+    required: bool | None = ...,
     secret: bool = ...,
     **extra_kwargs: Any,
 ) -> R: ...
@@ -171,17 +167,17 @@ def Argument(
 @overload
 def Argument(
     *aliases: str,
-    type: Type[T],
+    type: type[T],
     nargs: Literal["?"],
-    action: Union[Actions, Type[Action]] = ...,
-    choices: Optional[Iterable[str]] = ...,
-    const: Optional[Any] = ...,
+    action: Actions | type[Action] = ...,
+    choices: Iterable[str] | None = ...,
+    const: Any | None = ...,
     converter: None = ...,
-    default: Optional[Any] = ...,
-    env_var: Optional[str] = ...,
-    help: Optional[str] = ...,
-    metavar: Optional[MetavarType] = ...,
-    required: Optional[bool] = ...,
+    default: Any | None = ...,
+    env_var: str | None = ...,
+    help: str | None = ...,
+    metavar: MetavarType | None = ...,
+    required: bool | None = ...,
     secret: bool = ...,
     **extra_kwargs: Any,
 ) -> T: ...
@@ -193,15 +189,15 @@ def Argument(
     *aliases: str,
     type: Callable[[str], T],
     nargs: Literal["?"],
-    action: Union[Actions, Type[Action]] = ...,
-    choices: Optional[Iterable[str]] = ...,
-    const: Optional[Any] = ...,
+    action: Actions | type[Action] = ...,
+    choices: Iterable[str] | None = ...,
+    const: Any | None = ...,
     converter: None = ...,
-    default: Optional[Any] = ...,
-    env_var: Optional[str] = ...,
-    help: Optional[str] = ...,
-    metavar: Optional[MetavarType] = ...,
-    required: Optional[bool] = ...,
+    default: Any | None = ...,
+    env_var: str | None = ...,
+    help: str | None = ...,
+    metavar: MetavarType | None = ...,
+    required: bool | None = ...,
     secret: bool = ...,
     **extra_kwargs: Any,
 ) -> T: ...
@@ -211,20 +207,20 @@ def Argument(
 @overload
 def Argument(
     *aliases: str,
-    type: Type[T],
-    nargs: Union[Literal["*", "+"], int, Nargs],
-    action: Union[Actions, Type[Action]] = ...,
-    choices: Optional[Iterable[str]] = ...,
-    const: Optional[Any] = ...,
+    type: type[T],
+    nargs: Literal["*", "+"] | int | Nargs,
+    action: Actions | type[Action] = ...,
+    choices: Iterable[str] | None = ...,
+    const: Any | None = ...,
     converter: None = ...,
-    default: Optional[Any] = ...,
-    env_var: Optional[str] = ...,
-    help: Optional[str] = ...,
-    metavar: Optional[MetavarType] = ...,
-    required: Optional[bool] = ...,
+    default: Any | None = ...,
+    env_var: str | None = ...,
+    help: str | None = ...,
+    metavar: MetavarType | None = ...,
+    required: bool | None = ...,
     secret: bool = ...,
     **extra_kwargs: Any,
-) -> List[T]: ...
+) -> list[T]: ...
 
 
 # Overload: Callable type + nargs (sequence) → List[T]
@@ -232,36 +228,36 @@ def Argument(
 def Argument(
     *aliases: str,
     type: Callable[[str], T],
-    nargs: Union[Literal["*", "+"], int, Nargs],
-    action: Union[Actions, Type[Action]] = ...,
-    choices: Optional[Iterable[str]] = ...,
-    const: Optional[Any] = ...,
+    nargs: Literal["*", "+"] | int | Nargs,
+    action: Actions | type[Action] = ...,
+    choices: Iterable[str] | None = ...,
+    const: Any | None = ...,
     converter: None = ...,
-    default: Optional[Any] = ...,
-    env_var: Optional[str] = ...,
-    help: Optional[str] = ...,
-    metavar: Optional[MetavarType] = ...,
-    required: Optional[bool] = ...,
+    default: Any | None = ...,
+    env_var: str | None = ...,
+    help: str | None = ...,
+    metavar: MetavarType | None = ...,
+    required: bool | None = ...,
     secret: bool = ...,
     **extra_kwargs: Any,
-) -> List[T]: ...
+) -> list[T]: ...
 
 
 # Overload: Type[T] without nargs (single) → T
 @overload
 def Argument(
     *aliases: str,
-    type: Type[T],
-    action: Union[Actions, Type[Action]] = ...,
-    choices: Optional[Iterable[str]] = ...,
-    const: Optional[Any] = ...,
+    type: type[T],
+    action: Actions | type[Action] = ...,
+    choices: Iterable[str] | None = ...,
+    const: Any | None = ...,
     converter: None = ...,
-    default: Optional[T] = ...,
-    env_var: Optional[str] = ...,
-    help: Optional[str] = ...,
-    metavar: Optional[MetavarType] = ...,
+    default: T | None = ...,
+    env_var: str | None = ...,
+    help: str | None = ...,
+    metavar: MetavarType | None = ...,
     nargs: None = ...,
-    required: Optional[bool] = ...,
+    required: bool | None = ...,
     secret: bool = ...,
     **extra_kwargs: Any,
 ) -> T: ...
@@ -272,16 +268,16 @@ def Argument(
 def Argument(
     *aliases: str,
     type: Callable[[str], T],
-    action: Union[Actions, Type[Action]] = ...,
-    choices: Optional[Iterable[str]] = ...,
-    const: Optional[Any] = ...,
+    action: Actions | type[Action] = ...,
+    choices: Iterable[str] | None = ...,
+    const: Any | None = ...,
     converter: None = ...,
-    default: Optional[T] = ...,
-    env_var: Optional[str] = ...,
-    help: Optional[str] = ...,
-    metavar: Optional[MetavarType] = ...,
+    default: T | None = ...,
+    env_var: str | None = ...,
+    help: str | None = ...,
+    metavar: MetavarType | None = ...,
     nargs: None = ...,
-    required: Optional[bool] = ...,
+    required: bool | None = ...,
     secret: bool = ...,
     **extra_kwargs: Any,
 ) -> T: ...
@@ -292,56 +288,60 @@ def Argument(
 def Argument(
     *aliases: str,
     converter: Callable[..., T],
-    action: Union[Actions, Type[Action]] = ...,
-    choices: Optional[Iterable[str]] = ...,
-    const: Optional[Any] = ...,
-    default: Optional[Any] = ...,
-    env_var: Optional[str] = ...,
-    help: Optional[str] = ...,
-    metavar: Optional[MetavarType] = ...,
-    nargs: Optional[NargsType] = ...,
-    required: Optional[bool] = ...,
+    action: Actions | type[Action] = ...,
+    choices: Iterable[str] | None = ...,
+    const: Any | None = ...,
+    default: Any | None = ...,
+    env_var: str | None = ...,
+    help: str | None = ...,
+    metavar: MetavarType | None = ...,
+    nargs: NargsType | None = ...,
+    required: bool | None = ...,
     secret: bool = ...,
-    type: Optional[ConverterType] = ...,
+    type: ConverterType | None = ...,
     **extra_kwargs: Any,
 ) -> T: ...
 
 
-# Overload: fallback for dynamic/optional parameters (used by Secret, etc.)
+# Overload: fallback for dynamic/optional parameters (used by Secret, etc.).
+# Returns a bare TypeVar so the result adopts the annotated attribute type
+# (e.g. ``tags: list[str] = Argument(nargs="+")`` infers ``list[str]``)
+# instead of ``Any``, which keeps strict checkers (basedpyright's reportAny)
+# quiet on simple, untyped declarations.
 @overload
 def Argument(
     *aliases: str,
-    action: Union[Actions, Type[Action]] = ...,
-    choices: Optional[Iterable[str]] = ...,
-    const: Optional[Any] = ...,
-    converter: Optional[ConverterType] = ...,
-    default: Optional[Any] = ...,
-    env_var: Optional[str] = ...,
-    help: Optional[str] = ...,
-    metavar: Optional[MetavarType] = ...,
-    nargs: Optional[NargsType] = ...,
-    required: Optional[bool] = ...,
+    action: Actions | type[Action] = ...,
+    choices: Iterable[str] | None = ...,
+    const: Any | None = ...,
+    converter: ConverterType | None = ...,
+    default: Any | None = ...,
+    env_var: str | None = ...,
+    help: str | None = ...,
+    metavar: MetavarType | None = ...,
+    nargs: NargsType | None = ...,
+    required: bool | None = ...,
     secret: bool = ...,
-    type: Optional[ConverterType] = ...,
+    type: ConverterType | None = ...,
     **extra_kwargs: Any,
-) -> Any: ...
+) -> T: ...  # type: ignore[type-var]
 
 
 # noinspection PyShadowingBuiltins
 def Argument(
     *aliases: str,
-    action: Union[Actions, Type[Action]] = Actions.default(),
-    choices: Optional[Iterable[str]] = None,
-    const: Optional[Any] = None,
-    converter: Optional[ConverterType] = None,
-    default: Optional[Any] = None,
-    env_var: Optional[str] = None,
-    help: Optional[str] = None,
-    metavar: Optional[MetavarType] = None,
-    nargs: Optional[NargsType] = None,
-    required: Optional[bool] = None,
+    action: Actions | type[Action] = Actions.default(),
+    choices: Iterable[str] | None = None,
+    const: Any | None = None,
+    converter: ConverterType | None = None,
+    default: Any | None = None,
+    env_var: str | None = None,
+    help: str | None = None,
+    metavar: MetavarType | None = None,
+    nargs: NargsType | None = None,
+    required: bool | None = None,
     secret: bool = False,
-    type: Optional[ConverterType] = None,
+    type: ConverterType | None = None,
     **extra_kwargs: Any,
 ) -> Any:
     """
@@ -396,7 +396,7 @@ def Argument(
     if type is not None:
         # Cast type to Type[Any] since we've verified it's not None
         # The actual type could be Type[T] or Callable[[str], T]
-        type_func = cast(Type[Any], type)
+        type_func = cast(builtins.type[Any], type)
         if nargs in ("+", "*") or isinstance(nargs, (int, Nargs)):
             return ArgumentSequence(
                 *aliases,
@@ -405,7 +405,7 @@ def Argument(
                 action=action,
                 choices=choices,
                 const=const,
-                converter=cast(Optional[Callable[[List[Any]], Any]], converter),
+                converter=cast(Callable[[list[Any]], Any] | None, converter),
                 default=default,
                 env_var=env_var,
                 help=help,
@@ -474,15 +474,15 @@ E = TypeVar("E", bound=Enum)
 # Overload: with default value (enum member or string) -> returns EnumType
 @overload
 def EnumArgument(
-    enum_class: Type[E],
+    enum_class: type[E],
     *aliases: str,
-    default: Union[E, str],
-    action: Union[Actions, Type[Action]] = ...,
-    env_var: Optional[str] = ...,
-    help: Optional[str] = ...,
-    metavar: Optional[str] = ...,
-    nargs: Optional[NargsType] = ...,
-    required: Optional[bool] = ...,
+    default: E | str,
+    action: Actions | type[Action] = ...,
+    env_var: str | None = ...,
+    help: str | None = ...,
+    metavar: str | None = ...,
+    nargs: NargsType | None = ...,
+    required: bool | None = ...,
     use_value: bool = ...,
     lowercase: bool = ...,
 ) -> E: ...
@@ -491,30 +491,30 @@ def EnumArgument(
 # Overload: without default value -> returns Optional[EnumType]
 @overload
 def EnumArgument(
-    enum_class: Type[E],
+    enum_class: type[E],
     *aliases: str,
-    action: Union[Actions, Type[Action]] = ...,
+    action: Actions | type[Action] = ...,
     default: None = ...,
-    env_var: Optional[str] = ...,
-    help: Optional[str] = ...,
-    metavar: Optional[str] = ...,
-    nargs: Optional[NargsType] = ...,
-    required: Optional[bool] = ...,
+    env_var: str | None = ...,
+    help: str | None = ...,
+    metavar: str | None = ...,
+    nargs: NargsType | None = ...,
+    required: bool | None = ...,
     use_value: bool = ...,
     lowercase: bool = ...,
-) -> Optional[E]: ...
+) -> E | None: ...
 
 
 def EnumArgument(
-    enum_class: Type[E],
+    enum_class: type[E],
     *aliases: str,
-    action: Union[Actions, Type[Action]] = Actions.default(),
-    default: Union[E, str, None] = None,
-    env_var: Optional[str] = None,
-    help: Optional[str] = None,
-    metavar: Optional[str] = None,
-    nargs: Optional[NargsType] = None,
-    required: Optional[bool] = None,
+    action: Actions | type[Action] = Actions.default(),
+    default: E | str | None = None,
+    env_var: str | None = None,
+    help: str | None = None,
+    metavar: str | None = None,
+    nargs: NargsType | None = None,
+    required: bool | None = None,
     use_value: bool = False,
     lowercase: bool = False,
 ) -> Any:
@@ -596,17 +596,17 @@ def EnumArgument(
 # noinspection PyShadowingBuiltins
 def Secret(
     *aliases: str,
-    action: Union[Actions, Type[Action]] = Actions.default(),
-    choices: Optional[Iterable[str]] = None,
-    const: Optional[Any] = None,
-    converter: Optional[ConverterType] = None,
-    default: Optional[Any] = None,
-    env_var: Optional[str] = None,
-    help: Optional[str] = None,
-    metavar: Optional[str] = None,
-    nargs: Optional[NargsType] = None,
-    required: Optional[bool] = None,
-    type: Optional[ConverterType] = None,
+    action: Actions | type[Action] = Actions.default(),
+    choices: Iterable[str] | None = None,
+    const: Any | None = None,
+    converter: ConverterType | None = None,
+    default: Any | None = None,
+    env_var: str | None = None,
+    help: str | None = None,
+    metavar: str | None = None,
+    nargs: NargsType | None = None,
+    required: bool | None = None,
+    type: ConverterType | None = None,
 ) -> Any:
     """
     Create a secret argument that masks sensitive values.
@@ -665,17 +665,17 @@ def Secret(
 # noinspection PyShadowingBuiltins
 def Config(
     *aliases: str,
-    search_paths: Optional[Iterable[Union[Path, str]]] = None,
-    choices: Optional[Iterable[str]] = None,
-    converter: Optional[ConverterType] = None,
-    const: Optional[Any] = None,
-    default: Optional[Any] = None,
-    env_var: Optional[str] = None,
-    help: Optional[str] = None,
-    metavar: Optional[str] = None,
-    nargs: Optional[NargsType] = None,
-    required: Optional[bool] = None,
-    config_class: Type[ConfigArgument] = INIConfig,
+    search_paths: Iterable[Path | str] | None = None,
+    choices: Iterable[str] | None = None,
+    converter: ConverterType | None = None,
+    const: Any | None = None,
+    default: Any | None = None,
+    env_var: str | None = None,
+    help: str | None = None,
+    metavar: str | None = None,
+    nargs: NargsType | None = None,
+    required: bool | None = None,
+    config_class: type[ConfigArgument] = INIConfig,
 ) -> Any:
     """
     Create a configuration file argument.

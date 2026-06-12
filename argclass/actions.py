@@ -6,7 +6,8 @@ import logging
 from argparse import Action
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Iterable, List, Mapping, Optional, Sequence, Union
+from typing import Any
+from collections.abc import Iterable, Mapping, Sequence
 
 try:
     import tomllib
@@ -30,7 +31,7 @@ class ConfigAction(Action):
         self,
         option_strings: Sequence[str],
         dest: str,
-        search_paths: Iterable[Union[str, Path]] = (),
+        search_paths: Iterable[str | Path] = (),
         type: MappingProxyType = MappingProxyType({}),
         help: str = "",
         required: bool = False,
@@ -47,8 +48,8 @@ class ConfigAction(Action):
             default=default,
             required=required,
         )
-        self.search_paths: List[Path] = list(map(Path, search_paths))
-        self._result: Optional[Any] = None
+        self.search_paths: list[Path] = list(map(Path, search_paths))
+        self._result: Any | None = None
 
     def parse(self, *files: Path) -> Any:
         result = {}
@@ -66,8 +67,8 @@ class ConfigAction(Action):
         self,
         parser: argparse.ArgumentParser,
         namespace: argparse.Namespace,
-        values: Optional[Union[str, Any]],
-        option_string: Optional[str] = None,
+        values: str | Any | None,
+        option_string: str | None = None,
     ) -> None:
         if not self._result:
             filenames: Sequence[Path] = list(self.search_paths)

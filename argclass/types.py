@@ -1,14 +1,17 @@
 """Type definitions, enums, and constants for argclass."""
 
 from enum import Enum, IntEnum
-from typing import Any, Callable, Tuple, Union, Literal
+from typing import Any, Union, Literal
+from collections.abc import Callable
 
 # Type aliases
 ConverterType = Callable[[Any], Any]
-NargsType = Union[int, str, "Nargs", Literal["?", "*", "+"]]
-MetavarType = Union[str, Tuple[str, ...]]
+MetavarType = str | tuple[str, ...]
 NoneType = type(None)
-UnionClass = Union[None, int].__class__
+# Introspection helper: the class of a typing.Union alias, used to detect
+# ``Optional[T]`` / ``Union[...]`` annotations (PEP 604 ``X | Y`` is handled
+# separately via ``types.UnionType``). Must stay a typing.Union at runtime.
+UnionClass = Union[None, int].__class__  # noqa: UP007
 
 
 class Actions(str, Enum):
@@ -37,6 +40,9 @@ class Nargs(Enum):
     ONE_OR_MORE = "+"
 
 
+NargsType = int | str | Nargs | Literal["?", "*", "+"]
+
+
 class LogLevelEnum(IntEnum):
     """Standard logging levels."""
 
@@ -51,7 +57,7 @@ class LogLevelEnum(IntEnum):
 
 
 # Container types for automatic nargs handling
-CONTAINER_TYPES: Tuple[type, ...] = (list, set, frozenset, tuple)
+CONTAINER_TYPES: tuple[type, ...] = (list, set, frozenset, tuple)
 
 
 # Boolean string values

@@ -280,6 +280,13 @@ implement `__call__` on each subcommand and call `cli()` to dispatch
 automatically to the selected command.
 :::
 
+:::{note}
+`current_subparsers`, `current_subparser`, and `__parent__` are reserved
+for internal parser state — using them as your own argument names raises
+`ArgumentDefinitionError`. See
+[Reserved Attribute Names](subparsers.md#reserved-attribute-names).
+:::
+
 ---
 
 ## Exception-Raising Patterns

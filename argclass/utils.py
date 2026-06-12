@@ -7,17 +7,12 @@ import types
 from pathlib import Path
 from typing import (
     Any,
-    Dict,
     Literal,
-    Mapping,
-    Optional,
-    Tuple,
-    Type,
-    Union,
     get_args,
     get_origin,
     get_type_hints,
 )
+from collections.abc import Mapping
 
 from .exceptions import ComplexTypeError
 from .types import (
@@ -31,9 +26,9 @@ from .types import (
 
 
 def read_ini_configs(
-    *paths: Union[str, Path],
+    *paths: str | Path,
     **kwargs: Any,
-) -> Tuple[Mapping[str, Any], Tuple[Path, ...]]:
+) -> tuple[Mapping[str, Any], tuple[Path, ...]]:
     """Read configuration from INI files."""
     kwargs.setdefault("allow_no_value", True)
     kwargs.setdefault("strict", False)
@@ -50,7 +45,7 @@ def read_ini_configs(
 
     config_paths = parser.read(filenames)
 
-    result: Dict[str, Union[str, Dict[str, str]]] = dict(
+    result: dict[str, str | dict[str, str]] = dict(
         parser.items(parser.default_section, raw=True),
     )
 
@@ -63,7 +58,7 @@ def read_ini_configs(
 def own_section_items(
     parser: configparser.ConfigParser,
     section: str,
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """Return ``section``'s own keys, excluding cascaded ``[DEFAULT]``.
 
     configparser's public API
@@ -77,13 +72,13 @@ def own_section_items(
     one place where we reach into ``parser._sections``. Keeps the
     private-attribute risk to a single well-commented call site.
     """
-    own: Dict[str, str] = dict(
+    own: dict[str, str] = dict(
         parser._sections[section],  # type: ignore[attr-defined]
     )
     return own
 
 
-def deep_getattr(name: str, attrs: Dict[str, Any], *bases: Type) -> Any:
+def deep_getattr(name: str, attrs: dict[str, Any], *bases: type) -> Any:
     """Get attribute from attrs dict or base classes."""
     if name in attrs:
         return attrs[name]
@@ -94,11 +89,11 @@ def deep_getattr(name: str, attrs: Dict[str, Any], *bases: Type) -> Any:
 
 
 def merge_annotations(
-    annotations: Dict[str, Any],
-    *bases: Type,
-) -> Dict[str, Any]:
+    annotations: dict[str, Any],
+    *bases: type,
+) -> dict[str, Any]:
     """Merge annotations from base classes following MRO."""
-    result: Dict[str, Any] = {}
+    result: dict[str, Any] = {}
 
     # Walk the full MRO to collect all inherited annotations
     for base in bases:
@@ -108,7 +103,7 @@ def merge_annotations(
     return result
 
 
-def resolve_annotations(cls: type) -> Dict[str, Any]:
+def resolve_annotations(cls: type) -> dict[str, Any]:
     """Resolve annotations for a class, handling stringified annotations.
 
     Uses typing.get_type_hints() to resolve string annotations
@@ -122,6 +117,28 @@ def resolve_annotations(cls: type) -> Dict[str, Any]:
             getattr(cls, "__annotations__", {}),
             *cls.__mro__[1:],
         )
+
+
+def own_annotation_keys(cls: type) -> frozenset[str]:
+    """Names annotated directly on ``cls`` (not inherited from bases).
+
+    On Python 3.14+ (PEP 649) ``cls.__dict__['__annotations__']`` may be
+    absent because annotations are evaluated lazily, so fall back to
+    ``annotationlib`` in FORWARDREF format — only the keys are needed, so
+    unresolved forward references must not raise.
+    """
+    ann = cls.__dict__.get("__annotations__")
+    if ann is not None:
+        return frozenset(ann)
+    try:
+        import annotationlib  # type: ignore[import-not-found]
+    except ImportError:
+        return frozenset()
+    return frozenset(
+        annotationlib.get_annotations(
+            cls, format=annotationlib.Format.FORWARDREF
+        )
+    )
 
 
 def parse_bool(value: str) -> bool:
@@ -192,7 +209,7 @@ def _is_union_type(typespec: Any) -> bool:
     return hasattr(types, "UnionType") and isinstance(typespec, types.UnionType)
 
 
-def unwrap_optional(typespec: Any) -> Optional[Any]:
+def unwrap_optional(typespec: Any) -> Any | None:
     """Unwrap Optional[T] to T, return None if not Optional."""
     if not _is_union_type(typespec):
         return None
@@ -220,7 +237,7 @@ def _is_container_type(typespec: Any) -> bool:
     return origin in CONTAINER_TYPES
 
 
-def _unwrap_container_type(typespec: Any) -> Optional[Tuple[type, type]]:
+def _unwrap_container_type(typespec: Any) -> tuple[type, type] | None:
     """
     Unwrap a container type and return (container_origin, element_type).
 
@@ -253,7 +270,7 @@ def _unwrap_container_type(typespec: Any) -> Optional[Tuple[type, type]]:
     return (origin, element_type)
 
 
-def unwrap_literal(typespec: Any) -> Optional[Tuple[type, Tuple[Any, ...]]]:
+def unwrap_literal(typespec: Any) -> tuple[type, tuple[Any, ...]] | None:
     """
     Unwrap Literal[value1, value2, ...] and return (value_type, choices).
 
