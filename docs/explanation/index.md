@@ -3,8 +3,8 @@
 These pages explain **how argclass works and why** — the mental models behind
 the API, rather than step-by-step instructions. Read them when you want to
 understand the design, not to accomplish a specific task. For tasks, see the
-[Quick Start](../quickstart.md), [Tutorial](../tutorial.md), and the User Guide;
-for exact signatures, see the [API Reference](../api.md).
+[Quick Start](../quickstart.md), [Tutorial](../tutorial.md), and the How-to
+Guides; for exact signatures, see the [API Reference](../api.md).
 
 ```{toctree}
 :maxdepth: 1
