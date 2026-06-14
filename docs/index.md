@@ -73,23 +73,16 @@ Starting server on 0.0.0.0:9000
 
 ## Why argclass?
 
-argclass bridges the gap between simple argument parsing and full-featured
-CLI frameworks. Unlike raw `argparse`, argclass provides type safety and
-IDE support. Unlike decorator-based frameworks like Click or Typer, argclass
-uses pure OOP: your parsers are real classes with inheritance, composition,
-and easy testability. And with zero dependencies, it stays close to Python's
-standard library.
+argclass bridges the gap between raw `argparse` (powerful but untyped) and
+decorator-based frameworks like Click or Typer (ergonomic but dependency-heavy):
+type-safe, class-based, IDE-friendly, with config files, environment variables,
+and secret masking built in — and zero dependencies.
 
-| Feature                 | argclass | argparse | click/typer |
-|-------------------------|----------|----------|-------------|
-| Type hints → arguments  | Yes      | No       | Yes         |
-| Class-based (OOP)       | Yes      | No       | Decorators  |
-| IDE autocompletion      | Yes      | No       | Yes         |
-| Config file support     | Built-in | No       | No          |
-| Environment variables   | Built-in | No       | Plugin      |
-| Secret masking          | Built-in | No       | No          |
-| Argument groups         | Reusable | Limited  | No          |
-| Dependencies            | stdlib   | stdlib   | Many        |
+:::{seealso}
+The design choices behind that position — classes vs. decorators, the
+zero-dependency constraint, and a full feature comparison:
+[Why argclass?](explanation/why-argclass.md).
+:::
 
 ```{only} html
 ::::{grid} 3
@@ -444,16 +437,32 @@ The [Examples](examples.md) page provides ready-to-use patterns:
 
 Each example includes explanations and can be copied directly into your project.
 
-### Reference Documentation
+### How-to Guides
 
-Once comfortable with the basics, explore the User Guide for detailed coverage:
+Once comfortable with the basics, explore the How-to Guides for detailed coverage:
 
-- [Arguments](arguments.md) - All argument types, actions, and customization options
 - [Groups](groups.md) - Organizing and reusing argument sets
 - [Subparsers](subparsers.md) - Building multi-command CLIs
 - [Config Files](config-files.md) - INI, JSON, and TOML configuration
 - [Environment](environment.md) - Environment variable integration
 - [Secrets](secrets.md) - Handling sensitive values securely
+
+### Reference
+
+For exact facts, look these up rather than read them through:
+
+- [API Reference](api.md) - Classes, functions, and exceptions
+- [Arguments](arguments.md) - All argument types, actions, and customization options
+- [Config File Syntax](config-file-reference.md) - On-disk format and section mapping
+
+### Concepts
+
+To understand *why* argclass works the way it does — the mental models behind the
+API — see the [Explanation](explanation/index.md) section: the
+[parser/group model](explanation/parsers-and-groups.md), the
+[configuration model](explanation/configuration-model.md), the
+[type system](explanation/type-system.md), and the
+[security model](explanation/security.md).
 
 ```{only} html
 ::::{grid} 2
@@ -486,34 +495,30 @@ Build a real CLI application step by step.
 
 ## Documentation
 
+The documentation follows the four [Diátaxis](https://diataxis.fr/) modes —
+**Tutorials** to learn by doing, **How-to Guides** for specific tasks,
+**Reference** for exact facts, and **Explanation** to understand the design.
+
 ```{toctree}
 :maxdepth: 2
-:caption: Getting Started
+:caption: Tutorials
 
 quickstart
 tutorial
-examples
 ```
 
 ```{toctree}
 :maxdepth: 2
-:caption: User Guide
+:caption: How-to Guides
 
-arguments
+examples
 groups
 subparsers
 config-files
 config-generation
 environment
 secrets
-security
 integrations
-```
-
-```{toctree}
-:maxdepth: 2
-:caption: Help
-
 errors
 pitfalls
 ```
@@ -523,6 +528,15 @@ pitfalls
 :caption: Reference
 
 api
+arguments
+config-file-reference
+```
+
+```{toctree}
+:maxdepth: 2
+:caption: Explanation
+
+explanation/index
 ```
 
 ## Indices and tables

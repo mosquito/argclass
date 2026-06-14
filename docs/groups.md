@@ -4,48 +4,18 @@ Groups organize related arguments together and enable reuse across parsers.
 They provide logical structure to your CLI, make `--help` output more readable,
 and allow you to define common argument sets once and reuse them in multiple parsers.
 
-## The Mental Model: a Group Instance Is a Declaration, not a Parser
+## What a group is
 
-A `Group()` you assign on a parser class — `db = DatabaseGroup()` or
-`db: DatabaseGroup = DatabaseGroup(defaults={...})` — is a **declaration
-of structure and per-instance defaults**, not a runtime parser. You
-don't call methods on it; you don't use it to read CLI arguments. Its
-job at class-definition time is to:
+A `Group()` assigned in a parser class body is a **declaration** — it names a
+slot in the parsed result (`parser.db`) and the arguments that belong to it. It
+is not a runtime parser: you never call `parse_args()` on a group. At parse time
+argclass writes the parsed values back into the instance so you read them as
+`parser.db.host`.
 
-- name a slot in the parsed result (`parser.db`),
-- describe which arguments belong to that slot (via its annotations),
-- optionally override defaults for this particular slot (`defaults=`,
-  `title=`, `prefix=`).
-
-When you call `Parser().parse_args(...)`, argclass walks these
-declarations, builds an `argparse` parser from them, parses the
-command line, and then writes the parsed values back into the same
-group instance so you can read them as `parser.db.host`. The instance
-is a write target during parsing, not an active participant in it.
-
-Two consequences worth internalising:
-
-1. **Don't call parser methods on a `Group` instance.** It has no
-   `parse_args()`. Groups are not standalone parsers.
-2. **Don't share one `Group` instance across two attributes.** Since
-   the instance holds the parsed state for *its* slot, assigning the
-   same instance to `primary = shared` and `secondary = shared` would
-   make them aliases of one another — argclass raises
-   `ArgclassError` at parse time to prevent this. Construct one
-   `Group()` per slot. (Using the same Group *class* twice is fine —
-   only sharing a single constructed instance is not.)
-
-:::{note}
-**Groups vs. subparsers.** This "instance-is-a-declaration" rule is
-specific to `Group`. **Subparsers are different**: a subparser is a
-`Parser` subclass instance assigned to an attribute (e.g.
-`serve = Serve()`), and at runtime the selected subparser really does
-parse its own slice of `sys.argv` — it has a working `parse_args()`,
-its own `__call__`, its own subparsers. Subparsers are real parsers
-chosen by name from the CLI; groups are namespaced collections of
-arguments declared upfront. If you want a runnable sub-command, use a
-subparser. If you want to bundle related options under a prefix, use a
-group. See [Subparsers](subparsers.md) for the runtime contract.
+:::{seealso}
+Why groups are declarations rather than parsers, how class-body instances become
+per-parser copies, and when to reach for a group vs. a subparser:
+[Parsers, Groups & Subparsers](explanation/parsers-and-groups.md).
 :::
 
 ## Basic Groups

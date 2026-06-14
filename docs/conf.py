@@ -60,6 +60,20 @@ myst_heading_anchors = 3
 templates_path = ["_templates"]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
+# HTML uses index.md (a rich landing page); the PDF uses a minimal root,
+# pdf-contents.md, so the four Diátaxis modes render as top-level parts rather
+# than being buried under the landing page's headings. Swap the master per
+# builder and keep each build from seeing the other's root.
+# The builder-name tag is not yet set when conf.py runs, so detect the LaTeX
+# build from the command line (`sphinx-build -b latex ...`).
+_building_latex = "latex" in sys.argv
+if _building_latex:
+    master_doc = "pdf-contents"
+    exclude_patterns.append("index.md")
+else:
+    master_doc = "index"
+    exclude_patterns.append("pdf-contents.md")
+
 # -- Options for HTML output -------------------------------------------------
 
 html_theme = "furo"
@@ -166,7 +180,7 @@ latex_engine = "xelatex"
 
 latex_documents = [
     (
-        "index",  # startdocname
+        "pdf-contents",  # startdocname
         "argclass.tex",  # targetname
         "argclass Documentation",  # title
         author,  # author
@@ -177,6 +191,9 @@ latex_documents = [
 latex_elements = {
     "papersize": "a4paper",
     "pointsize": "10pt",
+    # Single-sided: no blank verso/filler pages between chapters (this is a
+    # screen-read PDF, not a duplex print job).
+    "extraclassoptions": "oneside",
     "preamble": r"""
 \usepackage{fontspec}
 \setmainfont{DejaVu Serif}[Scale=0.9]

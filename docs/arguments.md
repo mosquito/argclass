@@ -500,12 +500,14 @@ assert parser.level_int == 20  # The integer value
 
 ## Type vs Converter
 
-These two parameters serve different purposes in the parsing pipeline:
+`type` runs on **each input string** during parsing; `converter` runs **once on
+the final collected result**. Use `type` for per-value conversion, `converter`
+for post-processing the aggregate.
 
-- **`type`**: Called for each input string during parsing (before collecting)
-- **`converter`**: Called once on the final collected result (after parsing)
-
-Use `type` for per-value conversion, `converter` for post-processing the result.
+:::{seealso}
+How values flow through the `type` → `converter` pipeline:
+[Types & Custom Actions → The conversion pipeline](explanation/type-system.md#the-conversion-pipeline-type-vs-converter).
+:::
 
 <!--- name: test_args_type_vs_converter --->
 ```python
@@ -596,6 +598,12 @@ automatically strips the `type` parameter for `VERSION`, `HELP`, `STORE_TRUE`,
 Extra kwargs are stored as an immutable `MappingProxyType` on the resulting
 argument and merged into the kwargs passed to `add_argument()` at parser
 construction time.
+
+:::{seealso}
+Why passthrough exists and how it lets custom actions receive their own
+constructor parameters:
+[Types & Custom Actions → Argparse passthrough](explanation/type-system.md#argparse-passthrough-the-escape-hatch).
+:::
 
 ### Custom Actions with passthrough kwargs
 
@@ -692,6 +700,11 @@ If your custom action is the "fire and exit" kind — `--version`,
 `--check-updates`, `--health`, anything that prints something and calls
 `parser.exit()` — argclass's config generators must skip it from dumps.
 Otherwise it would end up as a noisy empty entry. Two equivalent opt-outs:
+
+:::{seealso}
+Why fire-and-exit actions are excluded while stateful ones are kept:
+[Types & Custom Actions → Why "fire and exit" actions opt out](explanation/type-system.md#why-fire-and-exit-actions-opt-out-of-config-dumps).
+:::
 
 1. **Inherit from `argclass.NonConfigAction`** — cleanest if you're
    defining a new action from scratch. The base class just sets the
