@@ -506,7 +506,6 @@ config-files
 config-generation
 environment
 secrets
-security
 integrations
 ```
 
@@ -516,6 +515,13 @@ integrations
 
 errors
 pitfalls
+```
+
+```{toctree}
+:maxdepth: 2
+:caption: Explanation
+
+explanation/index
 ```
 
 ```{toctree}

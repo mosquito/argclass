@@ -84,6 +84,12 @@ The dump reflects the parser's CURRENT resolved state at the moment
 (`defaults < config files < env vars < CLI args`), so all four
 sources can shape the output.
 
+:::{seealso}
+Why generation follows the same priority chain as reading, and how that makes a
+parser a format converter:
+[The configuration model → The same chain shapes generated config](explanation/configuration-model.md#the-same-chain-shapes-generated-config).
+:::
+
 ### CLI flags
 
 CLI args parsed BEFORE `--generate-config` end up in the dump

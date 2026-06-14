@@ -116,6 +116,10 @@ config files for deployment defaults, environment variables for container
 orchestration, and CLI arguments for ad-hoc overrides. argclass handles
 all three with a clear priority order: CLI > environment > config file.
 
+:::{seealso}
+The priority chain explained: [The configuration model](explanation/configuration-model.md).
+:::
+
 This example demonstrates the complete configuration stack. It shows how
 defaults in a config file can be overridden by environment variables, which
 can in turn be overridden by command-line arguments. It also demonstrates

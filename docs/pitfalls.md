@@ -216,6 +216,11 @@ parser instance works on its own copies. That makes assigning the
 same instance to several attributes safe — each binding becomes an
 independent copy with its own parsed state:
 
+:::{seealso}
+The prototype/copy model in full:
+[Parsers, Groups & Subparsers → Instances are prototypes](explanation/parsers-and-groups.md#instances-are-prototypes-each-parser-gets-its-own-copy).
+:::
+
 <!--- name: test_pitfall_group_instance_reuse --->
 ```python
 import argclass

@@ -551,20 +551,15 @@ parser = Parser(config_files=[
 
 ### Value Priority
 
-Values are applied in order (later overrides earlier):
+Values are applied least-specific to most-specific — class defaults < config
+files < environment variables < CLI arguments — so each source overrides the
+ones before it. The two examples below show the chain in action.
 
-:::{card}
-1. **Class defaults** → 2. **Config files** → 3. **Environment variables** → 4. **CLI arguments**
+:::{seealso}
+The full priority chain (including `config_argument`), the override matrix, and
+why generation follows the same order:
+[The configuration model](explanation/configuration-model.md).
 :::
-
-**Override Matrix:**
-
-| Source | Overrides | Overridden by |
-|--------|-----------|---------------|
-| Class default | — | Config, Env, CLI |
-| Config file | Class default | Env, CLI |
-| Environment variable | Class default, Config | CLI |
-| CLI argument | All | — |
 
 <!--- name: test_config_priority --->
 ```python
