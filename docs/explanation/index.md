@@ -9,12 +9,16 @@ Guides; for exact signatures, see the [API Reference](../api.md).
 ```{toctree}
 :maxdepth: 1
 
+why-argclass
 parsers-and-groups
 configuration-model
 type-system
 security
 ```
 
+- **[Why argclass?](why-argclass.md)** — the design choices behind the library:
+  classes over decorators, the zero-dependency constraint, and how it compares to
+  `argparse` and Click/Typer.
 - **[Parsers, groups & subparsers](parsers-and-groups.md)** — what a class-body
   declaration actually is, why groups are not parsers, and how instances become
   per-parser copies.

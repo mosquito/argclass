@@ -73,23 +73,16 @@ Starting server on 0.0.0.0:9000
 
 ## Why argclass?
 
-argclass bridges the gap between simple argument parsing and full-featured
-CLI frameworks. Unlike raw `argparse`, argclass provides type safety and
-IDE support. Unlike decorator-based frameworks like Click or Typer, argclass
-uses pure OOP: your parsers are real classes with inheritance, composition,
-and easy testability. And with zero dependencies, it stays close to Python's
-standard library.
+argclass bridges the gap between raw `argparse` (powerful but untyped) and
+decorator-based frameworks like Click or Typer (ergonomic but dependency-heavy):
+type-safe, class-based, IDE-friendly, with config files, environment variables,
+and secret masking built in — and zero dependencies.
 
-| Feature                 | argclass | argparse | click/typer |
-|-------------------------|----------|----------|-------------|
-| Type hints → arguments  | Yes      | No       | Yes         |
-| Class-based (OOP)       | Yes      | No       | Decorators  |
-| IDE autocompletion      | Yes      | No       | Yes         |
-| Config file support     | Built-in | No       | No          |
-| Environment variables   | Built-in | No       | Plugin      |
-| Secret masking          | Built-in | No       | No          |
-| Argument groups         | Reusable | Limited  | No          |
-| Dependencies            | stdlib   | stdlib   | Many        |
+:::{seealso}
+The design choices behind that position — classes vs. decorators, the
+zero-dependency constraint, and a full feature comparison:
+[Why argclass?](explanation/why-argclass.md).
+:::
 
 ```{only} html
 ::::{grid} 3
@@ -529,6 +522,7 @@ pitfalls
 :caption: Reference
 
 api
+config-file-reference
 ```
 
 ```{toctree}
