@@ -441,12 +441,19 @@ Each example includes explanations and can be copied directly into your project.
 
 Once comfortable with the basics, explore the How-to Guides for detailed coverage:
 
-- [Arguments](arguments.md) - All argument types, actions, and customization options
 - [Groups](groups.md) - Organizing and reusing argument sets
 - [Subparsers](subparsers.md) - Building multi-command CLIs
 - [Config Files](config-files.md) - INI, JSON, and TOML configuration
 - [Environment](environment.md) - Environment variable integration
 - [Secrets](secrets.md) - Handling sensitive values securely
+
+### Reference
+
+For exact facts, look these up rather than read them through:
+
+- [API Reference](api.md) - Classes, functions, and exceptions
+- [Arguments](arguments.md) - All argument types, actions, and customization options
+- [Config File Syntax](config-file-reference.md) - On-disk format and section mapping
 
 ### Concepts
 
@@ -505,7 +512,6 @@ tutorial
 :caption: How-to Guides
 
 examples
-arguments
 groups
 subparsers
 config-files
@@ -522,6 +528,7 @@ pitfalls
 :caption: Reference
 
 api
+arguments
 config-file-reference
 ```
 
