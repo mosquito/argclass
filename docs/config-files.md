@@ -4,6 +4,18 @@ Load default values for CLI arguments from configuration files. Useful for
 site-specific defaults, deployment configurations, and separating configuration
 from code.
 
+argclass has three separate config mechanisms. Two of them happen to use a
+`--config` flag in their examples, so pick by what you actually want:
+
+| I want to…                                              | Use (→ API)                                           | Read more                                                                     |
+| ------------------------------------------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------- |
+| load defaults from files **I (the developer) choose**   | {py:class}`config_files=[...] <argclass.Parser>`        | [Quick Start](#quick-start) below                                             |
+| let the **end user** point at a file of defaults        | {py:class}`config_argument="--config" <argclass.Parser>` | [User-Supplied Config File](#user-supplied-config-file-config_argument) below  |
+| read **arbitrary data** from a file into one attribute  | {py:func}`argclass.Config() <argclass.Config>`         | [`Config` reference](api.md#config)                                           |
+
+The first two feed defaults to your other arguments; `Config()` is unrelated —
+it loads a whole file into a single attribute and touches nothing else.
+
 ## Quick Start
 
 <!--- name: test_config_ini --->
@@ -43,10 +55,10 @@ Path(config_path).unlink()
 
 `config_files=` is chosen by the developer at construction time. To
 let the **end user** point at a config file, pass
-`config_argument="--config"` — argclass adds the flag and applies the
-file's values as argument defaults via two-pass parsing (the flag is
-resolved first, then the real parser is built with the defaults in
-place, so even `--help` shows them):
+`config_argument="--config"` — argclass adds the flag and uses the
+file's values as defaults for your other arguments. The file is read
+before the defaults are fixed, so even `--help` shows the values it
+supplies:
 
 <!--- name: test_config_argument --->
 ```python
@@ -71,25 +83,26 @@ assert parser.port == 1234            # CLI still wins
 Path(config_path).unlink()
 ```
 
-Details:
+What you need to know:
 
-- The priority chain extends naturally: declared defaults <
+- **Priority.** The chain extends naturally: declared defaults <
   `config_files` < `config_argument` file < env vars < CLI args.
+- **Missing or broken file is an error.** A path the user passes
+  explicitly that does not exist or cannot be parsed raises
+  `ConfigurationError` — unlike `config_files`, which is a lenient
+  search list.
+- **Required arguments** are satisfied by a value from the file.
+
+Fine print:
+
 - The file format is the shared `config_parser_class` (INI by
   default; pass `JSONDefaultsParser` / `TOMLDefaultsParser` for other
   formats).
-- A required argument is satisfied by a value from the file.
 - Several aliases are accepted: `config_argument=("-c", "--config")`.
-- An explicitly passed path that does not exist or cannot be parsed
-  raises `ConfigurationError` — unlike `config_files`, which is a
-  lenient search list.
 - `parser.loaded_config_files` reports which files were applied, in
   priority order.
-- The flag is resolved by the parser whose `parse_args()` you call;
-  put it before any subcommand on the command line.
-
-This is different from `argclass.Config()`, which loads a file into
-an attribute as raw data without touching other arguments' defaults.
+- The flag is resolved by the parser whose `parse_args()` you call,
+  so put it before any subcommand on the command line.
 
 ## Supported Formats
 
