@@ -77,6 +77,97 @@ DEMO_HOST=prod python -m argclass genconfig --generate-env -
 All four are interchangeable from the user's perspective — switch
 `generator=...` and rerun.
 
+(defaults-are-commented)=
+## Defaults are commented — the output is a template
+
+For the comment-aware formats (INI, TOML, `.env`) the generated file
+reads like a config a human would hand-write. Every argument still
+sitting at its **declared default** is written **commented-out**, with
+its help text as a comment above it, and a blank line between entries.
+Only the values you actually changed (via CLI, env, or a loaded config
+file) come out active. So a fresh dump documents every knob and its
+default without turning any of them on.
+
+INI uses two comment markers so the help prose and a disabled value
+never blur together — help is `;`, a commented-out default is `#`
+(configparser treats both as comments, so either round-trips):
+
+```ini
+[DEFAULT]
+; Enable debug logging
+# debug = false
+
+; Application name
+# name = app
+
+[db]
+; Database host
+# host = localhost
+
+; Database port
+# port = 5432
+```
+
+TOML and `.env` have a single comment character, so both kinds use `#`:
+
+```toml
+# Enable debug logging
+# debug = false
+
+# Application name
+# name = "app"
+```
+
+Override something and it flips to an active line, while the untouched
+neighbours stay commented for reference:
+
+<!--- name: test_config_gen_template --->
+```python
+import argclass
+
+class CLI(argclass.Parser):
+    host: str = argclass.Argument(default="localhost", help="Server host")
+    port: int = argclass.Argument(default=8080, help="Server port")
+
+parser = CLI()
+parser.parse_args(["--port=9090"])          # change only the port
+
+ini = argclass.INIConfigGenerator().dump_to_string(parser)
+
+# host untouched → commented reference line ('#' for a disabled value,
+# ';' would be its help prose)
+assert "# host = localhost" in ini
+# port overridden → active
+assert "\nport = 9090" in ini
+assert "# port = 9090" not in ini
+```
+
+This makes generated files safe to ship as `config.example.ini`: a
+reader sees the full set of options and their defaults, and only the
+lines someone deliberately set are live.
+
+Want a full snapshot instead — every field active, defaults included?
+Pass `comment_defaults=False` to the generator:
+
+<!--- name: test_config_gen_no_comment_defaults --->
+```python
+import argclass
+
+class CLI(argclass.Parser):
+    host: str = "localhost"
+    port: int = 8080
+
+ini = argclass.INIConfigGenerator(
+    comment_defaults=False,
+).dump_to_string(CLI())
+
+assert "host = localhost" in ini
+assert "; host = localhost" not in ini
+```
+
+JSON has no comment syntax, so `JSONConfigGenerator` always emits every
+field and ignores `comment_defaults`.
+
 ## What lands in the dump
 
 The dump reflects the parser's CURRENT resolved state at the moment
@@ -204,7 +295,11 @@ the source surfaces as a missing field in the dump.
 the env var name argclass would read (explicit `env_var=` or computed
 from `auto_env_var_prefix=`). Arguments without a resolvable env var
 are skipped — set `auto_env_var_prefix=` on the parser to cover
-everything.
+everything. As with the other comment-aware formats, entries still at
+their default come out commented-out (see [Defaults are
+commented](#defaults-are-commented)); the
+example below reads them as substrings, so it matches whether a line is
+active or a `# `-prefixed reference.
 
 <!--- name: test_config_gen_env --->
 ```python

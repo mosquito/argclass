@@ -144,6 +144,30 @@ class TestApiShadowGuard:
 
         assert B.__argument_groups__["db"] is not A.__argument_groups__["db"]
 
+    def test_metaclass_only_name_allowed_as_subparser(self):
+        """``register`` comes from ``abc.ABCMeta``, not the Parser
+        API — it lives on the class object but never on instances, so
+        a subparser may use it. The guard must scan class dicts, not
+        ``getattr`` (which reaches into the metaclass)."""
+
+        class Register(argclass.Parser):
+            name: str = "x"
+
+        class CLI(argclass.Parser):
+            register = Register()
+
+        parser = CLI()
+        parser.parse_args(["register", "--name", "foo"])
+        assert parser.register.name == "foo"
+
+    def test_metaclass_only_name_allowed_as_argument(self):
+        class CLI(argclass.Parser):
+            register: str = "default"
+
+        parser = CLI()
+        parser.parse_args(["--register", "hi"])
+        assert parser.register == "hi"
+
 
 class TestAnnotationOnlySubparser:
     """Fix 3: a Parser-class annotation without an instance raises."""

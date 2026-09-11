@@ -25,6 +25,15 @@ The attribute name auto-derives the CLI flag, so end users run
 ``myapp --generate-config /etc/myapp.ini`` to write the file, or
 ``myapp --generate-config -`` to print to stdout.
 
+Template output: for the comment-aware formats (INI/TOML/.env) the
+generated file reads like a hand-written template. Any field still at
+its declared default is written commented-out (so the defaults are
+visible for reference) while values you actually overrode via CLI /
+env / config stay active. Help text becomes comment lines above each
+key, and a blank line separates entries so a value never runs into the
+next key's comment. Pass ``comment_defaults=False`` to the generator to
+emit every field active instead (a full snapshot).
+
 Security note: secret values are emitted as-is by default. Pass
 ``mask_secrets=True`` to the generator (or to its
 ``GenerateConfigAction`` wrapping via an instance) to replace
@@ -235,6 +244,13 @@ class ConfigField:
         var is configured.
     help:
         Help text declared on the argument, or ``None``.
+    is_default:
+        ``True`` when the resolved value is still the argument's
+        declared default (nothing overrode it via CLI / env / config).
+        Generators use this to emit the line commented-out, turning a
+        dump into a human-friendly template of "here are the defaults,
+        uncomment to change". ``False`` for arguments with no default
+        and for any value that was explicitly overridden.
     """
 
     attr_path: tuple[str, ...]
@@ -245,6 +261,7 @@ class ConfigField:
     value: Any
     env_var: str | None
     help: str | None
+    is_default: bool = False
 
     @property
     def section_path(self) -> tuple[str, ...]:
@@ -325,8 +342,12 @@ def iter_subtree_fields(
             env_var=env_var,
         )
         value = normalize_value(raw)
+        is_default = argument.has_default and value == normalize_value(
+            argument.default,
+        )
         if mask_secrets and argument.secret and value is not None:
             value = SecretString.PLACEHOLDER
+            is_default = False  # placeholder isn't the default
         yield ConfigField(
             attr_path=attr_path + (name,),
             cli_path=cli_path + (name,),
@@ -336,6 +357,7 @@ def iter_subtree_fields(
             value=value,
             env_var=env_var,
             help=argument.help if argument.help else None,
+            is_default=is_default,
         )
     for group_name, group in node.__argument_groups__.items():
         seg = group_cli_segment(group, group_name)
@@ -395,13 +417,54 @@ class ConfigGenerator:
         is safe to commit / share. Default is ``False`` — the
         generator reproduces real credential values exactly so the
         file round-trips back into a working parser.
+    comment_defaults:
+        When true (the default), a field still sitting at its
+        declared default is emitted commented-out — the generated
+        file reads like a hand-written template where the defaults
+        are shown for reference and only the values you actually
+        changed are active. Overridden values (from CLI / env /
+        config) and arguments without a default stay active. Set to
+        ``False`` to emit every field active, reproducing the old
+        behaviour where the dump is a full snapshot. Formats that
+        cannot carry comments (JSON) ignore this flag.
     """
 
     #: File extension hint. Subclasses set this.
     extension: str = ""
 
-    def __init__(self, *, mask_secrets: bool = False) -> None:
+    #: Marker for help prose; INI overrides to ``;``.
+    comment_marker: str = "#"
+
+    #: Marker for a commented-out default; INI keeps ``#`` so a disabled
+    #: value reads apart from its ``;`` help.
+    default_comment_marker: str = "#"
+
+    def __init__(
+        self,
+        *,
+        mask_secrets: bool = False,
+        comment_defaults: bool = True,
+    ) -> None:
         self.mask_secrets = mask_secrets
+        self.comment_defaults = comment_defaults
+
+    def _field_block(self, field: ConfigField, setting: str) -> str:
+        """Render one field: help comment(s) above the ``setting`` line
+        (already rendered by the caller), with the setting itself
+        commented out when ``comment_defaults`` is on and the field is
+        still at its default. Help is split per line so a multi-line
+        string can't break the surrounding format.
+        """
+        marker = self.comment_marker
+        lines: list[str] = []
+        if field.help:
+            for help_line in str(field.help).splitlines():
+                lines.append(f"{marker} {help_line}" if help_line else marker)
+        if self.comment_defaults and field.is_default:
+            lines.append(f"{self.default_comment_marker} {setting}")
+        else:
+            lines.append(setting)
+        return "\n".join(lines)
 
     def render(self, fields: Sequence[ConfigField]) -> str:
         """Render a sequence of :class:`ConfigField` records to text.
@@ -479,7 +542,10 @@ class INIConfigGenerator(ConfigGenerator):
     Top-level arguments go under ``[DEFAULT]`` (read by
     :class:`argclass.INIDefaultsParser`); nested groups become dotted
     sections (``[endpoint.credentials]``). Help text is emitted as
-    ``; <text>`` comments above each key.
+    ``; <text>`` comments above each key, while a key left at its
+    default is commented-out with ``#`` — the two markers keep help
+    prose visually distinct from a disabled setting. configparser
+    treats both ``;`` and ``#`` as comments, so either round-trips.
 
     Note: configparser's ``[DEFAULT]`` section would normally cascade
     into every other section, but
@@ -488,34 +554,31 @@ class INIConfigGenerator(ConfigGenerator):
     """
 
     extension = ".ini"
+    comment_marker = ";"  # help; a commented default uses base "#"
 
     def render(self, fields: Sequence[ConfigField]) -> str:
         sections = group_fields_by_section(fields)
-        lines: list[str] = []
+        blocks: list[str] = []
         root_fields = sections.pop((), [])
         if root_fields:
-            lines.append("[DEFAULT]")
-            self._emit_fields(root_fields, lines)
-            lines.append("")
+            body = self._emit_fields(root_fields)
+            blocks.append("[DEFAULT]" + (f"\n{body}" if body else ""))
         for path, items in sections.items():
-            lines.append(f"[{'.'.join(path)}]")
-            self._emit_fields(items, lines)
-            lines.append("")
-        return "\n".join(lines)
+            body = self._emit_fields(items)
+            header = f"[{'.'.join(path)}]"
+            blocks.append(header + (f"\n{body}" if body else ""))
+        return "\n\n".join(blocks) + ("\n" if blocks else "")
 
-    def _emit_fields(
-        self,
-        fields: list[ConfigField],
-        lines: list[str],
-    ) -> None:
+    def _emit_fields(self, fields: list[ConfigField]) -> str:
+        blocks: list[str] = []
         for field in fields:
             if field.value is None:
-                # configparser has no native None; dropping the key
-                # lets the reloaded parser fall back to its default.
+                # configparser has no native None; drop the key so the
+                # reloaded parser falls back to its default.
                 continue
-            if field.help:
-                lines.append(f"; {field.help}")
-            lines.append(f"{field.key} = {self.render_scalar(field.value)}")
+            setting = f"{field.key} = {self.render_scalar(field.value)}"
+            blocks.append(self._field_block(field, setting))
+        return "\n\n".join(blocks)
 
     @staticmethod
     def render_scalar(value: Any) -> str:
@@ -564,28 +627,24 @@ class TOMLConfigGenerator(ConfigGenerator):
 
     def render(self, fields: Sequence[ConfigField]) -> str:
         sections = group_fields_by_section(fields)
-        lines: list[str] = []
-        root_fields = sections.pop((), [])
-        for field in root_fields:
+        blocks: list[str] = []
+        root_body = self._emit_fields(sections.pop((), []))
+        if root_body:
+            blocks.append(root_body)
+        for path, items in sections.items():
+            body = self._emit_fields(items)
+            header = f"[{'.'.join(path)}]"
+            blocks.append(header + (f"\n{body}" if body else ""))
+        return "\n\n".join(blocks) + ("\n" if blocks else "")
+
+    def _emit_fields(self, fields: list[ConfigField]) -> str:
+        blocks: list[str] = []
+        for field in fields:
             if field.value is None:
                 continue
-            if field.help:
-                lines.append(f"# {field.help}")
-            lines.append(f"{field.key} = {self.render_value(field.value)}")
-        if root_fields and sections:
-            lines.append("")
-        for path, items in sections.items():
-            lines.append(f"[{'.'.join(path)}]")
-            for field in items:
-                if field.value is None:
-                    continue
-                if field.help:
-                    lines.append(f"# {field.help}")
-                lines.append(
-                    f"{field.key} = {self.render_value(field.value)}",
-                )
-            lines.append("")
-        return "\n".join(lines)
+            setting = f"{field.key} = {self.render_value(field.value)}"
+            blocks.append(self._field_block(field, setting))
+        return "\n\n".join(blocks)
 
     def render_value(self, value: Any) -> str:
         if isinstance(value, bool):
@@ -623,16 +682,15 @@ class EnvConfigGenerator(ConfigGenerator):
     QUOTE_CHARS = frozenset(' \t\n\r"\\#=')
 
     def render(self, fields: Sequence[ConfigField]) -> str:
-        lines: list[str] = []
+        blocks: list[str] = []
         for field in fields:
             if field.env_var is None:
                 continue
             if field.value is None:
                 continue
-            if field.help:
-                lines.append(f"# {field.help}")
-            lines.append(f"{field.env_var}={self.render_value(field.value)}")
-        return "\n".join(lines) + ("\n" if lines else "")
+            setting = f"{field.env_var}={self.render_value(field.value)}"
+            blocks.append(self._field_block(field, setting))
+        return "\n\n".join(blocks) + ("\n" if blocks else "")
 
     def render_value(self, value: Any) -> str:
         if isinstance(value, bool):
