@@ -740,6 +740,99 @@ class TestGroupReuseAndNesting:
             assert loaded.conn.sec.tls.key == "/etc/key", ext
 
 
+class TestCommentDefaults:
+    """The comment-aware generators emit fields still sitting at their
+    declared default commented-out (a human template), and keep
+    overridden values active. A blank line separates entries so a
+    value never merges with the next key's comment."""
+
+    def _cli(self) -> Type[argclass.Parser]:
+        class Endpoint(argclass.Group):
+            host: str = "localhost"
+            port: int = 8080
+
+        class CLI(argclass.Parser):
+            name: str = argclass.Argument(
+                default="app",
+                help="Application name",
+            )
+            endpoint: Endpoint = Endpoint()
+
+        return CLI
+
+    def test_ini_comments_defaults(self):
+        text = INIConfigGenerator().dump_to_string(self._cli()())
+        assert "; Application name" in text
+        assert "# name = app" in text
+        assert "# host = localhost" in text
+        assert "\nname = app" not in text
+        assert "\nhost = localhost" not in text
+
+    def test_ini_help_semicolon_value_hash(self):
+        """INI distinguishes the two comment kinds: ';' for help,
+        '#' for a disabled default. The help line and the value line
+        sit back-to-back with different markers."""
+        text = INIConfigGenerator().dump_to_string(self._cli()())
+        assert "; Application name\n# name = app" in text
+
+    def test_ini_keeps_overridden_active(self):
+        p = self._cli()()
+        p.parse_args(["--name=custom", "--endpoint-host=10.0.0.1"])
+        text = INIConfigGenerator().dump_to_string(p)
+        assert "name = custom" in text
+        assert "# name = custom" not in text
+        assert "host = 10.0.0.1" in text
+        assert "# host = 10.0.0.1" not in text
+        assert "# port = 8080" in text
+
+    def test_toml_comments_defaults(self):
+        text = TOMLConfigGenerator().dump_to_string(self._cli()())
+        assert "# name = " in text
+        assert '# host = "localhost"' in text
+
+    def test_env_comments_defaults(self):
+        p = self._cli()(auto_env_var_prefix="APP_")
+        text = EnvConfigGenerator().dump_to_string(p)
+        assert "# APP_NAME=app" in text
+        assert "# APP_ENDPOINT_HOST=localhost" in text
+
+    def test_comment_defaults_false_emits_all_active(self):
+        text = INIConfigGenerator(
+            comment_defaults=False,
+        ).dump_to_string(self._cli()())
+        assert "\nname = app" in text
+        assert "# name = app" not in text
+        assert "\nhost = localhost" in text
+
+    def test_blank_line_between_entries(self):
+        """Every field block is separated by a blank line so the
+        comment of one option can't touch the value of the previous."""
+        text = INIConfigGenerator().dump_to_string(self._cli()())
+        assert "# name = app\n\n" in text
+        # Each "\n\n"-separated block holds at most one setting line, so
+        # no value can sit directly above the next key's comment.
+        for block in text.split("\n\n"):
+            stripped = [ln for ln in block.splitlines() if ln]
+            settings = [
+                ln
+                for ln in stripped
+                if "=" in ln and not ln.lstrip().startswith("[")
+            ]
+            assert len(settings) <= 1, block
+
+    def test_secret_placeholder_stays_active(self):
+        """A masked secret is not its default — it must be emitted
+        active so the reader knows to fill it in."""
+
+        class CLI(argclass.Parser):
+            token: str = argclass.Secret(default="s3cr3t")
+
+        text = INIConfigGenerator(mask_secrets=True).dump_to_string(CLI())
+        placeholder = argclass.SecretString.PLACEHOLDER
+        assert f"\ntoken = {placeholder}" in text
+        assert f"# token = {placeholder}" not in text
+
+
 class TestEdgeCases:
     def test_base_generator_render_not_implemented(self):
         with pytest.raises(NotImplementedError):
@@ -1621,13 +1714,25 @@ class TestEnvStringEscaping:
             )
 
         text = EnvConfigGenerator().dump_to_string(App())
-        body_lines = [
-            line
-            for line in text.splitlines()
-            if line and not line.startswith("#")
-        ]
-        assert len(body_lines) == 1
-        assert body_lines[0] == r'BANNER="line1\nline2"'
+        banner_lines = [line for line in text.splitlines() if "BANNER=" in line]
+        assert len(banner_lines) == 1
+        assert banner_lines[0] == r'# BANNER="line1\nline2"'
+
+    def test_multiline_value_active_when_overridden(self):
+        """When the value is overridden it is emitted active (no
+        comment marker) and still stays on a single line."""
+
+        class App(argclass.Parser):
+            banner: str = argclass.Argument(
+                default="x",
+                env_var="BANNER",
+            )
+
+        p = App()
+        p.parse_args(["--banner=line1\nline2"])
+        text = EnvConfigGenerator().dump_to_string(p)
+        banner_lines = [line for line in text.splitlines() if "BANNER=" in line]
+        assert banner_lines == [r'BANNER="line1\nline2"']
 
 
 class TestDumpAcceptsPath:

@@ -122,6 +122,12 @@ def _shadowed_api_member(
     Inherited argclass members (arguments, groups, subparsers and
     their ``...`` placeholders) and plain data defaults remain
     legitimate redefinition targets.
+
+    Only members defined on the base *classes* count. Names supplied
+    by the metaclass (``abc.ABCMeta.register`` and friends) live on
+    the class object but never on instances, so a subparser/argument
+    named ``register`` shadows nothing the parser actually uses — a
+    ``getattr(base, key)`` here would falsely flag them.
     """
     own = attrs.get(key)
     if (
@@ -134,16 +140,21 @@ def _shadowed_api_member(
     ):
         return own
     for base in bases:
-        if not hasattr(base, key):
-            continue
-        value = getattr(base, key)
-        if value is None or value is Ellipsis:
+        for klass in base.__mro__:
+            if key not in klass.__dict__:
+                continue
+            value = klass.__dict__[key]
+            if value is None or value is Ellipsis:
+                return None
+            if isinstance(
+                value, (TypedArgument, AbstractGroup, AbstractParser)
+            ):
+                return None
+            if callable(value) or isinstance(
+                value, (property, classmethod, staticmethod)
+            ):
+                return value
             return None
-        if isinstance(value, (TypedArgument, AbstractGroup, AbstractParser)):
-            return None
-        if callable(value) or isinstance(value, property):
-            return value
-        return None
     return None
 
 
