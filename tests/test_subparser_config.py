@@ -340,10 +340,10 @@ class TestSubparserHelpEpilog:
         with pytest.raises(SystemExit):
             cli.parse_args(["serve", "--help"])
         out = squash(capsys.readouterr().out)
-        assert squash("Default values will based on") in out
+        assert squash("Default values come from") in out
         assert squash(f"'{ini_path}'") in out
         assert "'/missing.ini'" in out
-        assert squash("Now 1 files has been applied") in out
+        assert squash("Found and applied (1):") in out
         assert "PosixPath" not in out
 
     def test_nested_subcommand_help_lists_parent_files(
@@ -354,7 +354,7 @@ class TestSubparserHelpEpilog:
             cli.parse_args(["serve", "worker", "--help"])
         out = squash(capsys.readouterr().out)
         assert squash(f"'{ini_path}'") in out
-        assert squash("Now 1 files has been applied") in out
+        assert squash("Found and applied (1):") in out
 
     def test_subcommand_help_reports_config_argument_file(
         self, ini_path: Path, capsys: pytest.CaptureFixture[str]
@@ -363,7 +363,7 @@ class TestSubparserHelpEpilog:
         with pytest.raises(SystemExit):
             cli.parse_args(["--config", str(ini_path), "serve", "--help"])
         out = squash(capsys.readouterr().out)
-        assert squash("Now 1 files has been applied") in out
+        assert squash("Found and applied (1):") in out
         assert squash(str(ini_path.resolve())) in out
 
     def test_subcommand_help_lists_own_and_parent_files(
@@ -381,7 +381,7 @@ class TestSubparserHelpEpilog:
         out = squash(capsys.readouterr().out)
         assert squash(f"'{ini_path}'") in out
         assert squash(f"'{own}'") in out
-        assert squash("Now 2 files has been applied") in out
+        assert squash("Found and applied (2):") in out
 
     def test_subcommand_help_without_config_has_no_epilog(
         self, capsys: pytest.CaptureFixture[str]

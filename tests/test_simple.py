@@ -2220,7 +2220,7 @@ class TestParserConfigFilesEpilog:
 
         parser = Parser(config_files=[config_file])
 
-        assert "Default values will based on" in parser._epilog
+        assert "Default values come from" in parser._epilog
         assert "configuration files" in parser._epilog
 
     def test_epilog_lists_paths_as_strings(self, tmp_path, capsys):
@@ -2240,7 +2240,7 @@ class TestParserConfigFilesEpilog:
         assert "WindowsPath" not in out
         assert squash(f"'{config_file}'") in out
         assert "'/missing.ini'" in out
-        assert squash("Now 1 files has been applied") in out
+        assert squash("Found and applied (1):") in out
 
     def test_epilog_reports_config_argument_file(self, tmp_path, capsys):
         """The file passed via ``config_argument`` counts as applied."""
@@ -2254,7 +2254,7 @@ class TestParserConfigFilesEpilog:
         with pytest.raises(SystemExit):
             parser.parse_args(["--config", str(config_file), "--help"])
         out = squash(capsys.readouterr().out)
-        assert squash("Now 1 files has been applied") in out
+        assert squash("Found and applied (1):") in out
         assert squash(str(config_file.resolve())) in out
 
     def test_no_epilog_without_config(self, capsys):
