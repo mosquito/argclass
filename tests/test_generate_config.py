@@ -2552,3 +2552,180 @@ class TestConfigValuesInDump:
         arg = cli.__arguments__["name"]
         assert current_value(cli, "name", arg) == "app"
         assert current_value(cli, "name", arg, owner=cli) == "cfg"
+
+
+FORMATS = [
+    (INIConfigGenerator, argclass.INIDefaultsParser, "ini"),
+    (JSONConfigGenerator, argclass.JSONDefaultsParser, "json"),
+    (TOMLConfigGenerator, argclass.TOMLDefaultsParser, "toml"),
+]
+
+
+class TestSubparserRoundTrip:
+    """A dump of the whole command tree loads back through the same
+    parser class, for every format and both loading paths."""
+
+    @staticmethod
+    def make_cli() -> Type[argclass.Parser]:
+        class DB(argclass.Group):
+            host: str = "localhost"
+            port: int = 5432
+
+        class Auth(argclass.Group):
+            user: str = "admin"
+
+        class Worker(argclass.Parser):
+            threads: int = 4
+            tags: List[str] = argclass.Argument(
+                nargs=argclass.Nargs.ZERO_OR_MORE, default=["a", "b"]
+            )
+
+        class Serve(argclass.Parser):
+            port: int = 8080
+            db = DB()
+            worker = Worker()
+
+        class Deploy(argclass.Parser):
+            target: str = "production"
+            token: str = argclass.Secret(default="real-token")
+            auth = Auth()
+
+        class CLI(argclass.Parser):
+            debug: bool = False
+            name: str = "app"
+            serve = Serve()
+            deploy = Deploy()
+
+        return CLI
+
+    @staticmethod
+    def overridden(cli_cls: Type[argclass.Parser]) -> argclass.Parser:
+        """One instance per branch is parsed; the values are copied
+        into a single instance so the dump shows both branches."""
+        source = cli_cls()
+        source.parse_args(
+            [
+                "--debug",
+                "--name",
+                "svc",
+                "serve",
+                "--port",
+                "9",
+                "--db-host",
+                "db.example.com",
+                "worker",
+                "--threads",
+                "7",
+                "--tags",
+                "x",
+                "y",
+            ]
+        )
+        other = cli_cls()
+        other.parse_args(
+            ["deploy", "--target", "staging", "--auth-user", "root"]
+        )
+        source.deploy.target = other.deploy.target
+        source.deploy.auth.user = other.deploy.auth.user
+        return source
+
+    @staticmethod
+    def check(
+        loaded: argclass.Parser,
+        subcommand: List[str],
+        prefix: Optional[List[str]] = None,
+    ) -> None:
+        loaded.parse_args([*(prefix or []), *subcommand])
+        assert loaded.debug is True
+        assert loaded.name == "svc"
+        if subcommand[0] == "serve":
+            assert loaded.serve.port == 9
+            assert loaded.serve.db.host == "db.example.com"
+            assert loaded.serve.db.port == 5432
+            assert loaded.serve.worker.threads == 7
+            assert loaded.serve.worker.tags == ["x", "y"]
+        else:
+            assert loaded.deploy.target == "staging"
+            assert loaded.deploy.auth.user == "root"
+            assert loaded.deploy.token == "real-token"
+
+    @pytest.mark.parametrize("gen_cls,defaults_cls,ext", FORMATS)
+    @pytest.mark.parametrize("comment_defaults", [True, False])
+    @pytest.mark.parametrize("subcommand", [["serve", "worker"], ["deploy"]])
+    def test_config_files(
+        self,
+        tmp_path: Path,
+        gen_cls: type,
+        defaults_cls: type,
+        ext: str,
+        comment_defaults: bool,
+        subcommand: List[str],
+    ) -> None:
+        cli_cls = self.make_cli()
+        out = tmp_path / f"cfg.{ext}"
+        gen_cls(comment_defaults=comment_defaults).dump(
+            self.overridden(cli_cls), str(out)
+        )
+        loaded = cli_cls(config_files=[out], config_parser_class=defaults_cls)
+        self.check(loaded, subcommand)
+
+    @pytest.mark.parametrize("gen_cls,defaults_cls,ext", FORMATS)
+    @pytest.mark.parametrize("subcommand", [["serve", "worker"], ["deploy"]])
+    def test_config_argument(
+        self,
+        tmp_path: Path,
+        gen_cls: type,
+        defaults_cls: type,
+        ext: str,
+        subcommand: List[str],
+    ) -> None:
+        cli_cls = self.make_cli()
+        out = tmp_path / f"cfg.{ext}"
+        gen_cls().dump(self.overridden(cli_cls), str(out))
+        loaded = cli_cls(
+            config_argument="--config", config_parser_class=defaults_cls
+        )
+        self.check(loaded, subcommand, prefix=["--config", str(out)])
+
+    @pytest.mark.parametrize("gen_cls,defaults_cls,ext", FORMATS)
+    def test_defaults_only_template_loads_defaults(
+        self, tmp_path: Path, gen_cls: type, defaults_cls: type, ext: str
+    ) -> None:
+        """A template with every value commented out parses and leaves
+        every argument at its declared default."""
+        cli_cls = self.make_cli()
+        out = tmp_path / f"cfg.{ext}"
+        gen_cls().dump(cli_cls(), str(out))
+        loaded = cli_cls(config_files=[out], config_parser_class=defaults_cls)
+        loaded.parse_args(["serve", "worker"])
+        assert loaded.debug is False
+        assert loaded.serve.port == 8080
+        assert loaded.serve.worker.threads == 4
+        assert loaded.serve.worker.tags == ["a", "b"]
+
+    @pytest.mark.parametrize("gen_cls,defaults_cls,ext", FORMATS)
+    def test_masked_secret_in_subparser(
+        self, tmp_path: Path, gen_cls: type, defaults_cls: type, ext: str
+    ) -> None:
+        cli_cls = self.make_cli()
+        out = tmp_path / f"cfg.{ext}"
+        gen_cls(mask_secrets=True).dump(cli_cls(), str(out))
+        assert "real-token" not in out.read_text()
+        loaded = cli_cls(config_files=[out], config_parser_class=defaults_cls)
+        loaded.parse_args(["deploy"])
+        assert loaded.deploy.token == argclass.SecretString.PLACEHOLDER
+
+    @pytest.mark.parametrize("gen_cls,defaults_cls,ext", FORMATS)
+    def test_dump_of_loaded_parser_is_stable(
+        self, tmp_path: Path, gen_cls: type, defaults_cls: type, ext: str
+    ) -> None:
+        """dump → load → dump gives the same text."""
+        cli_cls = self.make_cli()
+        first = tmp_path / f"first.{ext}"
+        gen_cls(comment_defaults=False).dump(
+            self.overridden(cli_cls), str(first)
+        )
+        loaded = cli_cls(config_files=[first], config_parser_class=defaults_cls)
+        loaded.parse_args(["serve", "worker"])
+        second = gen_cls(comment_defaults=False).dump_to_string(loaded)
+        assert second == first.read_text()
