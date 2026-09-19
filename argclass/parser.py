@@ -829,7 +829,8 @@ class Parser(AbstractParser, Base):
         """
         super().__init__()
         self.current_subparsers: tuple[AbstractParser, ...] = ()
-        self._config_files = config_files
+        self._config_files: tuple[str | Path, ...] = tuple(config_files)
+        config_files = self._config_files
 
         # ``config_argument`` adds a CLI flag (e.g. "--config") that
         # lets the END USER point at a config file whose values become
@@ -868,22 +869,13 @@ class Parser(AbstractParser, Base):
         # Backward compatibility: ensure _values is populated for custom parsers
         if not self._config_parser._values:
             self._config_parser._values = dict(self._config)
-        filenames = self._config_parser.loaded_files
 
-        self._epilog = kwargs.pop("epilog", "")
-
-        if config_files:
-            # If not config files, we don't need to add any to the epilog
-            self._epilog += self.HELP_APPENDIX_PREAMBLE.format(
-                configs=repr(config_files),
-            )
-
-            if filenames:
-                self._epilog += self.HELP_APPENDIX_CURRENT.format(
-                    num_existent=len(filenames),
-                    existent=repr(list(map(str, filenames))),
-                )
-            self._epilog += self.HELP_APPENDIX_END
+        self._user_epilog: str = kwargs.pop("epilog", "")
+        # Config files a parent parser reads for this subparser:
+        # (declared, applied), as strings. Set by _bind_subparser.
+        self._inherited_config_files: tuple[
+            tuple[str, ...], tuple[str, ...]
+        ] = ((), ())
 
         self._auto_env_var_prefix = auto_env_var_prefix
         # Set by the parent parser when this parser is a subparser
@@ -947,6 +939,35 @@ class Parser(AbstractParser, Base):
         constructor ``config_files`` first, then the file passed via
         ``config_argument`` (highest priority last)."""
         return tuple(self._config_parser.loaded_files) + self._user_config_files
+
+    def _config_files_report(self) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        """Return ``(declared, applied)`` config file names as strings,
+        lowest priority first: the parent's files, then this parser's
+        own ``config_files``, then the ``config_argument`` file.
+        The report feeds the help epilog and is handed down to
+        subparsers."""
+        declared, applied = self._inherited_config_files
+        own_declared = tuple(str(path) for path in self._config_files)
+        own_applied = tuple(str(path) for path in self.loaded_config_files)
+        return declared + own_declared, applied + own_applied
+
+    @property
+    def _epilog(self) -> str:
+        """Help epilog: the user's ``epilog`` plus a note about the
+        config files, when any are declared or applied."""
+        declared, applied = self._config_files_report()
+        epilog = self._user_epilog
+        if not declared and not applied:
+            return epilog
+        epilog += self.HELP_APPENDIX_PREAMBLE.format(
+            configs=repr(list(declared)),
+        )
+        if applied:
+            epilog += self.HELP_APPENDIX_CURRENT.format(
+                num_existent=len(applied),
+                existent=repr(list(applied)),
+            )
+        return epilog + self.HELP_APPENDIX_END
 
     def _scan_config_argument(self, argv: list[str]) -> str | None:
         """First pass over argv: extract only the config flag value.
@@ -1033,6 +1054,7 @@ class Parser(AbstractParser, Base):
             self.env_var_prefix,
             name,
         )
+        subparser._inherited_config_files = self._config_files_report()
 
     def _config_value(
         self,
@@ -1317,6 +1339,7 @@ class Parser(AbstractParser, Base):
             current_parser, subparser_dests = subparser._make_parser(
                 subparsers.add_parser(
                     subparser_name,
+                    epilog=subparser._epilog,
                     **subparser._parser_kwargs,
                 ),
                 parent_chain=subparser_chain,
