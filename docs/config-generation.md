@@ -207,10 +207,82 @@ writes `host = prod.example.com`, `port = 9999`.
 
 ### Config-file defaults
 
-A parser instantiated with `config_files=[…]` loads those values
-during `parse_args`. Whatever the file contained ends up in the
-dump alongside any CLI overrides. This is the building block for
+A parser instantiated with `config_files=[…]` (or given a file via
+`config_argument`) contributes those values to the dump, together
+with any CLI overrides. This is the building block for
 **format conversion** (next section).
+
+## Subcommands
+
+Subparsers are part of the dump. Each subparser becomes a section
+named after its attribute, the same layout the config readers
+expect (see [Subparser Sections](config-file-reference.md#subparser-sections)),
+so one generated file describes the root parser and every
+subcommand and loads back through the same parser class:
+
+<!--- name: test_config_gen_subparsers --->
+```python
+import argclass
+
+class Database(argclass.Group):
+    host: str = "localhost"
+
+class Serve(argclass.Parser):
+    port: int = 8080
+    db = Database()
+
+class Deploy(argclass.Parser):
+    target: str = "production"
+
+class CLI(argclass.Parser):
+    debug: bool = False
+    serve = Serve()
+    deploy = Deploy()
+
+parser = CLI()
+parser.parse_args(["serve", "--port", "9000"])
+
+text = argclass.INIConfigGenerator().dump_to_string(parser)
+assert "[DEFAULT]\n# debug = false" in text
+assert "[serve]\nport = 9000" in text          # overridden: active
+assert "[serve.db]\n# host = localhost" in text
+assert "[deploy]\n# target = production" in text
+```
+
+A branch that was not selected on the command line still lands in
+the file, with the values its config files or env vars supply and
+its declared defaults otherwise. Pass `include_subparsers=False` to
+a generator to dump only the root parser and its groups:
+
+<!--- name: test_config_gen_subparsers_off --->
+```python
+import argclass
+
+class Serve(argclass.Parser):
+    port: int = 8080
+
+class CLI(argclass.Parser):
+    debug: bool = False
+    serve = Serve()
+
+text = argclass.INIConfigGenerator(
+    include_subparsers=False,
+).dump_to_string(CLI())
+assert "[serve]" not in text
+```
+
+`--generate-config` may be declared on the root parser or on a
+subcommand. Either way the dump starts at the root. Which values are
+visible depends on where the flag is placed, because argparse parses
+a subcommand into its own namespace:
+
+- `myapp --port 5 --generate-config - serve --port 9` — root
+  overrides are in, the subcommand has not been parsed yet, so
+  `[serve]` shows defaults.
+- `myapp serve --port 9 --generate-config -` (flag declared on
+  `Serve`) — `[serve]` shows `port = 9`; root values come from
+  instance state, env vars and config files, not from flags typed
+  before `serve`.
 
 ## Converting between config formats
 
@@ -520,15 +592,16 @@ credentials. Treat the output file like any credential-bearing file:
 
 ## Limitations
 
-- **Subparsers are skipped.** They represent runtime branches, not
-  config-time state. Dump each subparser separately by passing its
-  instance to the generator.
 - **JSON has no comments.** Help text is dropped in JSON output;
   INI, TOML, and `.env` formats include it.
 - **Mid-parse ordering.** CLI flags appearing AFTER
   `--generate-config` are not reflected in the dump — argparse
   invokes the action synchronously and the action exits. Put
-  overrides before the generation flag.
+  overrides before the generation flag. A subcommand is parsed into
+  its own namespace, so a flag declared on the root cannot see the
+  subcommand's arguments, and a flag declared on a subcommand cannot
+  see root flags typed before the subcommand (see
+  [Subcommands](#subcommands)).
 - **TOML is emitted by a minimal hand-rolled writer.** It covers
   the types argclass supports (`str`, `int`, `float`, `bool`,
   `list`, `None`). Exotic values fall back to `str()`.

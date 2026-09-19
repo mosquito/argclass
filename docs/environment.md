@@ -134,6 +134,53 @@ del os.environ["APP_ENDPOINT_CREDENTIALS_USERNAME"]
 del os.environ["APP_ENDPOINT_CREDENTIALS_PASSWORD"]
 ```
 
+## Subparser Environment Variables
+
+A subparser inherits `auto_env_var_prefix=` from its parent, extended
+with the subparser attribute name. A group inside a subparser and a
+nested subparser extend the name further, the same way nested groups
+do:
+
+<!--- name: test_env_subparsers --->
+```python
+import os
+import argclass
+
+os.environ["APP_SERVE_PORT"] = "9000"
+os.environ["APP_SERVE_DB_HOST"] = "db.example.com"
+os.environ["APP_SERVE_WORKER_THREADS"] = "8"
+
+class Database(argclass.Group):
+    host: str = "localhost"
+
+class Worker(argclass.Parser):
+    threads: int = 4
+
+class Serve(argclass.Parser):
+    port: int = 8080
+    db = Database()
+    worker = Worker()
+
+class CLI(argclass.Parser):
+    serve = Serve()
+
+cli = CLI(auto_env_var_prefix="APP_")
+cli.parse_args(["serve", "worker"])
+
+assert cli.serve.port == 9000
+assert cli.serve.db.host == "db.example.com"
+assert cli.serve.worker.threads == 8
+
+del os.environ["APP_SERVE_PORT"]
+del os.environ["APP_SERVE_DB_HOST"]
+del os.environ["APP_SERVE_WORKER_THREADS"]
+```
+
+An explicit `env_var=` on an argument, or an `auto_env_var_prefix=`
+passed to the subparser instance itself, takes precedence over the
+inherited prefix. `sanitize_env()` on the root parser also removes
+the variables a subcommand consumed.
+
 ## Priority
 
 Environment variables override config files but are overridden by CLI arguments:

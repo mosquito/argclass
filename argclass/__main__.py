@@ -425,12 +425,25 @@ class SubcommandDemo(argclass.Parser):
     The default __call__ auto-dispatches to the selected
     subcommand. Override it for custom logic.
 
+    Config files and env vars reach subcommands through the
+    attribute path: section [hello] and DEMO_HELLO_USER set the
+    ``user`` argument of ``hello``. A generated config lists every
+    subcommand as its own section.
+
     Try: subcommands hello --user Alice
     Try: subcommands info --verbose
+    Try: DEMO_HELLO_USER=Bob subcommands hello
+    Try: subcommands --generate-config -
     """
 
     hello = HelloCommand()
     info = InfoCommand()
+    generate_config: str = argclass.Argument(
+        action=argclass.GenerateConfigAction,
+        generator=argclass.INIConfigGenerator,
+        help="Write an INI template with every subcommand section "
+        "to FILE (use - for stdout)",
+    )
 
     def __call__(self) -> int:
         # Find a nested subparser (skip self in the chain)
@@ -548,7 +561,7 @@ class DemoParser(argclass.Parser):
     groups = GroupsDemo()
     secrets = SecretsDemo()
     env = EnvDemo()
-    subcommands = SubcommandDemo()
+    subcommands = SubcommandDemo(auto_env_var_prefix="DEMO_")
     genconfig = GenerateConfigDemo(auto_env_var_prefix="DEMO_")
 
     def __call__(self) -> int:

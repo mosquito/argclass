@@ -99,7 +99,10 @@ Naming follows the attribute path:
 - JSON/TOML: nested objects/tables
 
 `Group(prefix=...)` overrides only the CLI/env segment for that group;
-config section names always follow the attribute path. Class-body
+config section names always follow the attribute path. Subparsers
+follow the same rule: `[serve]`, `[serve.db]`, env `APP_SERVE_PORT`;
+a subparser reads the parent's config files and inherits its
+`auto_env_var_prefix`. Config generators walk subparsers too. Class-body
 Group/subparser instances are prototypes: every Parser instance works
 on its own copies, so one Group instance may be bound to several
 attributes (each binding is an independent copy). Only cyclic group
