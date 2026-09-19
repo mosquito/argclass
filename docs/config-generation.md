@@ -118,6 +118,39 @@ TOML and `.env` have a single comment character, so both kinds use `#`:
 # name = "app"
 ```
 
+An argument that accepts a fixed set of values — `Argument(choices=...)`,
+a `Literal[...]` annotation, or an `EnumArgument` — gets a `choices:`
+comment line after its help, so the template tells the reader what
+may go on the line:
+
+<!--- name: test_config_gen_choices --->
+```python
+from enum import Enum
+from typing import Literal
+import argclass
+
+class Color(Enum):
+    RED = "red"
+    GREEN = "green"
+
+class CLI(argclass.Parser):
+    mode: Literal["fast", "slow"] = argclass.Argument(
+        default="fast", help="Speed mode"
+    )
+    color: Color = argclass.EnumArgument(Color, default="RED")
+
+ini = argclass.INIConfigGenerator().dump_to_string(CLI())
+assert "; Speed mode\n; choices: fast, slow\n# mode = fast" in ini
+assert "; choices: RED, GREEN\n# color = RED" in ini
+
+toml = argclass.TOMLConfigGenerator().dump_to_string(CLI())
+assert "# choices: fast, slow\n# mode = \"fast\"" in toml
+```
+
+`EnumArgument(..., lowercase=True)` lists the lowercase member names,
+the same spelling the argument accepts. JSON carries no comments, so
+the line is dropped there as with help text.
+
 Override something and it flips to an active line, while the untouched
 neighbours stay commented for reference:
 

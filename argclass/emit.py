@@ -33,9 +33,11 @@ generated file reads like a hand-written template. Any field still at
 its declared default is written commented-out (so the defaults are
 visible for reference) while values you actually overrode via CLI /
 env / config stay active. Help text becomes comment lines above each
-key, and a blank line separates entries so a value never runs into the
-next key's comment. Pass ``comment_defaults=False`` to the generator to
-emit every field active instead (a full snapshot).
+key, an argument with ``choices`` (``Literal``, ``EnumArgument``)
+gets a ``choices: a, b, c`` comment line, and a blank line separates
+entries so a value never runs into the next key's comment. Pass
+``comment_defaults=False`` to the generator to emit every field
+active instead (a full snapshot).
 
 Security note: secret values are emitted as-is by default. Pass
 ``mask_secrets=True`` to the generator (or to its
@@ -265,6 +267,13 @@ class ConfigField:
         var is configured.
     help:
         Help text declared on the argument, or ``None``.
+    choices:
+        Accepted values, or ``None`` when the argument takes any
+        value. Filled from ``Argument(choices=...)``, a ``Literal``
+        annotation, or the member names of an ``EnumArgument``
+        (lowercase when it was declared with ``lowercase=True``).
+        Each item is :func:`normalize_value`-d. Comment-aware
+        generators list them above the key.
     is_default:
         ``True`` when the resolved value is still the argument's
         declared default (nothing overrode it via CLI / env / config).
@@ -284,6 +293,7 @@ class ConfigField:
     help: str | None
     is_default: bool = False
     subparser_path: tuple[str, ...] = ()
+    choices: tuple[Any, ...] | None = None
 
     @property
     def section_path(self) -> tuple[str, ...]:
@@ -451,6 +461,20 @@ def iter_subtree_fields(
         if mask_secrets and argument.secret and value is not None:
             value = SecretString.PLACEHOLDER
             is_default = False  # placeholder isn't the default
+        choices = (
+            tuple(normalize_value(c) for c in argument.choices)
+            if argument.choices
+            else None
+        )
+        if (
+            choices
+            and isinstance(raw, Enum)
+            and value not in choices
+            and str(value).lower() in choices
+        ):
+            # EnumArgument(lowercase=True) lists lowercase names; write
+            # the value in the same spelling as the listed choices.
+            value = str(value).lower()
         yield ConfigField(
             attr_path=attr_path + (name,),
             cli_path=cli_path + (name,),
@@ -462,6 +486,7 @@ def iter_subtree_fields(
             help=argument.help if argument.help else None,
             is_default=is_default,
             subparser_path=subparser_path,
+            choices=choices or None,
         )
     for group_name, group in node.__argument_groups__.items():
         seg = group_cli_segment(group, group_name)
@@ -586,8 +611,12 @@ class ConfigGenerator:
         self.comment_defaults = comment_defaults
         self.include_subparsers = include_subparsers
 
+    #: Label of the comment line that lists the accepted values.
+    choices_label: str = "choices:"
+
     def _field_block(self, field: ConfigField, setting: str) -> str:
-        """Render one field: help comment(s) above the ``setting`` line
+        """Render one field: help comment(s), then the accepted values
+        when the argument has ``choices``, above the ``setting`` line
         (already rendered by the caller), with the setting itself
         commented out when ``comment_defaults`` is on and the field is
         still at its default. Help is split per line so a multi-line
@@ -598,6 +627,9 @@ class ConfigGenerator:
         if field.help:
             for help_line in str(field.help).splitlines():
                 lines.append(f"{marker} {help_line}" if help_line else marker)
+        if field.choices:
+            listed = ", ".join(str(choice) for choice in field.choices)
+            lines.append(f"{marker} {self.choices_label} {listed}")
         if self.comment_defaults and field.is_default:
             lines.append(f"{self.default_comment_marker} {setting}")
         else:

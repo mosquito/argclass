@@ -1501,8 +1501,8 @@ class TestCrossFormatIterableRoundTrip:
         ext: str,
     ) -> None:
         """``EnumArgument(lowercase=True)`` accepts both cases on
-        read; the dump emits canonical ``.name`` and the lenient
-        converter rehydrates it."""
+        read; the dump writes the lowercase name, the spelling its
+        ``choices`` list, and the lenient converter rehydrates it."""
 
         class Color(Enum):
             RED = "red"
@@ -2729,3 +2729,82 @@ class TestSubparserRoundTrip:
         loaded.parse_args(["serve", "worker"])
         second = gen_cls(comment_defaults=False).dump_to_string(loaded)
         assert second == first.read_text()
+
+
+class TestChoicesComment:
+    """Comment-aware formats list the accepted values above the key."""
+
+    @staticmethod
+    def make_cli() -> Type[argclass.Parser]:
+        from typing import Literal
+
+        class Color(Enum):
+            RED = "red"
+            GREEN = "green"
+
+        class CLI(argclass.Parser):
+            mode: Literal["fast", "slow"] = argclass.Argument(
+                default="fast", help="Speed mode"
+            )
+            level: str = argclass.Argument(
+                default="low", choices=["low", "mid", "high"]
+            )
+            color: Color = argclass.EnumArgument(Color, default="RED")
+            shade: Color = argclass.EnumArgument(
+                Color, default="GREEN", lowercase=True
+            )
+            name: str = argclass.Argument(default="app", help="Name")
+
+        return CLI
+
+    def test_field_choices(self) -> None:
+        fields = {f.key: f for f in iter_config_fields(self.make_cli()())}
+        assert fields["mode"].choices == ("fast", "slow")
+        assert fields["level"].choices == ("low", "mid", "high")
+        assert fields["color"].choices == ("RED", "GREEN")
+        assert fields["shade"].choices == ("red", "green")
+        assert fields["name"].choices is None
+
+    def test_ini_help_then_choices_then_setting(self) -> None:
+        text = INIConfigGenerator().dump_to_string(self.make_cli()())
+        assert "; Speed mode\n; choices: fast, slow\n# mode = fast\n" in text
+        assert "; choices: low, mid, high\n# level = low\n" in text
+        assert "; choices: RED, GREEN\n# color = RED\n" in text
+        assert "; choices: red, green\n# shade = green\n" in text
+        assert "; Name\n# name = app\n" in text
+        assert "choices:" not in text.split("; Name")[1]
+
+    def test_ini_active_value_keeps_choices(self) -> None:
+        cli = self.make_cli()()
+        cli.parse_args(["--mode", "slow"])
+        text = INIConfigGenerator().dump_to_string(cli)
+        assert "; Speed mode\n; choices: fast, slow\nmode = slow\n" in text
+
+    def test_toml_marker(self) -> None:
+        text = TOMLConfigGenerator().dump_to_string(self.make_cli()())
+        assert '# Speed mode\n# choices: fast, slow\n# mode = "fast"\n' in text
+
+    def test_env_marker(self) -> None:
+        cli = self.make_cli()(auto_env_var_prefix="APP_")
+        text = EnvConfigGenerator().dump_to_string(cli)
+        assert "# Speed mode\n# choices: fast, slow\n# APP_MODE=fast\n" in text
+
+    def test_json_has_no_choices(self) -> None:
+        text = JSONConfigGenerator().dump_to_string(self.make_cli()())
+        assert "choices" not in text
+
+    def test_custom_label(self) -> None:
+        class Gen(INIConfigGenerator):
+            choices_label = "one of:"
+
+        text = Gen().dump_to_string(self.make_cli()())
+        assert "; one of: fast, slow\n" in text
+
+    def test_lowercase_enum_value_matches_choices(self) -> None:
+        cli = self.make_cli()()
+        cli.parse_args(["--shade", "red"])
+        text = INIConfigGenerator().dump_to_string(cli)
+        assert "; choices: red, green\nshade = red\n" in text
+        data = json.loads(JSONConfigGenerator().dump_to_string(cli))
+        assert data["shade"] == "red"
+        assert data["color"] == "RED"
