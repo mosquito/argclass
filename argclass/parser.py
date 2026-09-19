@@ -923,6 +923,11 @@ class Parser(AbstractParser, Base):
         subparsers: dict[str, Any] = {}
         for name, subparser in cls.__subparsers__.items():
             sub_clone = copy.copy(subparser)
+            # Hand down the parent's config files and env prefix now,
+            # so a dump of an unparsed tree already sees them. The
+            # values are refreshed in _fill_subparsers, where the
+            # config_argument file joins the layers.
+            self._bind_subparser(name, sub_clone)
             # The shallow copy still references the prototype's own
             # member clones and env-var bookkeeping; rebuild them.
             sub_clone._materialize_members()
@@ -1015,6 +1020,50 @@ class Parser(AbstractParser, Base):
         layers.extend(self._inherited_config_layers)
         layers.append((self._config_parser, None))
         return layers
+
+    def _bind_subparser(self, name: str, subparser: "Parser") -> None:
+        """Give ``subparser`` the config layers and the env prefix it
+        inherits from this parser under attribute ``name``.
+
+        The subparser reads the parent's config files under its own
+        section, so one file can describe the whole tree. Env vars
+        follow the attribute path too: ``APP_SERVE_PORT``.
+        """
+        subparser._inherited_config_layers = [
+            (config_parser, join_config_section(prefix, name))
+            for config_parser, prefix in self._config_layers()
+        ]
+        subparser._inherited_env_prefix = child_env_prefix(
+            self.env_var_prefix,
+            name,
+        )
+
+    def _config_value(
+        self,
+        name: str,
+        argument: TypedArgument,
+        section: str | None = None,
+    ) -> Any:
+        """Return the config-file value for ``name`` converted with
+        ``argument.type``, or ``None`` when no config file sets it.
+
+        Config readers deliver strings (INI) or native values
+        (JSON/TOML). The conversion makes both look like the value
+        argclass binds at parse time.
+        """
+        kind = self._get_value_kind(argument)
+        value = self._get_config_default(name, kind, section=section)
+        if value is None or argument.type is None:
+            return value
+        type_func = argument.type
+        if isinstance(value, (list, tuple)):
+            return [type_func(x) for x in value]
+        try:
+            already_correct = isinstance(value, type_func)
+        except TypeError:
+            # type_func is a callable, not a type
+            already_correct = False
+        return value if already_correct else type_func(value)
 
     def _get_config_default(
         self,
@@ -1111,25 +1160,7 @@ class Parser(AbstractParser, Base):
             if not aliases:
                 aliases.add(f"--{self.get_cli_name(name)}")
 
-            # Get default from config with type-aware loading
-            kind = self._get_value_kind(argument)
-            config_default = self._get_config_default(name, kind)
-
-            # Apply type converter to config values
-            if config_default is not None and argument.type is not None:
-                if isinstance(config_default, (list, tuple)):
-                    config_default = [argument.type(x) for x in config_default]
-                else:
-                    # Check if already correct type (only for types)
-                    type_func = argument.type
-                    try:
-                        is_correct_type = isinstance(config_default, type_func)
-                    except TypeError:
-                        # type_func is a function, not a type
-                        is_correct_type = False
-                    if not is_correct_type:
-                        config_default = type_func(config_default)
-
+            config_default = self._config_value(name, argument)
             default = (
                 config_default
                 if config_default is not None
@@ -1211,28 +1242,11 @@ class Parser(AbstractParser, Base):
             if not aliases:
                 aliases.add(f"--{self.get_cli_name(dest)}")
 
-            # Get default from config with type-aware loading
-            kind = self._get_value_kind(argument)
-            config_default = self._get_config_default(
+            config_default = self._config_value(
                 name,
-                kind,
+                argument,
                 section=section,
             )
-
-            # Apply type converter to config values
-            if config_default is not None and argument.type is not None:
-                type_func = argument.type
-                if isinstance(config_default, (list, tuple)):
-                    config_default = [type_func(x) for x in config_default]
-                else:
-                    val = config_default
-                    try:
-                        already_correct = isinstance(val, type_func)
-                    except TypeError:
-                        already_correct = False
-                    if not already_correct:
-                        config_default = type_func(val)
-
             default = (
                 config_default
                 if config_default is not None
@@ -1303,20 +1317,7 @@ class Parser(AbstractParser, Base):
         for subparser_name, subparser in self.__subparsers__.items():
             # Build the chain for this subparser level
             subparser_chain = (subparser,) + parent_chain
-            # The subparser reads the parent's config files under its
-            # own section, so one file can describe the whole tree.
-            subparser._inherited_config_layers = [
-                (
-                    config_parser,
-                    join_config_section(prefix, subparser_name),
-                )
-                for config_parser, prefix in self._config_layers()
-            ]
-            # Env vars follow the attribute path too: APP_SERVE_PORT.
-            subparser._inherited_env_prefix = child_env_prefix(
-                self.env_var_prefix,
-                subparser_name,
-            )
+            self._bind_subparser(subparser_name, subparser)
             current_parser, subparser_dests = subparser._make_parser(
                 subparsers.add_parser(
                     subparser_name,

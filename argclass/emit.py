@@ -109,6 +109,8 @@ def current_value(
     namespace: argparse.Namespace | None = None,
     dest: str | None = None,
     env_var: str | None = None,
+    owner: AbstractParser | None = None,
+    section: str | None = None,
 ) -> Any:
     """Read the current value for ``name`` on a Parser/Group instance.
 
@@ -124,11 +126,15 @@ def current_value(
        attributes argclass populated after parsing).
     3. ``os.environ[env_var]`` — covers env vars when the dump
        runs before argclass has applied them to ``__dict__``.
-    4. The argument's declared default.
+    4. The config files of ``owner`` (the parser that owns
+       ``target``) under ``section`` — covers a parser that was not
+       parsed yet and a subparser that was not selected, because
+       argclass applies config values only to the parsed branch.
+    5. The argument's declared default.
 
     Env values arrive as strings; we apply ``argument.type`` when it
     is callable, so the dump reflects the same type argclass would
-    bind at parse time.
+    bind at parse time. Config values are converted the same way.
     """
     if namespace is not None and dest is not None and hasattr(namespace, dest):
         value = getattr(namespace, dest)
@@ -140,6 +146,10 @@ def current_value(
         raw = os.environ.get(env_var)
         if raw is not None:
             return coerce_env_default(raw, argument)
+    if owner is not None:
+        value = getattr(owner, "_config_value")(name, argument, section=section)
+        if value is not None:
+            return value
     return argument.default
 
 
@@ -376,6 +386,7 @@ def iter_subtree_fields(
     cli_path: tuple[str, ...] = (),
     subparser_path: tuple[str, ...] = (),
     dest_path: tuple[str, ...] | None = None,
+    owner: AbstractParser | None = None,
     auto_prefix: str | None = None,
     namespace: argparse.Namespace | None = None,
     namespace_targets: frozenset[int] | None = None,
@@ -391,6 +402,9 @@ def iter_subtree_fields(
     ``dest_path`` is the part of ``cli_path`` below the owning
     subparser; it forms the argparse ``dest``. It defaults to
     ``cli_path`` and is reset when the walk enters a subparser.
+    ``owner`` is the parser that owns ``target`` (``target`` itself
+    for a parser node); it supplies config-file values for fields
+    that no parse has bound yet.
 
     ``namespace_targets`` limits which parsers read from
     ``namespace`` (see :func:`namespace_targets`); ``None`` lets every
@@ -400,6 +414,10 @@ def iter_subtree_fields(
     node = cast(Any, target)
     if dest_path is None:
         dest_path = cli_path
+    if owner is None and isinstance(node, AbstractParser):
+        owner = node
+    # Config section of this node relative to its owning parser.
+    section = ".".join(attr_path[len(subparser_path) :]) or None
     # Groups share the namespace of their parser, so only a parser
     # node can lose it. The full namespace still travels down to the
     # subparsers, where each one is checked again.
@@ -423,6 +441,8 @@ def iter_subtree_fields(
             namespace=own_namespace,
             dest=dest,
             env_var=env_var,
+            owner=owner,
+            section=section,
         )
         value = normalize_value(raw)
         is_default = argument.has_default and value == normalize_value(
@@ -452,6 +472,7 @@ def iter_subtree_fields(
             cli_path=cli_path + child_seg,
             subparser_path=subparser_path,
             dest_path=dest_path + child_seg,
+            owner=owner,
             auto_prefix=auto_prefix,
             namespace=own_namespace,
             namespace_targets=namespace_targets,
@@ -471,6 +492,7 @@ def iter_subtree_fields(
             cli_path=cli_path + (sub_name,),
             subparser_path=subparser_path + (sub_name,),
             dest_path=(),
+            owner=subparser,
             auto_prefix=subparser_env_prefix(subparser, auto_prefix, sub_name),
             namespace=namespace,
             namespace_targets=namespace_targets,

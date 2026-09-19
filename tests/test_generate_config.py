@@ -2460,3 +2460,95 @@ class TestSubparserEnv:
         cli = self.make_cli()(auto_env_var_prefix="APP_")
         text = INIConfigGenerator().dump_to_string(cli)
         assert "[serve]\nport = 9\n" in text
+
+
+class TestConfigValuesInDump:
+    """Config-file values reach the dump even for fields no parse has
+    bound: an unparsed parser and an unselected subparser branch."""
+
+    @staticmethod
+    def make_cli() -> Type[argclass.Parser]:
+        class Auth(argclass.Group):
+            user: str = "admin"
+
+        class Deploy(argclass.Parser):
+            target: str = "production"
+            retries: int = 1
+            auth = Auth()
+
+        class Serve(argclass.Parser):
+            port: int = 8080
+
+        class CLI(argclass.Parser):
+            name: str = "app"
+            serve = Serve()
+            deploy = Deploy()
+
+        return CLI
+
+    INI = (
+        "[DEFAULT]\nname = from-config\n"
+        "[deploy]\ntarget = staging\nretries = 3\n"
+        "[deploy.auth]\nuser = root\n"
+    )
+
+    def test_fresh_parser_dump_reflects_config_files(
+        self, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "app.ini"
+        path.write_text(self.INI)
+        cli = self.make_cli()(config_files=[path])
+        values = {f.attr_path: f.value for f in iter_config_fields(cli)}
+        assert values[("name",)] == "from-config"
+        assert values[("deploy", "target")] == "staging"
+        assert values[("deploy", "retries")] == 3
+        assert values[("deploy", "auth", "user")] == "root"
+        assert values[("serve", "port")] == 8080
+
+    def test_unselected_branch_reflects_config_files(
+        self, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "app.ini"
+        path.write_text(self.INI)
+        cli = self.make_cli()(config_files=[path])
+        cli.parse_args(["serve"])
+        text = INIConfigGenerator(comment_defaults=False).dump_to_string(cli)
+        assert "[deploy]\ntarget = staging\n\nretries = 3\n" in text
+        assert "[deploy.auth]\nuser = root\n" in text
+
+    def test_config_argument_file_reaches_unselected_branch(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        path = tmp_path / "app.ini"
+        path.write_text(self.INI)
+
+        class CLI(self.make_cli()):  # type: ignore[misc,valid-type]
+            generate_config = argclass.Argument(
+                action=GenerateConfigAction,
+                generator=INIConfigGenerator(comment_defaults=False),
+            )
+
+        with pytest.raises(SystemExit):
+            CLI(config_argument="--config").parse_args(
+                ["--config", str(path), "--generate-config", "-"]
+            )
+        out = capsys.readouterr().out
+        assert "[deploy]\ntarget = staging\n" in out
+
+    def test_env_wins_over_config_in_dump(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        path = tmp_path / "app.ini"
+        path.write_text(self.INI)
+        monkeypatch.setenv("APP_DEPLOY_RETRIES", "9")
+        cli = self.make_cli()(config_files=[path], auto_env_var_prefix="APP_")
+        values = {f.attr_path: f.value for f in iter_config_fields(cli)}
+        assert values[("deploy", "retries")] == 9
+
+    def test_current_value_reads_owner_config(self, tmp_path: Path) -> None:
+        path = tmp_path / "app.ini"
+        path.write_text("[DEFAULT]\nname = cfg\n")
+        cli = self.make_cli()(config_files=[path])
+        arg = cli.__arguments__["name"]
+        assert current_value(cli, "name", arg) == "app"
+        assert current_value(cli, "name", arg, owner=cli) == "cfg"
