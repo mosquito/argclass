@@ -8,6 +8,7 @@ from pathlib import Path
 from sphinx.application import Sphinx
 
 # (stem, title, description, optional)
+# A stem is the page path relative to the docs root, without ".md".
 _PAGES: list[tuple[str, str, str, bool]] = [
     (
         "quickstart",
@@ -37,13 +38,19 @@ _PAGES: list[tuple[str, str, str, bool]] = [
     (
         "config-files",
         "Config Files",
-        "INI, JSON, and TOML configuration file support",
+        "INI, JSON, and TOML defaults via config_files= and config_argument=",
+        False,
+    ),
+    (
+        "config-file-reference",
+        "Config File Syntax",
+        "On-disk layout: sections for groups and subcommands, booleans, lists",
         False,
     ),
     (
         "config-generation",
         "Generating Config Files",
-        "Writing INI/JSON/TOML/.env from a parser",
+        "Writing INI/JSON/TOML/.env from a parser, the inverse of reading",
         False,
     ),
     (
@@ -78,7 +85,36 @@ _PAGES: list[tuple[str, str, str, bool]] = [
         True,
     ),
     ("integrations", "Integrations", "Using argclass with other tools", True),
-    ("security", "Security", "Security policy and best practices", True),
+    (
+        "explanation/why-argclass",
+        "Why argclass?",
+        "Design goals and the gap between argparse and Click/Typer",
+        True,
+    ),
+    (
+        "explanation/parsers-and-groups",
+        "Parsers, Groups & Subparsers",
+        "Mental model: Parser vs Group vs subcommand, prototype copies",
+        True,
+    ),
+    (
+        "explanation/configuration-model",
+        "The Configuration Model",
+        "One priority chain: defaults < config files < user file < env < CLI",
+        True,
+    ),
+    (
+        "explanation/type-system",
+        "Types & Custom Actions",
+        "type vs converter pipeline and the argparse passthrough",
+        True,
+    ),
+    (
+        "explanation/security",
+        "Security Checklist",
+        "Security best practices for secrets and sensitive data",
+        True,
+    ),
 ]
 
 
