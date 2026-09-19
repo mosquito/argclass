@@ -141,6 +141,19 @@ def own_annotation_keys(cls: type) -> frozenset[str]:
     )
 
 
+def child_env_prefix(parent_prefix: str | None, name: str) -> str | None:
+    """Return the auto env-var prefix a subparser inherits.
+
+    ``"APP_"`` and ``"serve"`` give ``"APP_SERVE_"``, so a ``port``
+    argument of the subparser reads ``APP_SERVE_PORT``. This is the
+    same rule a group applies through its ``dest``. Return ``None``
+    when the parent has no prefix.
+    """
+    if parent_prefix is None:
+        return None
+    return f"{parent_prefix}{name}_".upper()
+
+
 def parse_bool(value: str) -> bool:
     """Parse a string to boolean."""
     return value.lower() in TEXT_TRUE_VALUES

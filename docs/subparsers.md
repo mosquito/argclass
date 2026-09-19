@@ -108,6 +108,54 @@ assert cli.deploy.environment == "production"
 assert cli.deploy() is True  # Returns parent's verbose
 ```
 
+## Config Files and Environment Variables
+
+A subcommand reads the same config files and env vars as its parent.
+In a config file the subcommand is a section named after its
+attribute; with `auto_env_var_prefix=` its env vars carry the
+attribute name after the prefix. Both follow the attribute path,
+exactly like [groups](groups.md):
+
+<!--- name: test_subparsers_config_env --->
+```python
+import os
+import argclass
+from pathlib import Path
+from tempfile import NamedTemporaryFile
+
+class Database(argclass.Group):
+    host: str = "localhost"
+
+class Serve(argclass.Parser):
+    port: int = 8080
+    db = Database()
+
+class CLI(argclass.Parser):
+    debug: bool = False
+    serve = Serve()
+
+with NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as f:
+    f.write("[DEFAULT]\ndebug = true\n[serve]\nport = 9000\n")
+    config_path = f.name
+
+os.environ["APP_SERVE_DB_HOST"] = "db.example.com"
+
+cli = CLI(config_files=[config_path], auto_env_var_prefix="APP_")
+cli.parse_args(["serve"])
+assert cli.debug is True
+assert cli.serve.port == 9000                 # from [serve]
+assert cli.serve.db.host == "db.example.com"  # from APP_SERVE_DB_HOST
+
+del os.environ["APP_SERVE_DB_HOST"]
+Path(config_path).unlink()
+```
+
+The full section and env var naming rules are in
+[Config File Syntax → Subparser Sections](config-file-reference.md#subparser-sections)
+and [Environment Variables → Subparsers](environment.md#subparser-environment-variables).
+A generated config file (see [Generating Config Files](config-generation.md#subcommands))
+covers every subcommand with the same layout.
+
 ## Nested Subcommands
 
 For complex CLIs, subcommands can have their own subcommands, creating

@@ -1501,8 +1501,8 @@ class TestCrossFormatIterableRoundTrip:
         ext: str,
     ) -> None:
         """``EnumArgument(lowercase=True)`` accepts both cases on
-        read; the dump emits canonical ``.name`` and the lenient
-        converter rehydrates it."""
+        read; the dump writes the lowercase name, the spelling its
+        ``choices`` list, and the lenient converter rehydrates it."""
 
         class Color(Enum):
             RED = "red"
@@ -2083,3 +2083,728 @@ class TestMaskSecrets:
         assert f"api_key = {argclass.SecretString.PLACEHOLDER}" in text
         assert "sk-real-key" not in text
         assert "host = localhost" in text
+
+
+class TestSubparsers:
+    """Subparsers are walked; each one becomes a section named after
+    its attribute, the same rule the config readers apply."""
+
+    @staticmethod
+    def make_tree() -> Type[argclass.Parser]:
+        class DB(argclass.Group):
+            host: str = "localhost"
+            port: int = 5432
+
+        class Worker(argclass.Parser):
+            threads: int = argclass.Argument(default=4, help="thread count")
+
+        class Serve(argclass.Parser):
+            port: int = 8080
+            db = DB()
+            worker = Worker()
+
+        class Deploy(argclass.Parser):
+            target: str = "production"
+            version = argclass.Argument(
+                action=argclass.Actions.VERSION, version="1.0"
+            )
+
+        class CLI(argclass.Parser):
+            debug: bool = False
+            serve = Serve()
+            deploy = Deploy()
+
+        return CLI
+
+    def test_walk_order_and_paths(self) -> None:
+        fields = list(iter_config_fields(self.make_tree()()))
+        assert [f.attr_path for f in fields] == [
+            ("debug",),
+            ("serve", "port"),
+            ("serve", "db", "host"),
+            ("serve", "db", "port"),
+            ("serve", "worker", "threads"),
+            ("deploy", "target"),
+        ]
+        by_path = {f.attr_path: f for f in fields}
+        assert by_path[("serve", "db", "host")].dest == "db_host"
+        assert by_path[("serve", "db", "host")].cli_path == (
+            "serve",
+            "db",
+            "host",
+        )
+        assert by_path[("serve", "db", "host")].subparser_path == ("serve",)
+        assert by_path[("serve", "worker", "threads")].dest == "threads"
+        assert by_path[("serve", "worker", "threads")].subparser_path == (
+            "serve",
+            "worker",
+        )
+        assert by_path[("debug",)].subparser_path == ()
+
+    def test_non_config_action_inside_subparser_skipped(self) -> None:
+        fields = list(iter_config_fields(self.make_tree()()))
+        assert ("deploy", "version") not in {f.attr_path for f in fields}
+
+    def test_include_subparsers_false(self) -> None:
+        cli = self.make_tree()()
+        fields = list(iter_config_fields(cli, include_subparsers=False))
+        assert [f.attr_path for f in fields] == [("debug",)]
+        text = INIConfigGenerator(include_subparsers=False).dump_to_string(
+            cli,
+        )
+        assert "[serve" not in text
+        assert "[deploy]" not in text
+
+    def test_ini_sections(self) -> None:
+        cli = self.make_tree()()
+        text = INIConfigGenerator(comment_defaults=False).dump_to_string(cli)
+        assert text == (
+            "[DEFAULT]\n"
+            "debug = false\n"
+            "\n"
+            "[serve]\n"
+            "port = 8080\n"
+            "\n"
+            "[serve.db]\n"
+            "host = localhost\n"
+            "\n"
+            "port = 5432\n"
+            "\n"
+            "[serve.worker]\n"
+            "; thread count\n"
+            "threads = 4\n"
+            "\n"
+            "[deploy]\n"
+            "target = production\n"
+        )
+
+    def test_ini_template_keeps_default_sections(self) -> None:
+        """A section whose keys are all at their defaults still gets
+        its header; the keys are commented out."""
+        cli = self.make_tree()()
+        text = INIConfigGenerator().dump_to_string(cli)
+        assert "[serve.worker]\n; thread count\n# threads = 4\n" in text
+        assert "[deploy]\n# target = production\n" in text
+
+    def test_toml_tables(self) -> None:
+        cli = self.make_tree()()
+        text = TOMLConfigGenerator(comment_defaults=False).dump_to_string(cli)
+        assert text == (
+            "debug = false\n"
+            "\n"
+            "[serve]\n"
+            "port = 8080\n"
+            "\n"
+            "[serve.db]\n"
+            'host = "localhost"\n'
+            "\n"
+            "port = 5432\n"
+            "\n"
+            "[serve.worker]\n"
+            "# thread count\n"
+            "threads = 4\n"
+            "\n"
+            "[deploy]\n"
+            'target = "production"\n'
+        )
+
+    def test_json_nesting(self) -> None:
+        cli = self.make_tree()()
+        data = json.loads(JSONConfigGenerator().dump_to_string(cli))
+        assert data == {
+            "debug": False,
+            "serve": {
+                "port": 8080,
+                "db": {"host": "localhost", "port": 5432},
+                "worker": {"threads": 4},
+            },
+            "deploy": {"target": "production"},
+        }
+
+    def test_parsed_values_of_selected_subparser(self) -> None:
+        cli = self.make_tree()()
+        cli.parse_args(
+            [
+                "serve",
+                "--port",
+                "1",
+                "--db-host",
+                "x",
+                "worker",
+                "--threads",
+                "9",
+            ]
+        )
+        text = INIConfigGenerator().dump_to_string(cli)
+        assert "[serve]\nport = 1\n" in text
+        assert "[serve.db]\nhost = x\n" in text
+        assert "threads = 9\n" in text
+        # The unselected branch keeps its defaults.
+        assert "# target = production" in text
+
+    def test_secret_masked_inside_subparser(self) -> None:
+        class Serve(argclass.Parser):
+            token: str = argclass.Secret(default="real")
+
+        class CLI(argclass.Parser):
+            serve = Serve()
+
+        text = INIConfigGenerator(mask_secrets=True).dump_to_string(CLI())
+        assert f"[serve]\ntoken = {argclass.SecretString.PLACEHOLDER}\n" in text
+        assert "real" not in text
+
+    def test_action_dumps_all_subparsers(self, tmp_path: Path) -> None:
+        class Serve(argclass.Parser):
+            port: int = 8080
+
+        class CLI(argclass.Parser):
+            debug: bool = False
+            serve = Serve()
+            generate_config = argclass.Argument(
+                action=GenerateConfigAction,
+                generator=INIConfigGenerator(comment_defaults=False),
+            )
+
+        out = tmp_path / "cfg.ini"
+        with pytest.raises(SystemExit) as exc:
+            CLI().parse_args(["--generate-config", str(out)])
+        assert exc.value.code == 0
+        assert out.read_text() == (
+            "[DEFAULT]\ndebug = false\n\n[serve]\nport = 8080\n"
+        )
+
+
+class TestSubparserNamespace:
+    """A parse namespace is read only by the parser that owns the
+    Action and by the selected subparsers below it."""
+
+    @staticmethod
+    def make_cli(generator: ConfigGenerator) -> Type[argclass.Parser]:
+        class Worker(argclass.Parser):
+            threads: int = 4
+            generate_config = argclass.Argument(
+                action=GenerateConfigAction, generator=generator
+            )
+
+        class Serve(argclass.Parser):
+            port: int = 8080
+            worker = Worker()
+            generate_config = argclass.Argument(
+                action=GenerateConfigAction, generator=generator
+            )
+
+        class Deploy(argclass.Parser):
+            port: int = 22
+
+        class CLI(argclass.Parser):
+            port: int = 1
+            debug: bool = False
+            serve = Serve()
+            deploy = Deploy()
+            generate_config = argclass.Argument(
+                action=GenerateConfigAction, generator=generator
+            )
+
+        return CLI
+
+    def test_unselected_branch_ignores_same_named_dest(self) -> None:
+        cli = self.make_cli(INIConfigGenerator())()
+        namespace = argparse.Namespace(port=9, current_subparsers=(cli.serve,))
+        fields = {
+            f.attr_path: f.value
+            for f in iter_config_fields(cli, namespace=namespace)
+        }
+        assert fields[("serve", "port")] == 9
+        assert fields[("deploy", "port")] == 22
+
+    def test_owner_below_root_shields_root_and_ancestors(self) -> None:
+        cli = self.make_cli(INIConfigGenerator())()
+        cli.serve.__parent__ = cli
+        cli.serve.worker.__parent__ = cli.serve
+        namespace = argparse.Namespace(
+            port=9,
+            threads=7,
+            current_subparsers=(cli.serve.worker, cli.serve),
+        )
+        fields = {
+            f.attr_path: f.value
+            for f in iter_config_fields(
+                cli, namespace=namespace, namespace_owner=cli.serve.worker
+            )
+        }
+        assert fields[("serve", "worker", "threads")] == 7
+        assert fields[("serve", "port")] == 8080
+        assert fields[("port",)] == 1
+
+    def test_action_on_root_before_subcommand(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Values of the subcommand are not parsed yet when the root
+        Action fires, so the subcommand section shows defaults."""
+        cli = self.make_cli(INIConfigGenerator(comment_defaults=False))()
+        with pytest.raises(SystemExit):
+            cli.parse_args(
+                [
+                    "--port",
+                    "5",
+                    "--generate-config",
+                    "-",
+                    "serve",
+                    "--port",
+                    "9",
+                ]
+            )
+        out = capsys.readouterr().out
+        assert "[DEFAULT]\nport = 5\n" in out
+        assert "[serve]\nport = 8080\n" in out
+
+    def test_action_inside_subparser_dumps_from_root(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        cli = self.make_cli(INIConfigGenerator(comment_defaults=False))()
+        with pytest.raises(SystemExit) as exc:
+            cli.parse_args(["serve", "--port", "9", "--generate-config", "-"])
+        assert exc.value.code == 0
+        out = capsys.readouterr().out
+        assert out.startswith("[DEFAULT]\nport = 1\n")
+        assert "[serve]\nport = 9\n" in out
+        assert "[serve.worker]\nthreads = 4\n" in out
+        assert "[deploy]\nport = 22\n" in out
+
+    def test_action_inside_nested_subparser(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        cli = self.make_cli(INIConfigGenerator(comment_defaults=False))()
+        with pytest.raises(SystemExit):
+            cli.parse_args(
+                [
+                    "serve",
+                    "--port",
+                    "9",
+                    "worker",
+                    "--threads",
+                    "7",
+                    "--generate-config",
+                    "-",
+                ]
+            )
+        out = capsys.readouterr().out
+        assert "[serve.worker]\nthreads = 7\n" in out
+        # ``serve`` was parsed into its own namespace, which the
+        # nested Action does not see.
+        assert "[serve]\nport = 8080\n" in out
+
+
+class TestSubparserEnv:
+    """Env var names for subparser fields follow the inherited
+    prefix, so the ``.env`` dump and the reader agree."""
+
+    @staticmethod
+    def make_cli() -> Type[argclass.Parser]:
+        class DB(argclass.Group):
+            host: str = "localhost"
+
+        class Worker(argclass.Parser):
+            threads: int = 4
+
+        class Serve(argclass.Parser):
+            port: int = 8080
+            db = DB()
+            worker = Worker()
+
+        class CLI(argclass.Parser):
+            debug: bool = False
+            serve = Serve()
+
+        return CLI
+
+    def test_derived_env_var_names(self) -> None:
+        cli = self.make_cli()(auto_env_var_prefix="APP_")
+        names = {f.attr_path: f.env_var for f in iter_config_fields(cli)}
+        assert names == {
+            ("debug",): "APP_DEBUG",
+            ("serve", "port"): "APP_SERVE_PORT",
+            ("serve", "db", "host"): "APP_SERVE_DB_HOST",
+            ("serve", "worker", "threads"): "APP_SERVE_WORKER_THREADS",
+        }
+
+    def test_no_prefix_no_env_var(self) -> None:
+        cli = self.make_cli()()
+        assert all(f.env_var is None for f in iter_config_fields(cli))
+
+    def test_own_prefix_on_subparser(self) -> None:
+        class Serve(argclass.Parser):
+            port: int = 8080
+
+        class CLI(argclass.Parser):
+            serve = Serve(auto_env_var_prefix="SRV_")
+
+        cli = CLI(auto_env_var_prefix="APP_")
+        names = {f.attr_path: f.env_var for f in iter_config_fields(cli)}
+        assert names[("serve", "port")] == "SRV_PORT"
+
+    def test_env_dump_includes_subparsers(self) -> None:
+        cli = self.make_cli()(auto_env_var_prefix="APP_")
+        text = EnvConfigGenerator(comment_defaults=False).dump_to_string(cli)
+        assert text == (
+            "APP_DEBUG=false\n\n"
+            "APP_SERVE_PORT=8080\n\n"
+            "APP_SERVE_DB_HOST=localhost\n\n"
+            "APP_SERVE_WORKER_THREADS=4\n"
+        )
+
+    def test_env_value_appears_in_subparser_dump(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("APP_SERVE_PORT", "9")
+        cli = self.make_cli()(auto_env_var_prefix="APP_")
+        text = INIConfigGenerator().dump_to_string(cli)
+        assert "[serve]\nport = 9\n" in text
+
+
+class TestConfigValuesInDump:
+    """Config-file values reach the dump even for fields no parse has
+    bound: an unparsed parser and an unselected subparser branch."""
+
+    @staticmethod
+    def make_cli() -> Type[argclass.Parser]:
+        class Auth(argclass.Group):
+            user: str = "admin"
+
+        class Deploy(argclass.Parser):
+            target: str = "production"
+            retries: int = 1
+            auth = Auth()
+
+        class Serve(argclass.Parser):
+            port: int = 8080
+
+        class CLI(argclass.Parser):
+            name: str = "app"
+            serve = Serve()
+            deploy = Deploy()
+
+        return CLI
+
+    INI = (
+        "[DEFAULT]\nname = from-config\n"
+        "[deploy]\ntarget = staging\nretries = 3\n"
+        "[deploy.auth]\nuser = root\n"
+    )
+
+    def test_fresh_parser_dump_reflects_config_files(
+        self, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "app.ini"
+        path.write_text(self.INI)
+        cli = self.make_cli()(config_files=[path])
+        values = {f.attr_path: f.value for f in iter_config_fields(cli)}
+        assert values[("name",)] == "from-config"
+        assert values[("deploy", "target")] == "staging"
+        assert values[("deploy", "retries")] == 3
+        assert values[("deploy", "auth", "user")] == "root"
+        assert values[("serve", "port")] == 8080
+
+    def test_unselected_branch_reflects_config_files(
+        self, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "app.ini"
+        path.write_text(self.INI)
+        cli = self.make_cli()(config_files=[path])
+        cli.parse_args(["serve"])
+        text = INIConfigGenerator(comment_defaults=False).dump_to_string(cli)
+        assert "[deploy]\ntarget = staging\n\nretries = 3\n" in text
+        assert "[deploy.auth]\nuser = root\n" in text
+
+    def test_config_argument_file_reaches_unselected_branch(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        path = tmp_path / "app.ini"
+        path.write_text(self.INI)
+
+        class CLI(self.make_cli()):  # type: ignore[misc,valid-type]
+            generate_config = argclass.Argument(
+                action=GenerateConfigAction,
+                generator=INIConfigGenerator(comment_defaults=False),
+            )
+
+        with pytest.raises(SystemExit):
+            CLI(config_argument="--config").parse_args(
+                ["--config", str(path), "--generate-config", "-"]
+            )
+        out = capsys.readouterr().out
+        assert "[deploy]\ntarget = staging\n" in out
+
+    def test_env_wins_over_config_in_dump(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        path = tmp_path / "app.ini"
+        path.write_text(self.INI)
+        monkeypatch.setenv("APP_DEPLOY_RETRIES", "9")
+        cli = self.make_cli()(config_files=[path], auto_env_var_prefix="APP_")
+        values = {f.attr_path: f.value for f in iter_config_fields(cli)}
+        assert values[("deploy", "retries")] == 9
+
+    def test_current_value_reads_owner_config(self, tmp_path: Path) -> None:
+        path = tmp_path / "app.ini"
+        path.write_text("[DEFAULT]\nname = cfg\n")
+        cli = self.make_cli()(config_files=[path])
+        arg = cli.__arguments__["name"]
+        assert current_value(cli, "name", arg) == "app"
+        assert current_value(cli, "name", arg, owner=cli) == "cfg"
+
+
+FORMATS = [
+    (INIConfigGenerator, argclass.INIDefaultsParser, "ini"),
+    (JSONConfigGenerator, argclass.JSONDefaultsParser, "json"),
+    (TOMLConfigGenerator, argclass.TOMLDefaultsParser, "toml"),
+]
+
+
+class TestSubparserRoundTrip:
+    """A dump of the whole command tree loads back through the same
+    parser class, for every format and both loading paths."""
+
+    @staticmethod
+    def make_cli() -> Type[argclass.Parser]:
+        class DB(argclass.Group):
+            host: str = "localhost"
+            port: int = 5432
+
+        class Auth(argclass.Group):
+            user: str = "admin"
+
+        class Worker(argclass.Parser):
+            threads: int = 4
+            tags: List[str] = argclass.Argument(
+                nargs=argclass.Nargs.ZERO_OR_MORE, default=["a", "b"]
+            )
+
+        class Serve(argclass.Parser):
+            port: int = 8080
+            db = DB()
+            worker = Worker()
+
+        class Deploy(argclass.Parser):
+            target: str = "production"
+            token: str = argclass.Secret(default="real-token")
+            auth = Auth()
+
+        class CLI(argclass.Parser):
+            debug: bool = False
+            name: str = "app"
+            serve = Serve()
+            deploy = Deploy()
+
+        return CLI
+
+    @staticmethod
+    def overridden(cli_cls: Type[argclass.Parser]) -> argclass.Parser:
+        """One instance per branch is parsed; the values are copied
+        into a single instance so the dump shows both branches."""
+        source = cli_cls()
+        source.parse_args(
+            [
+                "--debug",
+                "--name",
+                "svc",
+                "serve",
+                "--port",
+                "9",
+                "--db-host",
+                "db.example.com",
+                "worker",
+                "--threads",
+                "7",
+                "--tags",
+                "x",
+                "y",
+            ]
+        )
+        other = cli_cls()
+        other.parse_args(
+            ["deploy", "--target", "staging", "--auth-user", "root"]
+        )
+        source.deploy.target = other.deploy.target
+        source.deploy.auth.user = other.deploy.auth.user
+        return source
+
+    @staticmethod
+    def check(
+        loaded: argclass.Parser,
+        subcommand: List[str],
+        prefix: Optional[List[str]] = None,
+    ) -> None:
+        loaded.parse_args([*(prefix or []), *subcommand])
+        assert loaded.debug is True
+        assert loaded.name == "svc"
+        if subcommand[0] == "serve":
+            assert loaded.serve.port == 9
+            assert loaded.serve.db.host == "db.example.com"
+            assert loaded.serve.db.port == 5432
+            assert loaded.serve.worker.threads == 7
+            assert loaded.serve.worker.tags == ["x", "y"]
+        else:
+            assert loaded.deploy.target == "staging"
+            assert loaded.deploy.auth.user == "root"
+            assert loaded.deploy.token == "real-token"
+
+    @pytest.mark.parametrize("gen_cls,defaults_cls,ext", FORMATS)
+    @pytest.mark.parametrize("comment_defaults", [True, False])
+    @pytest.mark.parametrize("subcommand", [["serve", "worker"], ["deploy"]])
+    def test_config_files(
+        self,
+        tmp_path: Path,
+        gen_cls: type,
+        defaults_cls: type,
+        ext: str,
+        comment_defaults: bool,
+        subcommand: List[str],
+    ) -> None:
+        cli_cls = self.make_cli()
+        out = tmp_path / f"cfg.{ext}"
+        gen_cls(comment_defaults=comment_defaults).dump(
+            self.overridden(cli_cls), str(out)
+        )
+        loaded = cli_cls(config_files=[out], config_parser_class=defaults_cls)
+        self.check(loaded, subcommand)
+
+    @pytest.mark.parametrize("gen_cls,defaults_cls,ext", FORMATS)
+    @pytest.mark.parametrize("subcommand", [["serve", "worker"], ["deploy"]])
+    def test_config_argument(
+        self,
+        tmp_path: Path,
+        gen_cls: type,
+        defaults_cls: type,
+        ext: str,
+        subcommand: List[str],
+    ) -> None:
+        cli_cls = self.make_cli()
+        out = tmp_path / f"cfg.{ext}"
+        gen_cls().dump(self.overridden(cli_cls), str(out))
+        loaded = cli_cls(
+            config_argument="--config", config_parser_class=defaults_cls
+        )
+        self.check(loaded, subcommand, prefix=["--config", str(out)])
+
+    @pytest.mark.parametrize("gen_cls,defaults_cls,ext", FORMATS)
+    def test_defaults_only_template_loads_defaults(
+        self, tmp_path: Path, gen_cls: type, defaults_cls: type, ext: str
+    ) -> None:
+        """A template with every value commented out parses and leaves
+        every argument at its declared default."""
+        cli_cls = self.make_cli()
+        out = tmp_path / f"cfg.{ext}"
+        gen_cls().dump(cli_cls(), str(out))
+        loaded = cli_cls(config_files=[out], config_parser_class=defaults_cls)
+        loaded.parse_args(["serve", "worker"])
+        assert loaded.debug is False
+        assert loaded.serve.port == 8080
+        assert loaded.serve.worker.threads == 4
+        assert loaded.serve.worker.tags == ["a", "b"]
+
+    @pytest.mark.parametrize("gen_cls,defaults_cls,ext", FORMATS)
+    def test_masked_secret_in_subparser(
+        self, tmp_path: Path, gen_cls: type, defaults_cls: type, ext: str
+    ) -> None:
+        cli_cls = self.make_cli()
+        out = tmp_path / f"cfg.{ext}"
+        gen_cls(mask_secrets=True).dump(cli_cls(), str(out))
+        assert "real-token" not in out.read_text()
+        loaded = cli_cls(config_files=[out], config_parser_class=defaults_cls)
+        loaded.parse_args(["deploy"])
+        assert loaded.deploy.token == argclass.SecretString.PLACEHOLDER
+
+    @pytest.mark.parametrize("gen_cls,defaults_cls,ext", FORMATS)
+    def test_dump_of_loaded_parser_is_stable(
+        self, tmp_path: Path, gen_cls: type, defaults_cls: type, ext: str
+    ) -> None:
+        """dump → load → dump gives the same text."""
+        cli_cls = self.make_cli()
+        first = tmp_path / f"first.{ext}"
+        gen_cls(comment_defaults=False).dump(
+            self.overridden(cli_cls), str(first)
+        )
+        loaded = cli_cls(config_files=[first], config_parser_class=defaults_cls)
+        loaded.parse_args(["serve", "worker"])
+        second = gen_cls(comment_defaults=False).dump_to_string(loaded)
+        assert second == first.read_text()
+
+
+class TestChoicesComment:
+    """Comment-aware formats list the accepted values above the key."""
+
+    @staticmethod
+    def make_cli() -> Type[argclass.Parser]:
+        from typing import Literal
+
+        class Color(Enum):
+            RED = "red"
+            GREEN = "green"
+
+        class CLI(argclass.Parser):
+            mode: Literal["fast", "slow"] = argclass.Argument(
+                default="fast", help="Speed mode"
+            )
+            level: str = argclass.Argument(
+                default="low", choices=["low", "mid", "high"]
+            )
+            color: Color = argclass.EnumArgument(Color, default="RED")
+            shade: Color = argclass.EnumArgument(
+                Color, default="GREEN", lowercase=True
+            )
+            name: str = argclass.Argument(default="app", help="Name")
+
+        return CLI
+
+    def test_field_choices(self) -> None:
+        fields = {f.key: f for f in iter_config_fields(self.make_cli()())}
+        assert fields["mode"].choices == ("fast", "slow")
+        assert fields["level"].choices == ("low", "mid", "high")
+        assert fields["color"].choices == ("RED", "GREEN")
+        assert fields["shade"].choices == ("red", "green")
+        assert fields["name"].choices is None
+
+    def test_ini_help_then_choices_then_setting(self) -> None:
+        text = INIConfigGenerator().dump_to_string(self.make_cli()())
+        assert "; Speed mode\n; choices: fast, slow\n# mode = fast\n" in text
+        assert "; choices: low, mid, high\n# level = low\n" in text
+        assert "; choices: RED, GREEN\n# color = RED\n" in text
+        assert "; choices: red, green\n# shade = green\n" in text
+        assert "; Name\n# name = app\n" in text
+        assert "choices:" not in text.split("; Name")[1]
+
+    def test_ini_active_value_keeps_choices(self) -> None:
+        cli = self.make_cli()()
+        cli.parse_args(["--mode", "slow"])
+        text = INIConfigGenerator().dump_to_string(cli)
+        assert "; Speed mode\n; choices: fast, slow\nmode = slow\n" in text
+
+    def test_toml_marker(self) -> None:
+        text = TOMLConfigGenerator().dump_to_string(self.make_cli()())
+        assert '# Speed mode\n# choices: fast, slow\n# mode = "fast"\n' in text
+
+    def test_env_marker(self) -> None:
+        cli = self.make_cli()(auto_env_var_prefix="APP_")
+        text = EnvConfigGenerator().dump_to_string(cli)
+        assert "# Speed mode\n# choices: fast, slow\n# APP_MODE=fast\n" in text
+
+    def test_json_has_no_choices(self) -> None:
+        text = JSONConfigGenerator().dump_to_string(self.make_cli()())
+        assert "choices" not in text
+
+    def test_custom_label(self) -> None:
+        class Gen(INIConfigGenerator):
+            choices_label = "one of:"
+
+        text = Gen().dump_to_string(self.make_cli()())
+        assert "; one of: fast, slow\n" in text
+
+    def test_lowercase_enum_value_matches_choices(self) -> None:
+        cli = self.make_cli()()
+        cli.parse_args(["--shade", "red"])
+        text = INIConfigGenerator().dump_to_string(cli)
+        assert "; choices: red, green\nshade = red\n" in text
+        data = json.loads(JSONConfigGenerator().dump_to_string(cli))
+        assert data["shade"] == "red"
+        assert data["color"] == "RED"
