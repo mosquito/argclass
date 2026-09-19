@@ -137,6 +137,87 @@ even when a group has `prefix=` set. `prefix=` only renames the CLI/env
 segment for that group.
 :::
 
+## Subparser Sections
+
+A subparser is addressed the same way as a group: its section is the
+attribute path from the root parser. A group inside a subparser, or a
+subparser inside a subparser, extends that path with a dot. The section
+name never depends on the subcommand name typed on the command line;
+it depends only on the attribute the subparser is bound to.
+
+```python
+import argclass
+
+class Database(argclass.Group):
+    host: str = "localhost"
+    port: int = 5432
+
+class Worker(argclass.Parser):
+    threads: int = 4
+
+class Serve(argclass.Parser):
+    port: int = 8080
+    db = Database()
+    worker = Worker()
+
+class Deploy(argclass.Parser):
+    target: str = "production"
+
+class CLI(argclass.Parser):
+    debug: bool = False
+    serve = Serve()
+    deploy = Deploy()
+```
+
+| Attribute path | INI section | JSON path | TOML table |
+|----------------|-------------|-----------|------------|
+| `debug` | `[DEFAULT]` | `debug` | top level |
+| `serve.port` | `[serve]` | `serve.port` | `[serve]` |
+| `serve.db.host` | `[serve.db]` | `serve.db.host` | `[serve.db]` |
+| `serve.worker.threads` | `[serve.worker]` | `serve.worker.threads` | `[serve.worker]` |
+| `deploy.target` | `[deploy]` | `deploy.target` | `[deploy]` |
+
+One file therefore describes the root parser and every subcommand:
+
+```ini
+[DEFAULT]
+debug = true
+
+[serve]
+port = 9000
+
+[serve.db]
+host = db.example.com
+
+[serve.worker]
+threads = 8
+
+[deploy]
+target = staging
+```
+
+```json
+{
+  "debug": true,
+  "serve": {
+    "port": 9000,
+    "db": {"host": "db.example.com"},
+    "worker": {"threads": 8}
+  },
+  "deploy": {"target": "staging"}
+}
+```
+
+A section for a subcommand that is not selected on the command line is
+read but has no visible effect: only the selected subparser chain is
+populated after `parse_args()`.
+
+:::{note}
+An attribute name is bound to exactly one of: an argument, a group, or a
+subparser. Section names therefore cannot collide between a group and a
+subparser of the same parser.
+:::
+
 ## Boolean Values
 
 | True values | False values |
