@@ -287,9 +287,9 @@ a subcommand into its own namespace:
 ## Converting between config formats
 
 Format conversion happens through your own parser class — load
-through reader X, dump through generator Y. There's no built-in
-`--config` flag in argclass that loads a config file, so this is
-best expressed as a small script (or a `__main__` entry point):
+through reader X, dump through generator Y. argclass has no built-in
+command that converts between formats, so this is best expressed as a
+small script (or a `__main__` entry point):
 
 <!--- name: test_config_gen_migrate_oneshot --->
 ```python
