@@ -582,6 +582,13 @@ class Group(AbstractGroup, Base):
         self._defaults: Mapping[str, Any] = defaults or {}
 
 
+def join_config_section(*parts: str | None) -> str | None:
+    """Join section path segments with dots. Empty segments are
+    dropped. Return ``None`` when no segment remains."""
+    joined = ".".join(part for part in parts if part)
+    return joined or None
+
+
 def _group_reuse_error(path: str) -> ArgclassError:
     return ArgclassError(
         "Group instance is referenced more than once in the parser "
@@ -833,6 +840,12 @@ class Parser(AbstractParser, Base):
         self._config_parser_class = config_parser_class
         self._runtime_config_parsers: list[AbstractDefaultsParser] = []
         self._user_config_files: tuple[Path, ...] = ()
+        # Config layers received from the parent parser when this
+        # parser is a subparser. Each entry is a defaults parser and
+        # the section prefix that addresses this subparser inside it.
+        self._inherited_config_layers: list[
+            tuple[AbstractDefaultsParser, str | None]
+        ] = []
 
         # Parse config files using the specified parser class
         self._config_parser = config_parser_class(
@@ -965,6 +978,24 @@ class Parser(AbstractParser, Base):
         self._user_config_files = runtime_parser.loaded_files
         return [runtime_parser]
 
+    def _config_layers(
+        self,
+    ) -> list[tuple[AbstractDefaultsParser, str | None]]:
+        """Return the config sources this parser reads, highest
+        priority first.
+
+        Order: the file passed via ``config_argument``, the layers
+        inherited from the parent parser (already prefixed with this
+        subparser's section), then the constructor ``config_files``.
+        """
+        layers: list[tuple[AbstractDefaultsParser, str | None]] = [
+            (runtime_parser, None)
+            for runtime_parser in self._runtime_config_parsers
+        ]
+        layers.extend(self._inherited_config_layers)
+        layers.append((self._config_parser, None))
+        return layers
+
     def _get_config_default(
         self,
         name: str,
@@ -974,14 +1005,19 @@ class Parser(AbstractParser, Base):
         """Look up a config-provided default for ``name``.
 
         The file passed via ``config_argument`` (when present) wins
-        over the constructor ``config_files``; env vars and CLI args
-        still override both later in the chain.
+        over the parent's config, which wins over the constructor
+        ``config_files``; env vars and CLI args still override all of
+        them later in the chain.
         """
-        for runtime_parser in self._runtime_config_parsers:
-            value = runtime_parser.get_value(name, kind, section=section)
+        for config_parser, prefix in self._config_layers():
+            value = config_parser.get_value(
+                name,
+                kind,
+                section=join_config_section(prefix, section),
+            )
             if value is not None:
                 return value
-        return self._config_parser.get_value(name, kind, section=section)
+        return None
 
     def _make_parser(
         self,
@@ -1244,6 +1280,15 @@ class Parser(AbstractParser, Base):
         for subparser_name, subparser in self.__subparsers__.items():
             # Build the chain for this subparser level
             subparser_chain = (subparser,) + parent_chain
+            # The subparser reads the parent's config files under its
+            # own section, so one file can describe the whole tree.
+            subparser._inherited_config_layers = [
+                (
+                    config_parser,
+                    join_config_section(prefix, subparser_name),
+                )
+                for config_parser, prefix in self._config_layers()
+            ]
             current_parser, subparser_dests = subparser._make_parser(
                 subparsers.add_parser(
                     subparser_name,
