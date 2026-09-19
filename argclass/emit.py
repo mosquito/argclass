@@ -1,8 +1,11 @@
 """Config-file generators: render an argclass Parser to INI/JSON/TOML/.env.
 
 Symmetric counterpart to ``argclass/defaults.py`` (which READS configs).
-The parser tree is walked once, yielding :class:`ConfigField` records;
-generators consume that iterator and produce a format-specific string.
+The parser tree — root arguments, groups and subparsers — is walked
+once, yielding :class:`ConfigField` records; generators consume that
+iterator and produce a format-specific string. A subparser becomes a
+section named after its attribute, so one generated file describes
+every subcommand and loads back through the same parser.
 
 Subclass :class:`ConfigGenerator` and override :meth:`render` to add a
 new format. The walking + Action wiring are shared — your subclass only
@@ -220,15 +223,22 @@ class ConfigField:
         Tuple of attribute names from the parser root down to the
         leaf (``("endpoint", "credentials", "username")``). The last
         element is the field name; everything before it forms the
-        section path used by INI / TOML.
+        section path used by INI / TOML. A subparser contributes its
+        attribute name as one segment, exactly like a group.
     cli_path:
         Same shape as ``attr_path`` but respecting per-group
         ``prefix=`` overrides — useful when reconstructing CLI flag
-        names.
+        names. A subparser segment is the subcommand name.
+    subparser_path:
+        Attribute names of the subparsers that enclose the field,
+        root first (``("serve", "worker")``). Empty for a field that
+        belongs to the root parser.
     dest:
         argparse ``dest`` for the field
-        (``"endpoint_credentials_username"``). Joins ``cli_path``
-        with underscores.
+        (``"endpoint_credentials_username"``). Joins the part of
+        ``cli_path`` below the owning subparser with underscores: a
+        subparser is a separate ``ArgumentParser``, so its ``dest``
+        values do not carry the subcommand name.
     argument:
         The owning :class:`TypedArgument`. Carries declared type,
         help, env_var, etc.
@@ -262,6 +272,7 @@ class ConfigField:
     env_var: str | None
     help: str | None
     is_default: bool = False
+    subparser_path: tuple[str, ...] = ()
 
     @property
     def section_path(self) -> tuple[str, ...]:
@@ -279,13 +290,17 @@ def iter_config_fields(
     *,
     namespace: argparse.Namespace | None = None,
     mask_secrets: bool = False,
+    include_subparsers: bool = True,
 ) -> Iterator[ConfigField]:
     """Walk ``parser`` and yield one :class:`ConfigField` per leaf.
 
-    Subparsers are skipped (they're runtime branches, not config
-    state). Non-emittable arguments (``--help``, ``--version``, any
-    :class:`NonConfigAction` subclass) are filtered out by
-    :func:`should_emit`.
+    Order: the parser's own arguments, its groups (recursively), then
+    its subparsers (recursively) in declaration order. A subparser
+    becomes a section named after its attribute, the same rule the
+    config readers apply. Pass ``include_subparsers=False`` to stop at
+    the root parser and its groups. Non-emittable arguments
+    (``--help``, ``--version``, any :class:`NonConfigAction` subclass)
+    are filtered out by :func:`should_emit`.
 
     ``namespace``, when provided, lets fields pick up CLI args that
     argparse has already parsed — used by
@@ -305,6 +320,7 @@ def iter_config_fields(
         auto_prefix=auto_prefix,
         namespace=namespace,
         mask_secrets=mask_secrets,
+        include_subparsers=include_subparsers,
     )
 
 
@@ -313,9 +329,12 @@ def iter_subtree_fields(
     *,
     attr_path: tuple[str, ...] = (),
     cli_path: tuple[str, ...] = (),
+    subparser_path: tuple[str, ...] = (),
+    dest_path: tuple[str, ...] | None = None,
     auto_prefix: str | None = None,
     namespace: argparse.Namespace | None = None,
     mask_secrets: bool = False,
+    include_subparsers: bool = True,
 ) -> Iterator[ConfigField]:
     """Recursive walker used by :func:`iter_config_fields`.
 
@@ -323,11 +342,17 @@ def iter_subtree_fields(
     to dump just one nested group). Pass the cumulative ``attr_path``
     and ``cli_path`` you want the yielded fields to carry.
 
-    ``mask_secrets`` mirrors :func:`iter_config_fields` — see its
-    docstring for the semantics.
+    ``dest_path`` is the part of ``cli_path`` below the owning
+    subparser; it forms the argparse ``dest``. It defaults to
+    ``cli_path`` and is reset when the walk enters a subparser.
+
+    ``mask_secrets`` and ``include_subparsers`` mirror
+    :func:`iter_config_fields` — see its docstring for the semantics.
     """
     node = cast(Any, target)
-    cli_prefix = "_".join(cli_path)
+    if dest_path is None:
+        dest_path = cli_path
+    cli_prefix = "_".join(dest_path)
     for name, argument in node.__arguments__.items():
         if not should_emit(argument):
             continue
@@ -358,17 +383,39 @@ def iter_subtree_fields(
             env_var=env_var,
             help=argument.help if argument.help else None,
             is_default=is_default,
+            subparser_path=subparser_path,
         )
     for group_name, group in node.__argument_groups__.items():
         seg = group_cli_segment(group, group_name)
-        child_cli = cli_path + ((seg,) if seg else ())
+        child_seg = (seg,) if seg else ()
         yield from iter_subtree_fields(
             group,
             attr_path=attr_path + (group_name,),
-            cli_path=child_cli,
+            cli_path=cli_path + child_seg,
+            subparser_path=subparser_path,
+            dest_path=dest_path + child_seg,
             auto_prefix=auto_prefix,
             namespace=namespace,
             mask_secrets=mask_secrets,
+            include_subparsers=include_subparsers,
+        )
+    if not include_subparsers:
+        return
+    for sub_name, subparser in getattr(node, "__subparsers__", {}).items():
+        # A subparser is a separate ArgumentParser: its dests start
+        # over, and the parse namespace of the parent does not carry
+        # its values, so the walk falls back to instance state, env
+        # vars and declared defaults.
+        yield from iter_subtree_fields(
+            subparser,
+            attr_path=attr_path + (sub_name,),
+            cli_path=cli_path + (sub_name,),
+            subparser_path=subparser_path + (sub_name,),
+            dest_path=(),
+            auto_prefix=getattr(subparser, "_auto_env_var_prefix", None),
+            namespace=None,
+            mask_secrets=mask_secrets,
+            include_subparsers=True,
         )
 
 
@@ -427,6 +474,13 @@ class ConfigGenerator:
         ``False`` to emit every field active, reproducing the old
         behaviour where the dump is a full snapshot. Formats that
         cannot carry comments (JSON) ignore this flag.
+    include_subparsers:
+        When true (the default), every subparser is walked and its
+        arguments land in a section named after the subparser
+        attribute (``[serve]``, ``[serve.db]``), so one file covers
+        the whole command tree and loads back through the same
+        parser. Set to ``False`` to dump only the root parser and
+        its groups.
     """
 
     #: File extension hint. Subclasses set this.
@@ -444,9 +498,11 @@ class ConfigGenerator:
         *,
         mask_secrets: bool = False,
         comment_defaults: bool = True,
+        include_subparsers: bool = True,
     ) -> None:
         self.mask_secrets = mask_secrets
         self.comment_defaults = comment_defaults
+        self.include_subparsers = include_subparsers
 
     def _field_block(self, field: ConfigField, setting: str) -> str:
         """Render one field: help comment(s) above the ``setting`` line
@@ -494,6 +550,7 @@ class ConfigGenerator:
                 parser,
                 namespace=namespace,
                 mask_secrets=self.mask_secrets,
+                include_subparsers=self.include_subparsers,
             ),
         )
         return self.render(fields)
@@ -540,8 +597,9 @@ class INIConfigGenerator(ConfigGenerator):
     """Render a parser to INI.
 
     Top-level arguments go under ``[DEFAULT]`` (read by
-    :class:`argclass.INIDefaultsParser`); nested groups become dotted
-    sections (``[endpoint.credentials]``). Help text is emitted as
+    :class:`argclass.INIDefaultsParser`); nested groups and
+    subparsers become dotted sections (``[endpoint.credentials]``,
+    ``[serve.db]``). Help text is emitted as
     ``; <text>`` comments above each key, while a key left at its
     default is commented-out with ``#`` — the two markers keep help
     prose visually distinct from a disabled setting. configparser
@@ -593,7 +651,7 @@ class JSONConfigGenerator(ConfigGenerator):
     """Render a parser to JSON.
 
     Comments are not supported by JSON, so help text is dropped.
-    Nested groups become nested objects.
+    Nested groups and subparsers become nested objects.
     """
 
     extension = ".json"
@@ -617,7 +675,8 @@ class TOMLConfigGenerator(ConfigGenerator):
     """Render a parser to TOML.
 
     Help text is emitted as ``# <text>`` comments above each key.
-    Nested groups use dotted table headers (``[parent.child]``).
+    Nested groups and subparsers use dotted table headers
+    (``[parent.child]``).
 
     Minimal hand-rolled emitter — covers ``str``/``int``/``float``/
     ``bool``/``list``/``None``. Other types are coerced via ``str()``.

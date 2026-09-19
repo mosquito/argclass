@@ -2083,3 +2083,192 @@ class TestMaskSecrets:
         assert f"api_key = {argclass.SecretString.PLACEHOLDER}" in text
         assert "sk-real-key" not in text
         assert "host = localhost" in text
+
+
+class TestSubparsers:
+    """Subparsers are walked; each one becomes a section named after
+    its attribute, the same rule the config readers apply."""
+
+    @staticmethod
+    def make_tree() -> Type[argclass.Parser]:
+        class DB(argclass.Group):
+            host: str = "localhost"
+            port: int = 5432
+
+        class Worker(argclass.Parser):
+            threads: int = argclass.Argument(default=4, help="thread count")
+
+        class Serve(argclass.Parser):
+            port: int = 8080
+            db = DB()
+            worker = Worker()
+
+        class Deploy(argclass.Parser):
+            target: str = "production"
+            version = argclass.Argument(
+                action=argclass.Actions.VERSION, version="1.0"
+            )
+
+        class CLI(argclass.Parser):
+            debug: bool = False
+            serve = Serve()
+            deploy = Deploy()
+
+        return CLI
+
+    def test_walk_order_and_paths(self) -> None:
+        fields = list(iter_config_fields(self.make_tree()()))
+        assert [f.attr_path for f in fields] == [
+            ("debug",),
+            ("serve", "port"),
+            ("serve", "db", "host"),
+            ("serve", "db", "port"),
+            ("serve", "worker", "threads"),
+            ("deploy", "target"),
+        ]
+        by_path = {f.attr_path: f for f in fields}
+        assert by_path[("serve", "db", "host")].dest == "db_host"
+        assert by_path[("serve", "db", "host")].cli_path == (
+            "serve",
+            "db",
+            "host",
+        )
+        assert by_path[("serve", "db", "host")].subparser_path == ("serve",)
+        assert by_path[("serve", "worker", "threads")].dest == "threads"
+        assert by_path[("serve", "worker", "threads")].subparser_path == (
+            "serve",
+            "worker",
+        )
+        assert by_path[("debug",)].subparser_path == ()
+
+    def test_non_config_action_inside_subparser_skipped(self) -> None:
+        fields = list(iter_config_fields(self.make_tree()()))
+        assert ("deploy", "version") not in {f.attr_path for f in fields}
+
+    def test_include_subparsers_false(self) -> None:
+        cli = self.make_tree()()
+        fields = list(iter_config_fields(cli, include_subparsers=False))
+        assert [f.attr_path for f in fields] == [("debug",)]
+        text = INIConfigGenerator(include_subparsers=False).dump_to_string(
+            cli,
+        )
+        assert "[serve" not in text
+        assert "[deploy]" not in text
+
+    def test_ini_sections(self) -> None:
+        cli = self.make_tree()()
+        text = INIConfigGenerator(comment_defaults=False).dump_to_string(cli)
+        assert text == (
+            "[DEFAULT]\n"
+            "debug = false\n"
+            "\n"
+            "[serve]\n"
+            "port = 8080\n"
+            "\n"
+            "[serve.db]\n"
+            "host = localhost\n"
+            "\n"
+            "port = 5432\n"
+            "\n"
+            "[serve.worker]\n"
+            "; thread count\n"
+            "threads = 4\n"
+            "\n"
+            "[deploy]\n"
+            "target = production\n"
+        )
+
+    def test_ini_template_keeps_default_sections(self) -> None:
+        """A section whose keys are all at their defaults still gets
+        its header; the keys are commented out."""
+        cli = self.make_tree()()
+        text = INIConfigGenerator().dump_to_string(cli)
+        assert "[serve.worker]\n; thread count\n# threads = 4\n" in text
+        assert "[deploy]\n# target = production\n" in text
+
+    def test_toml_tables(self) -> None:
+        cli = self.make_tree()()
+        text = TOMLConfigGenerator(comment_defaults=False).dump_to_string(cli)
+        assert text == (
+            "debug = false\n"
+            "\n"
+            "[serve]\n"
+            "port = 8080\n"
+            "\n"
+            "[serve.db]\n"
+            'host = "localhost"\n'
+            "\n"
+            "port = 5432\n"
+            "\n"
+            "[serve.worker]\n"
+            "# thread count\n"
+            "threads = 4\n"
+            "\n"
+            "[deploy]\n"
+            'target = "production"\n'
+        )
+
+    def test_json_nesting(self) -> None:
+        cli = self.make_tree()()
+        data = json.loads(JSONConfigGenerator().dump_to_string(cli))
+        assert data == {
+            "debug": False,
+            "serve": {
+                "port": 8080,
+                "db": {"host": "localhost", "port": 5432},
+                "worker": {"threads": 4},
+            },
+            "deploy": {"target": "production"},
+        }
+
+    def test_parsed_values_of_selected_subparser(self) -> None:
+        cli = self.make_tree()()
+        cli.parse_args(
+            [
+                "serve",
+                "--port",
+                "1",
+                "--db-host",
+                "x",
+                "worker",
+                "--threads",
+                "9",
+            ]
+        )
+        text = INIConfigGenerator().dump_to_string(cli)
+        assert "[serve]\nport = 1\n" in text
+        assert "[serve.db]\nhost = x\n" in text
+        assert "threads = 9\n" in text
+        # The unselected branch keeps its defaults.
+        assert "# target = production" in text
+
+    def test_secret_masked_inside_subparser(self) -> None:
+        class Serve(argclass.Parser):
+            token: str = argclass.Secret(default="real")
+
+        class CLI(argclass.Parser):
+            serve = Serve()
+
+        text = INIConfigGenerator(mask_secrets=True).dump_to_string(CLI())
+        assert f"[serve]\ntoken = {argclass.SecretString.PLACEHOLDER}\n" in text
+        assert "real" not in text
+
+    def test_action_dumps_all_subparsers(self, tmp_path: Path) -> None:
+        class Serve(argclass.Parser):
+            port: int = 8080
+
+        class CLI(argclass.Parser):
+            debug: bool = False
+            serve = Serve()
+            generate_config = argclass.Argument(
+                action=GenerateConfigAction,
+                generator=INIConfigGenerator(comment_defaults=False),
+            )
+
+        out = tmp_path / "cfg.ini"
+        with pytest.raises(SystemExit) as exc:
+            CLI().parse_args(["--generate-config", str(out)])
+        assert exc.value.code == 0
+        assert out.read_text() == (
+            "[DEFAULT]\ndebug = false\n\n[serve]\nport = 8080\n"
+        )
