@@ -323,3 +323,69 @@ class TestEnvPrefix:
         second.parse_args(["serve"])
         assert first.serve.env_var_prefix == "APP_SERVE_"
         assert second.serve.env_var_prefix is None
+
+
+def squash(text: str) -> str:
+    """Drop all whitespace: argparse wraps long paths mid-word."""
+    return "".join(text.split())
+
+
+class TestSubparserHelpEpilog:
+    """A subcommand's --help names the config files it reads."""
+
+    def test_subcommand_help_lists_parent_files(
+        self, ini_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        cli = CLI(config_files=[ini_path, Path("/missing.ini")])
+        with pytest.raises(SystemExit):
+            cli.parse_args(["serve", "--help"])
+        out = squash(capsys.readouterr().out)
+        assert squash("Default values come from") in out
+        assert squash(f"'{ini_path}'") in out
+        assert "'/missing.ini'" in out
+        assert squash("Found and applied (1):") in out
+        assert "PosixPath" not in out
+
+    def test_nested_subcommand_help_lists_parent_files(
+        self, ini_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        cli = CLI(config_files=[ini_path])
+        with pytest.raises(SystemExit):
+            cli.parse_args(["serve", "worker", "--help"])
+        out = squash(capsys.readouterr().out)
+        assert squash(f"'{ini_path}'") in out
+        assert squash("Found and applied (1):") in out
+
+    def test_subcommand_help_reports_config_argument_file(
+        self, ini_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        cli = CLI(config_argument="--config")
+        with pytest.raises(SystemExit):
+            cli.parse_args(["--config", str(ini_path), "serve", "--help"])
+        out = squash(capsys.readouterr().out)
+        assert squash("Found and applied (1):") in out
+        assert squash(str(ini_path.resolve())) in out
+
+    def test_subcommand_help_lists_own_and_parent_files(
+        self, ini_path: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        own = tmp_path / "serve.ini"
+        own.write_text("[DEFAULT]\nport = 5\n")
+
+        class Root(argclass.Parser):
+            serve = Serve(config_files=[own])
+
+        cli = Root(config_files=[ini_path])
+        with pytest.raises(SystemExit):
+            cli.parse_args(["serve", "--help"])
+        out = squash(capsys.readouterr().out)
+        assert squash(f"'{ini_path}'") in out
+        assert squash(f"'{own}'") in out
+        assert squash("Found and applied (2):") in out
+
+    def test_subcommand_help_without_config_has_no_epilog(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        with pytest.raises(SystemExit):
+            CLI().parse_args(["serve", "--help"])
+        assert "configuration files" not in capsys.readouterr().out
