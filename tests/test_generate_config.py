@@ -2393,3 +2393,70 @@ class TestSubparserNamespace:
         # ``serve`` was parsed into its own namespace, which the
         # nested Action does not see.
         assert "[serve]\nport = 8080\n" in out
+
+
+class TestSubparserEnv:
+    """Env var names for subparser fields follow the inherited
+    prefix, so the ``.env`` dump and the reader agree."""
+
+    @staticmethod
+    def make_cli() -> Type[argclass.Parser]:
+        class DB(argclass.Group):
+            host: str = "localhost"
+
+        class Worker(argclass.Parser):
+            threads: int = 4
+
+        class Serve(argclass.Parser):
+            port: int = 8080
+            db = DB()
+            worker = Worker()
+
+        class CLI(argclass.Parser):
+            debug: bool = False
+            serve = Serve()
+
+        return CLI
+
+    def test_derived_env_var_names(self) -> None:
+        cli = self.make_cli()(auto_env_var_prefix="APP_")
+        names = {f.attr_path: f.env_var for f in iter_config_fields(cli)}
+        assert names == {
+            ("debug",): "APP_DEBUG",
+            ("serve", "port"): "APP_SERVE_PORT",
+            ("serve", "db", "host"): "APP_SERVE_DB_HOST",
+            ("serve", "worker", "threads"): "APP_SERVE_WORKER_THREADS",
+        }
+
+    def test_no_prefix_no_env_var(self) -> None:
+        cli = self.make_cli()()
+        assert all(f.env_var is None for f in iter_config_fields(cli))
+
+    def test_own_prefix_on_subparser(self) -> None:
+        class Serve(argclass.Parser):
+            port: int = 8080
+
+        class CLI(argclass.Parser):
+            serve = Serve(auto_env_var_prefix="SRV_")
+
+        cli = CLI(auto_env_var_prefix="APP_")
+        names = {f.attr_path: f.env_var for f in iter_config_fields(cli)}
+        assert names[("serve", "port")] == "SRV_PORT"
+
+    def test_env_dump_includes_subparsers(self) -> None:
+        cli = self.make_cli()(auto_env_var_prefix="APP_")
+        text = EnvConfigGenerator(comment_defaults=False).dump_to_string(cli)
+        assert text == (
+            "APP_DEBUG=false\n\n"
+            "APP_SERVE_PORT=8080\n\n"
+            "APP_SERVE_DB_HOST=localhost\n\n"
+            "APP_SERVE_WORKER_THREADS=4\n"
+        )
+
+    def test_env_value_appears_in_subparser_dump(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("APP_SERVE_PORT", "9")
+        cli = self.make_cli()(auto_env_var_prefix="APP_")
+        text = INIConfigGenerator().dump_to_string(cli)
+        assert "[serve]\nport = 9\n" in text

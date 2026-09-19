@@ -64,7 +64,7 @@ from .parser import get_argclass_parser
 from .secret import SecretString
 from .store import AbstractGroup, AbstractParser, TypedArgument
 from .types import Actions
-from .utils import coerce_env_default
+from .utils import child_env_prefix, coerce_env_default
 
 
 class NonConfigAction(argparse.Action):
@@ -152,7 +152,8 @@ def derive_env_var(
 
     Mirrors :meth:`argclass.Parser.get_env_var`. Returns ``None`` when
     neither an explicit ``env_var`` on the argument nor an
-    ``auto_env_var_prefix`` on the parser supplies one.
+    ``auto_env_var_prefix`` on the parser (own or inherited from the
+    parent parser) supplies one.
     """
     if argument.env_var is not None:
         return argument.env_var
@@ -356,6 +357,18 @@ def iter_config_fields(
     )
 
 
+def subparser_env_prefix(
+    subparser: Any, parent_prefix: str | None, name: str
+) -> str | None:
+    """Return the auto env-var prefix a subparser uses in the walk:
+    its own ``auto_env_var_prefix`` when set, else the parent's
+    prefix extended with the subparser attribute name."""
+    own = getattr(subparser, "_auto_env_var_prefix", None)
+    if own is not None:
+        return str(own)
+    return child_env_prefix(parent_prefix, name)
+
+
 def iter_subtree_fields(
     target: Any,
     *,
@@ -458,7 +471,7 @@ def iter_subtree_fields(
             cli_path=cli_path + (sub_name,),
             subparser_path=subparser_path + (sub_name,),
             dest_path=(),
-            auto_prefix=getattr(subparser, "_auto_env_var_prefix", None),
+            auto_prefix=subparser_env_prefix(subparser, auto_prefix, sub_name),
             namespace=namespace,
             namespace_targets=namespace_targets,
             mask_secrets=mask_secrets,

@@ -35,6 +35,7 @@ from .store import AbstractGroup, AbstractParser, TypedArgument
 from .types import Actions, Nargs
 from .utils import (
     _unwrap_container_type,
+    child_env_prefix,
     coerce_env_default,
     deep_getattr,
     own_annotation_keys,
@@ -772,11 +773,22 @@ class Parser(AbstractParser, Base):
     def get_cli_name(name: str) -> str:
         return name.replace("_", "-")
 
+    @property
+    def env_var_prefix(self) -> str | None:
+        """Auto env-var prefix in effect for this parser: the
+        constructor ``auto_env_var_prefix`` when given, else the
+        prefix inherited from the parent parser extended with this
+        subparser's attribute name (``APP_SERVE_``)."""
+        if self._auto_env_var_prefix is not None:
+            return self._auto_env_var_prefix
+        return self._inherited_env_prefix
+
     def get_env_var(self, name: str, argument: TypedArgument) -> str | None:
         if argument.env_var is not None:
             return argument.env_var
-        if self._auto_env_var_prefix is not None:
-            return f"{self._auto_env_var_prefix}{name}".upper()
+        prefix = self.env_var_prefix
+        if prefix is not None:
+            return f"{prefix}{name}".upper()
         return None
 
     def __init__(
@@ -873,6 +885,9 @@ class Parser(AbstractParser, Base):
             self._epilog += self.HELP_APPENDIX_END
 
         self._auto_env_var_prefix = auto_env_var_prefix
+        # Set by the parent parser when this parser is a subparser
+        # and the parent has an auto env-var prefix.
+        self._inherited_env_prefix: str | None = None
         self._parser_kwargs = kwargs
         self._used_env_vars: set[str] = set()
         self._used_secret_env_vars: set[str] = set()
@@ -1289,6 +1304,11 @@ class Parser(AbstractParser, Base):
                 )
                 for config_parser, prefix in self._config_layers()
             ]
+            # Env vars follow the attribute path too: APP_SERVE_PORT.
+            subparser._inherited_env_prefix = child_env_prefix(
+                self.env_var_prefix,
+                subparser_name,
+            )
             current_parser, subparser_dests = subparser._make_parser(
                 subparsers.add_parser(
                     subparser_name,
@@ -1297,6 +1317,10 @@ class Parser(AbstractParser, Base):
                 parent_chain=subparser_chain,
             )
             subparser.__parent__ = self
+            # Let sanitize_env() on the root parser remove the env
+            # vars a subparser consumed.
+            self._used_env_vars |= subparser._used_env_vars
+            self._used_secret_env_vars |= subparser._used_secret_env_vars
             current_parser.set_defaults(
                 current_subparsers=subparser_chain,
             )

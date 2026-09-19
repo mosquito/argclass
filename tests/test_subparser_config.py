@@ -1,6 +1,7 @@
 """Config files reach subparser arguments through the parent parser."""
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -218,3 +219,107 @@ class TestReuse:
         second.parse_args(["serve"])
         assert first.serve.port == 9999
         assert second.serve.port == 8080
+
+
+class TestEnvPrefix:
+    """``auto_env_var_prefix`` reaches subparsers through the
+    attribute path: ``APP_SERVE_PORT``, ``APP_SERVE_DB_HOST``,
+    ``APP_SERVE_WORKER_THREADS``."""
+
+    def test_prefix_reaches_subparser_tree(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("APP_DEBUG", "true")
+        monkeypatch.setenv("APP_SERVE_PORT", "9999")
+        monkeypatch.setenv("APP_SERVE_DB_HOST", "db.example.com")
+        monkeypatch.setenv("APP_SERVE_WORKER_THREADS", "8")
+        cli = CLI(auto_env_var_prefix="APP_")
+        cli.parse_args(["serve", "worker"])
+        assert_serve_tree(cli)
+
+    def test_env_overrides_config_section(
+        self, ini_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("APP_SERVE_PORT", "1")
+        cli = CLI(config_files=[ini_path], auto_env_var_prefix="APP_")
+        cli.parse_args(["serve"])
+        assert cli.serve.port == 1
+
+    def test_no_prefix_reads_nothing(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("SERVE_PORT", "1")
+        monkeypatch.setenv("PORT", "2")
+        cli = CLI()
+        cli.parse_args(["serve"])
+        assert cli.serve.port == 8080
+
+    def test_explicit_env_var_wins(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("APP_SERVE_PORT", "1")
+        monkeypatch.setenv("MY_PORT", "2")
+
+        class Serve2(argclass.Parser):
+            port: int = argclass.Argument(default=8080, env_var="MY_PORT")
+
+        class Root(argclass.Parser):
+            serve = Serve2()
+
+        cli = Root(auto_env_var_prefix="APP_")
+        cli.parse_args(["serve"])
+        assert cli.serve.port == 2
+
+    def test_own_prefix_wins_over_inherited(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("APP_SERVE_PORT", "1")
+        monkeypatch.setenv("SRV_PORT", "2")
+
+        class Root(argclass.Parser):
+            serve = Serve(auto_env_var_prefix="SRV_")
+
+        cli = Root(auto_env_var_prefix="APP_")
+        cli.parse_args(["serve"])
+        assert cli.serve.port == 2
+
+    def test_help_shows_inherited_env_var(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        cli = CLI(auto_env_var_prefix="APP_")
+        with pytest.raises(SystemExit):
+            cli.parse_args(["serve", "--help"])
+        assert "[ENV: APP_SERVE_PORT]" in capsys.readouterr().out
+
+    def test_sanitize_env_covers_subparsers(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("APP_SERVE_PORT", "1")
+        cli = CLI(auto_env_var_prefix="APP_")
+        cli.parse_args(["serve"])
+        cli.sanitize_env()
+        assert "APP_SERVE_PORT" not in os.environ
+
+    def test_sanitize_secrets_covers_subparsers(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("APP_SERVE_TOKEN", "hunter2")
+
+        class Serve2(argclass.Parser):
+            token: str = argclass.Secret(default="")
+
+        class Root(argclass.Parser):
+            serve = Serve2()
+
+        cli = Root(auto_env_var_prefix="APP_")
+        cli.parse_args(["serve"], sanitize_secrets=True)
+        assert cli.serve.token == "hunter2"
+        assert "APP_SERVE_TOKEN" not in os.environ
+
+    def test_second_instance_does_not_keep_prefix(self) -> None:
+        first = CLI(auto_env_var_prefix="APP_")
+        first.parse_args(["serve"])
+        second = CLI()
+        second.parse_args(["serve"])
+        assert first.serve.env_var_prefix == "APP_SERVE_"
+        assert second.serve.env_var_prefix is None
