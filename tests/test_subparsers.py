@@ -166,3 +166,30 @@ def test_call() -> None:
     parser.parse_args(["subparser2"])
     parser()
     assert not parser.subparser2._flag
+
+
+def test_group_of_unselected_subparser_stays_unparsed() -> None:
+    """parse_args() must not bind None into the groups of a branch
+    that was not selected; those attributes stay unparsed like the
+    branch's own arguments."""
+
+    class Auth(argclass.Group):
+        user: str = "admin"
+
+    class Deploy(argclass.Parser):
+        target: str = "production"
+        auth = Auth()
+
+    class Serve(argclass.Parser):
+        port: int = 8080
+
+    class CLI(argclass.Parser):
+        serve = Serve()
+        deploy = Deploy()
+
+    cli = CLI()
+    cli.parse_args(["serve"])
+    assert cli.serve.port == 8080
+    with pytest.raises(AttributeError):
+        cli.deploy.target
+    assert "user" not in cli.deploy.auth.__dict__

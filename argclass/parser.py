@@ -562,6 +562,11 @@ class Destination(NamedTuple):
     attribute: str
     argument: TypedArgument | None
     action: Action | None
+    #: The parser whose ArgumentParser binds this destination: the
+    #: target itself for a parser, the enclosing parser for a group.
+    #: parse_args() skips every destination of an unselected
+    #: subparser, groups included.
+    owner: "AbstractParser | None" = None
 
 
 DestinationsType = MutableMapping[str, set[Destination]]
@@ -1149,6 +1154,7 @@ class Parser(AbstractParser, Base):
                     attribute=name,
                     argument=argument,
                     action=action,
+                    owner=self,
                 ),
             )
 
@@ -1254,6 +1260,7 @@ class Parser(AbstractParser, Base):
                     attribute=name,
                     argument=argument,
                     action=action,
+                    owner=self,
                 ),
             )
 
@@ -1289,6 +1296,7 @@ class Parser(AbstractParser, Base):
                 attribute="current_subparsers",
                 argument=None,
                 action=None,
+                owner=self,
             ),
         )
 
@@ -1359,11 +1367,13 @@ class Parser(AbstractParser, Base):
                 argument = dest.argument
                 action = dest.action
 
-                # Skip subparsers that weren't selected
+                # Skip every destination of an unselected subparser,
+                # its groups included; they stay unparsed.
+                owner = dest.owner if dest.owner is not None else target
                 if (
-                    isinstance(target, AbstractParser)
-                    and target is not self
-                    and target not in selected_subparsers
+                    isinstance(owner, AbstractParser)
+                    and owner is not self
+                    and owner not in selected_subparsers
                 ):
                     continue
 
