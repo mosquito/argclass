@@ -2272,3 +2272,124 @@ class TestSubparsers:
         assert out.read_text() == (
             "[DEFAULT]\ndebug = false\n\n[serve]\nport = 8080\n"
         )
+
+
+class TestSubparserNamespace:
+    """A parse namespace is read only by the parser that owns the
+    Action and by the selected subparsers below it."""
+
+    @staticmethod
+    def make_cli(generator: ConfigGenerator) -> Type[argclass.Parser]:
+        class Worker(argclass.Parser):
+            threads: int = 4
+            generate_config = argclass.Argument(
+                action=GenerateConfigAction, generator=generator
+            )
+
+        class Serve(argclass.Parser):
+            port: int = 8080
+            worker = Worker()
+            generate_config = argclass.Argument(
+                action=GenerateConfigAction, generator=generator
+            )
+
+        class Deploy(argclass.Parser):
+            port: int = 22
+
+        class CLI(argclass.Parser):
+            port: int = 1
+            debug: bool = False
+            serve = Serve()
+            deploy = Deploy()
+            generate_config = argclass.Argument(
+                action=GenerateConfigAction, generator=generator
+            )
+
+        return CLI
+
+    def test_unselected_branch_ignores_same_named_dest(self) -> None:
+        cli = self.make_cli(INIConfigGenerator())()
+        namespace = argparse.Namespace(port=9, current_subparsers=(cli.serve,))
+        fields = {
+            f.attr_path: f.value
+            for f in iter_config_fields(cli, namespace=namespace)
+        }
+        assert fields[("serve", "port")] == 9
+        assert fields[("deploy", "port")] == 22
+
+    def test_owner_below_root_shields_root_and_ancestors(self) -> None:
+        cli = self.make_cli(INIConfigGenerator())()
+        cli.serve.__parent__ = cli
+        cli.serve.worker.__parent__ = cli.serve
+        namespace = argparse.Namespace(
+            port=9,
+            threads=7,
+            current_subparsers=(cli.serve.worker, cli.serve),
+        )
+        fields = {
+            f.attr_path: f.value
+            for f in iter_config_fields(
+                cli, namespace=namespace, namespace_owner=cli.serve.worker
+            )
+        }
+        assert fields[("serve", "worker", "threads")] == 7
+        assert fields[("serve", "port")] == 8080
+        assert fields[("port",)] == 1
+
+    def test_action_on_root_before_subcommand(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Values of the subcommand are not parsed yet when the root
+        Action fires, so the subcommand section shows defaults."""
+        cli = self.make_cli(INIConfigGenerator(comment_defaults=False))()
+        with pytest.raises(SystemExit):
+            cli.parse_args(
+                [
+                    "--port",
+                    "5",
+                    "--generate-config",
+                    "-",
+                    "serve",
+                    "--port",
+                    "9",
+                ]
+            )
+        out = capsys.readouterr().out
+        assert "[DEFAULT]\nport = 5\n" in out
+        assert "[serve]\nport = 8080\n" in out
+
+    def test_action_inside_subparser_dumps_from_root(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        cli = self.make_cli(INIConfigGenerator(comment_defaults=False))()
+        with pytest.raises(SystemExit) as exc:
+            cli.parse_args(["serve", "--port", "9", "--generate-config", "-"])
+        assert exc.value.code == 0
+        out = capsys.readouterr().out
+        assert out.startswith("[DEFAULT]\nport = 1\n")
+        assert "[serve]\nport = 9\n" in out
+        assert "[serve.worker]\nthreads = 4\n" in out
+        assert "[deploy]\nport = 22\n" in out
+
+    def test_action_inside_nested_subparser(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        cli = self.make_cli(INIConfigGenerator(comment_defaults=False))()
+        with pytest.raises(SystemExit):
+            cli.parse_args(
+                [
+                    "serve",
+                    "--port",
+                    "9",
+                    "worker",
+                    "--threads",
+                    "7",
+                    "--generate-config",
+                    "-",
+                ]
+            )
+        out = capsys.readouterr().out
+        assert "[serve.worker]\nthreads = 7\n" in out
+        # ``serve`` was parsed into its own namespace, which the
+        # nested Action does not see.
+        assert "[serve]\nport = 8080\n" in out

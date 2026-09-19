@@ -285,10 +285,37 @@ class ConfigField:
         return self.attr_path[-1]
 
 
+def namespace_targets(
+    owner: AbstractParser,
+    namespace: argparse.Namespace | None,
+) -> frozenset[int] | None:
+    """Return ``id()`` of every parser whose ``dest`` values
+    ``namespace`` holds, or ``None`` when there is no namespace.
+
+    argparse gives each subcommand a fresh namespace and copies it
+    into the parent namespace only after the subcommand finished. So
+    a namespace seen by an Action carries the values of the parser
+    that owns the Action (``owner``) and of the selected subparsers
+    below it; ``namespace.current_subparsers`` lists the selected
+    chain deepest first. Ancestors of ``owner`` and unselected
+    branches must not read from it: a same-named ``dest`` in another
+    branch would leak.
+    """
+    if namespace is None:
+        return None
+    ids = {id(owner)}
+    for node in getattr(namespace, "current_subparsers", None) or ():
+        if node is owner:
+            break
+        ids.add(id(node))
+    return frozenset(ids)
+
+
 def iter_config_fields(
     parser: AbstractParser,
     *,
     namespace: argparse.Namespace | None = None,
+    namespace_owner: AbstractParser | None = None,
     mask_secrets: bool = False,
     include_subparsers: bool = True,
 ) -> Iterator[ConfigField]:
@@ -304,7 +331,10 @@ def iter_config_fields(
 
     ``namespace``, when provided, lets fields pick up CLI args that
     argparse has already parsed — used by
-    :class:`GenerateConfigAction` mid-parse.
+    :class:`GenerateConfigAction` mid-parse. ``namespace_owner`` is
+    the parser whose Action received the namespace (default:
+    ``parser``); only that parser and the selected subparsers below
+    it read from the namespace, see :func:`namespace_targets`.
 
     When ``mask_secrets`` is true, any field whose argument was
     declared via :func:`argclass.Secret` (or carries
@@ -313,12 +343,14 @@ def iter_config_fields(
     template without leaking credentials.
     """
     auto_prefix = getattr(parser, "_auto_env_var_prefix", None)
+    targets = namespace_targets(namespace_owner or parser, namespace)
     yield from iter_subtree_fields(
         parser,
         attr_path=(),
         cli_path=(),
         auto_prefix=auto_prefix,
         namespace=namespace,
+        namespace_targets=targets,
         mask_secrets=mask_secrets,
         include_subparsers=include_subparsers,
     )
@@ -333,6 +365,7 @@ def iter_subtree_fields(
     dest_path: tuple[str, ...] | None = None,
     auto_prefix: str | None = None,
     namespace: argparse.Namespace | None = None,
+    namespace_targets: frozenset[int] | None = None,
     mask_secrets: bool = False,
     include_subparsers: bool = True,
 ) -> Iterator[ConfigField]:
@@ -346,12 +379,24 @@ def iter_subtree_fields(
     subparser; it forms the argparse ``dest``. It defaults to
     ``cli_path`` and is reset when the walk enters a subparser.
 
-    ``mask_secrets`` and ``include_subparsers`` mirror
+    ``namespace_targets`` limits which parsers read from
+    ``namespace`` (see :func:`namespace_targets`); ``None`` lets every
+    node read it. ``mask_secrets`` and ``include_subparsers`` mirror
     :func:`iter_config_fields` — see its docstring for the semantics.
     """
     node = cast(Any, target)
     if dest_path is None:
         dest_path = cli_path
+    # Groups share the namespace of their parser, so only a parser
+    # node can lose it. The full namespace still travels down to the
+    # subparsers, where each one is checked again.
+    own_namespace = namespace
+    if (
+        namespace_targets is not None
+        and isinstance(node, AbstractParser)
+        and id(node) not in namespace_targets
+    ):
+        own_namespace = None
     cli_prefix = "_".join(dest_path)
     for name, argument in node.__arguments__.items():
         if not should_emit(argument):
@@ -362,7 +407,7 @@ def iter_subtree_fields(
             target,
             name,
             argument,
-            namespace=namespace,
+            namespace=own_namespace,
             dest=dest,
             env_var=env_var,
         )
@@ -395,7 +440,8 @@ def iter_subtree_fields(
             subparser_path=subparser_path,
             dest_path=dest_path + child_seg,
             auto_prefix=auto_prefix,
-            namespace=namespace,
+            namespace=own_namespace,
+            namespace_targets=namespace_targets,
             mask_secrets=mask_secrets,
             include_subparsers=include_subparsers,
         )
@@ -403,9 +449,9 @@ def iter_subtree_fields(
         return
     for sub_name, subparser in getattr(node, "__subparsers__", {}).items():
         # A subparser is a separate ArgumentParser: its dests start
-        # over, and the parse namespace of the parent does not carry
-        # its values, so the walk falls back to instance state, env
-        # vars and declared defaults.
+        # over. Only a selected subparser reads the namespace; an
+        # unselected branch falls back to instance state, env vars
+        # and declared defaults.
         yield from iter_subtree_fields(
             subparser,
             attr_path=attr_path + (sub_name,),
@@ -413,7 +459,8 @@ def iter_subtree_fields(
             subparser_path=subparser_path + (sub_name,),
             dest_path=(),
             auto_prefix=getattr(subparser, "_auto_env_var_prefix", None),
-            namespace=None,
+            namespace=namespace,
+            namespace_targets=namespace_targets,
             mask_secrets=mask_secrets,
             include_subparsers=True,
         )
@@ -540,15 +587,18 @@ class ConfigGenerator:
         parser: AbstractParser,
         *,
         namespace: argparse.Namespace | None = None,
+        namespace_owner: AbstractParser | None = None,
     ) -> str:
         """Walk ``parser`` and return the rendered config as a
-        string."""
+        string. ``namespace`` and ``namespace_owner`` are passed to
+        :func:`iter_config_fields`."""
         # Materialise into a tuple so ``render`` (and any custom
         # subclass) can iterate the field stream multiple times.
         fields = tuple(
             iter_config_fields(
                 parser,
                 namespace=namespace,
+                namespace_owner=namespace_owner,
                 mask_secrets=self.mask_secrets,
                 include_subparsers=self.include_subparsers,
             ),
@@ -561,6 +611,7 @@ class ConfigGenerator:
         dest: str | Path | IO[str],
         *,
         namespace: argparse.Namespace | None = None,
+        namespace_owner: AbstractParser | None = None,
     ) -> None:
         """Write the rendered config to ``dest``.
 
@@ -568,7 +619,11 @@ class ConfigGenerator:
         :class:`pathlib.Path`), a file-like object, or the string
         ``"-"`` for stdout.
         """
-        content = self.dump_to_string(parser, namespace=namespace)
+        content = self.dump_to_string(
+            parser,
+            namespace=namespace,
+            namespace_owner=namespace_owner,
+        )
         if dest == "-":
             sys.stdout.write(content)
             return
@@ -785,6 +840,14 @@ class GenerateConfigAction(NonConfigAction):
     (or ``-`` for stdout). The action walks the parser, renders the
     config via the supplied ``generator=`` (class or instance), writes
     to the destination, and exits with status 0.
+
+    The action may also be declared on a subparser. The dump then
+    still starts at the root parser, so the file covers the whole
+    command tree. argparse parses a subcommand into a fresh namespace,
+    so root arguments given before the subcommand are not visible to
+    the action; the root part of the dump shows instance state, env
+    vars and declared defaults. Declare the flag on the root parser
+    and pass it before the subcommand when root overrides matter.
     """
 
     def __init__(
@@ -819,5 +882,13 @@ class GenerateConfigAction(NonConfigAction):
                 "through argclass.Parser.parse_args",
             )
         path = values[0] if isinstance(values, list) else values
-        self.generator.dump(argclass_parser, path, namespace=namespace)
+        root: AbstractParser = argclass_parser
+        while root.__parent__ is not None:
+            root = root.__parent__
+        self.generator.dump(
+            root,
+            path,
+            namespace=namespace,
+            namespace_owner=argclass_parser,
+        )
         parser.exit(0)
