@@ -4,6 +4,7 @@ import os
 import re
 import uuid
 from enum import IntEnum
+from pathlib import Path
 from typing import FrozenSet, List, Literal, Optional, Set, Tuple
 from unittest.mock import patch
 
@@ -2201,6 +2202,11 @@ class TestArgumentBaseIsPositional:
         assert arg.is_positional is False
 
 
+def squash(text: str) -> str:
+    """Drop all whitespace: argparse wraps long paths mid-word."""
+    return "".join(text.split())
+
+
 class TestParserConfigFilesEpilog:
     """Test Parser epilog generation with config files."""
 
@@ -2216,6 +2222,47 @@ class TestParserConfigFilesEpilog:
 
         assert "Default values will based on" in parser._epilog
         assert "configuration files" in parser._epilog
+
+    def test_epilog_lists_paths_as_strings(self, tmp_path, capsys):
+        """A ``Path`` in ``config_files`` must not show up as
+        ``PosixPath(...)`` in the help text."""
+        config_file = tmp_path / "config.ini"
+        config_file.write_text("[DEFAULT]\nname=test")
+
+        class Parser(argclass.Parser):
+            name: str = "default"
+
+        parser = Parser(config_files=[config_file, Path("/missing.ini")])
+        with pytest.raises(SystemExit):
+            parser.parse_args(["--help"])
+        out = squash(capsys.readouterr().out)
+        assert "PosixPath" not in out
+        assert "WindowsPath" not in out
+        assert squash(f"'{config_file}'") in out
+        assert "'/missing.ini'" in out
+        assert squash("Now 1 files has been applied") in out
+
+    def test_epilog_reports_config_argument_file(self, tmp_path, capsys):
+        """The file passed via ``config_argument`` counts as applied."""
+        config_file = tmp_path / "config.ini"
+        config_file.write_text("[DEFAULT]\nname=test")
+
+        class Parser(argclass.Parser):
+            name: str = "default"
+
+        parser = Parser(config_argument="--config")
+        with pytest.raises(SystemExit):
+            parser.parse_args(["--config", str(config_file), "--help"])
+        out = squash(capsys.readouterr().out)
+        assert squash("Now 1 files has been applied") in out
+        assert squash(str(config_file.resolve())) in out
+
+    def test_no_epilog_without_config(self, capsys):
+        class Parser(argclass.Parser):
+            name: str = "default"
+
+        Parser().print_help()
+        assert "configuration files" not in capsys.readouterr().out
 
 
 class TestParserPrintHelp:
