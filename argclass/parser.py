@@ -689,16 +689,12 @@ class Parser(AbstractParser, Base):
     """Main parser class for command-line argument parsing."""
 
     HELP_APPENDIX_PREAMBLE = (
-        " Default values will based on following "
-        "configuration files {configs}. "
+        " Default values come from these configuration files: {configs}. "
     )
-    HELP_APPENDIX_CURRENT = (
-        "Now {num_existent} files has been applied {existent}. "
-    )
+    HELP_APPENDIX_CURRENT = "Found and applied ({num_existent}): {existent}. "
     HELP_APPENDIX_END = (
-        "The configuration files is INI-formatted files "
-        "where configuration groups is INI sections. "
-        "See more https://docs.argclass.com/config-files.html"
+        "Argument groups and subcommands are sections of the file. "
+        "See https://docs.argclass.com/config-files.html"
     )
 
     def _add_argument(
