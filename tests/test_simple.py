@@ -1514,6 +1514,71 @@ class TestBoolDefaultValidation:
 
             Parser()
 
+    def test_optional_bool_with_argument_keeps_tristate(self):
+        """Optional[bool] + Argument() must stay a tri-state flag.
+
+        ``Optional[bool]`` means "true, false or not given". Adding an
+        explicit ``Argument()`` (to attach help text, an env var, ...)
+        must not collapse it into a plain store_true flag.
+        """
+
+        class Parser(argclass.Parser):
+            flag: Optional[bool] = argclass.Argument(default=None)
+
+        parser = Parser()
+        parser.parse_args([])
+        assert parser.flag is None
+
+        parser = Parser()
+        parser.parse_args(["--flag", "true"])
+        assert parser.flag is True
+
+        parser = Parser()
+        parser.parse_args(["--flag", "false"])
+        assert parser.flag is False
+
+    def test_optional_bool_with_argument_keeps_default(self):
+        """Optional[bool] + Argument(default=...) keeps the declared default."""
+
+        class Parser(argclass.Parser):
+            flag: Optional[bool] = argclass.Argument(default=True)
+
+        parser = Parser()
+        parser.parse_args([])
+        assert parser.flag is True
+
+        parser = Parser()
+        parser.parse_args(["--flag", "false"])
+        assert parser.flag is False
+
+    def test_optional_bool_with_argument_accepts_nargs(self):
+        """Optional[bool] + Argument(nargs='?') must not blow up."""
+
+        class Parser(argclass.Parser):
+            flag: Optional[bool] = argclass.Argument(nargs="?", default=None)
+
+        parser = Parser()
+        parser.parse_args([])
+        assert parser.flag is None
+
+        parser = Parser()
+        parser.parse_args(["--flag", "true"])
+        assert parser.flag is True
+
+    def test_plain_bool_with_argument_stays_a_flag(self):
+        """A plain bool + Argument() keeps the store_true flag behaviour."""
+
+        class Parser(argclass.Parser):
+            flag: bool = argclass.Argument(default=False)
+
+        parser = Parser()
+        parser.parse_args([])
+        assert parser.flag is False
+
+        parser = Parser()
+        parser.parse_args(["--flag"])
+        assert parser.flag is True
+
 
 class TestParserCallBehavior:
     """Test Parser.__call__ behavior."""
