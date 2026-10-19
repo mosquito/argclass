@@ -439,13 +439,40 @@ class Meta(ABCMeta):
                     argument = argument.copy()
                     # First try to unwrap optional
                     optional_inner = unwrap_optional(kind)
+                    # ``Optional[bool]`` is a tri-state: not given
+                    # (None), True or False. Remember that before the
+                    # annotation is unwrapped, otherwise the field
+                    # below would be turned into a plain store_true /
+                    # store_false flag and lose the "not given" state
+                    # as well as the ability to carry an explicit
+                    # value. The very same tri-state is what
+                    # ``_make_action_true_argument`` builds for the
+                    # fields declared without an explicit Argument().
+                    optional_bool = optional_inner is bool
                     if optional_inner is not None:
                         kind = optional_inner
 
                     # Handle bool type: set STORE_TRUE/STORE_FALSE action
                     if kind is bool and argument.action == Actions.default():
                         default = argument.default
-                        if default is False or default is None:
+                        if optional_bool:
+                            # Tri-state: the value is read as a string
+                            # and converted by ``parse_bool``. The
+                            # declared default is kept, it is the value
+                            # used when the flag is not given.
+                            if not (
+                                default is None
+                                or default is True
+                                or default is False
+                            ):
+                                raise TypeError(
+                                    f"Invalid default {default!r} for bool"
+                                )
+                            argument = argument.copy(
+                                action=Actions.STORE,
+                                type=parse_bool,
+                            )
+                        elif default is False or default is None:
                             argument = argument.copy(
                                 action=Actions.STORE_TRUE,
                                 default=False,

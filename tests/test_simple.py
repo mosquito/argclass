@@ -1579,6 +1579,15 @@ class TestBoolDefaultValidation:
         parser.parse_args(["--flag"])
         assert parser.flag is True
 
+    def test_optional_bool_with_argument_invalid_default_raises(self):
+        """Optional[bool] + Argument() rejects a non-boolean default."""
+        with pytest.raises(TypeError, match="Invalid default"):
+
+            class Parser(argclass.Parser):
+                flag: Optional[bool] = argclass.Argument(default=1)
+
+            Parser()
+
 
 class TestParserCallBehavior:
     """Test Parser.__call__ behavior."""
