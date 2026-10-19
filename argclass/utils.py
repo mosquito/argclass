@@ -154,8 +154,15 @@ def child_env_prefix(parent_prefix: str | None, name: str) -> str | None:
     return f"{parent_prefix}{name}_".upper()
 
 
-def parse_bool(value: str) -> bool:
-    """Parse a string to boolean."""
+def parse_bool(value: str | bool) -> bool:
+    """Parse a string to boolean.
+
+    A ``bool`` is returned unchanged. The conversion is applied to
+    values that may already be native booleans, for example the ones
+    a JSON or TOML configuration file delivers.
+    """
+    if isinstance(value, bool):
+        return value
     return value.lower() in TEXT_TRUE_VALUES
 
 

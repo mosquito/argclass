@@ -1,5 +1,6 @@
 from configparser import ConfigParser
 from pathlib import Path
+from typing import Optional
 
 import pytest
 
@@ -240,6 +241,72 @@ class TestConfigBooleanConversion:
 
         assert parser.output == Path("/var/log/app")
         assert parser.data == Path("/data/files")
+
+    def test_optional_bool_from_ini_config(self, tmp_path: Path):
+        """Test Optional[bool] tri-state conversion from an INI config."""
+        config_file = tmp_path / "config.ini"
+        config_file.write_text("[DEFAULT]\ndebug = true\nquiet = false\n")
+
+        class Parser(argclass.Parser):
+            debug: Optional[bool] = None
+            quiet: Optional[bool] = None
+
+        parser = Parser(config_files=[config_file])
+        parser.parse_args([])
+
+        assert parser.debug is True
+        assert parser.quiet is False
+
+    def test_optional_bool_from_json_config(self, tmp_path: Path):
+        """Test Optional[bool] tri-state from a JSON config.
+
+        JSON delivers real booleans, not the strings an INI file
+        holds, so the value must survive the conversion unchanged.
+        """
+        config_file = tmp_path / "config.json"
+        config_file.write_text('{"debug": true, "quiet": false}')
+
+        class Parser(argclass.Parser):
+            debug: Optional[bool] = None
+            quiet: Optional[bool] = None
+
+        parser = Parser(
+            config_files=[config_file],
+            config_parser_class=argclass.JSONDefaultsParser,
+        )
+        parser.parse_args([])
+
+        assert parser.debug is True
+        assert parser.quiet is False
+
+    def test_optional_bool_with_argument_from_json_config(self, tmp_path: Path):
+        """Test Optional[bool] + Argument() from a JSON config."""
+        config_file = tmp_path / "config.json"
+        config_file.write_text('{"debug": true}')
+
+        class Parser(argclass.Parser):
+            debug: Optional[bool] = argclass.Argument(default=None)
+
+        parser = Parser(
+            config_files=[config_file],
+            config_parser_class=argclass.JSONDefaultsParser,
+        )
+        parser.parse_args([])
+
+        assert parser.debug is True
+
+    def test_optional_bool_with_argument_from_ini_config(self, tmp_path: Path):
+        """Test Optional[bool] + Argument() from an INI config."""
+        config_file = tmp_path / "config.ini"
+        config_file.write_text("[DEFAULT]\ndebug = true\n")
+
+        class Parser(argclass.Parser):
+            debug: Optional[bool] = argclass.Argument(default=None)
+
+        parser = Parser(config_files=[config_file])
+        parser.parse_args([])
+
+        assert parser.debug is True
 
 
 class TestPartialConfigMerging:
