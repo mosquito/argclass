@@ -4,6 +4,7 @@ import ast
 import configparser
 import json
 import os
+import sys
 from abc import ABC, abstractmethod
 from enum import IntEnum
 from pathlib import Path
@@ -154,6 +155,33 @@ class AbstractDefaultsParser(ABC):
         return value
 
 
+def _ini_error_message(
+    error: configparser.Error | UnicodeDecodeError | AttributeError,
+) -> str:
+    """Describe the error without copying any text from the file."""
+    if isinstance(error, UnicodeDecodeError):
+        return "invalid text encoding"
+
+    lineno = getattr(error, "lineno", None)
+    if isinstance(error, configparser.MissingSectionHeaderError):
+        reason = "missing section header"
+    elif isinstance(error, configparser.DuplicateSectionError):
+        reason = "duplicate section"
+    elif isinstance(error, configparser.DuplicateOptionError):
+        reason = "duplicate option"
+    elif (
+        sys.version_info >= (3, 13)
+        and isinstance(error, configparser.MultilineContinuationError)
+    ) or (isinstance(error, AttributeError) and error.name == "append"):
+        reason = "continuation after an option without a value"
+    else:
+        reason = "invalid INI syntax"
+        if isinstance(error, configparser.ParsingError) and error.errors:
+            lineno = error.errors[0][0]
+
+    return f"line {lineno}: {reason}" if lineno is not None else reason
+
+
 class INIDefaultsParser(AbstractDefaultsParser):
     """Parse INI configuration files for default values.
 
@@ -189,10 +217,14 @@ class INIDefaultsParser(AbstractDefaultsParser):
                     continue
             # Before Python 3.13 a continuation after a valueless option
             # raises AttributeError instead of a configparser.Error.
-            except (configparser.Error, UnicodeDecodeError, AttributeError):
+            except (
+                configparser.Error,
+                UnicodeDecodeError,
+                AttributeError,
+            ) as e:
                 if self._strict:
                     raise ConfigurationError(
-                        "invalid INI file",
+                        _ini_error_message(e),
                         file_path=str(path),
                         reason="invalid_file",
                     ) from None

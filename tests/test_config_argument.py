@@ -10,6 +10,7 @@ Priority chain: declared defaults < config_files < --config file
 """
 
 import json
+import sys
 import traceback
 from pathlib import Path
 
@@ -196,17 +197,45 @@ class TestErrors:
 
     @pytest.mark.parametrize("explicit", [False, True], ids=["preset", "flag"])
     @pytest.mark.parametrize(
-        "contents",
+        ("contents", "expected"),
         [
-            b"private-marker without a section header\n",
-            b"[private-marker]\nx = 1\nx = 2\n",
-            b"[DEFAULT]\nworkers = private-marker\xff\n",
-            b"[section]\nprivate-marker\n  continuation\n",
+            (
+                b"; comment\n\nprivate-marker = value\n",
+                "line 3: missing section header",
+            ),
+            (
+                b"[private-marker]\n[private-marker]\n",
+                "line 2: duplicate section",
+            ),
+            (
+                b"[s]\nprivate-marker = 1\nprivate-marker = 2\n",
+                "line 3: duplicate option",
+            ),
+            (
+                b"[a]\n= private-marker\n[b]\n= second error\n",
+                "line 2: invalid INI syntax",
+            ),
+            (
+                b"[DEFAULT]\nworkers = private-marker\xff\n",
+                "invalid text encoding",
+            ),
+            (
+                b"[section]\nprivate-marker\n  continuation\n",
+                ("line 3: " if sys.version_info >= (3, 13) else "")
+                + "continuation after an option without a value",
+            ),
         ],
-        ids=["syntax", "duplicate", "encoding", "valueless-continuation"],
+        ids=[
+            "header",
+            "section",
+            "option",
+            "syntax",
+            "encoding",
+            "continuation",
+        ],
     )
     def test_invalid_ini_has_safe_file_error(
-        self, tmp_path, explicit, contents
+        self, tmp_path, explicit, contents, expected
     ):
         bad = tmp_path / "bad.ini"
         bad.write_bytes(contents)
@@ -221,7 +250,7 @@ class TestErrors:
 
         assert caught.value.reason == "invalid_file"
         assert caught.value.file_path == str(bad)
-        assert "private-marker" not in str(caught.value)
+        assert str(caught.value) == f"({bad}) {expected}"
         assert "private-marker" not in "".join(
             traceback.format_exception(caught.value)
         )

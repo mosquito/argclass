@@ -94,7 +94,10 @@ What you need to know:
   `reason="unreadable_file"`. Malformed INI files, including files with
   decoding errors, have `reason="invalid_file"` for both strict
   `config_files` and `config_argument`. The error includes the file path
-  and omits the file contents.
+  and the cause. Syntax errors include the line number when available.
+  For example, a repeated option on line 4 gives
+  `(app.ini) line 4: duplicate option`. A decoding error gives
+  `(app.ini) invalid text encoding`. Neither message quotes the input.
 - **Required arguments** are satisfied by a value from the file.
 
 Fine print:
@@ -425,6 +428,7 @@ try:
     assert False, "Should have raised"
 except argclass.ConfigurationError as error:
     assert error.reason == "invalid_file"
+    assert error.message == "line 4: duplicate option"
     assert error.file_path == str(Path(config_path).resolve())
 
 Path(config_path).unlink()
