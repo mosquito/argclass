@@ -174,33 +174,40 @@ class INIDefaultsParser(AbstractDefaultsParser):
     BOOL_TRUE_VALUES = TEXT_TRUE_VALUES
 
     def parse(self) -> Mapping[str, Any]:
-        parser = configparser.ConfigParser(
-            allow_no_value=True,
-            strict=self._strict,
-        )
-
+        defaults: dict[str, Any] = {}
+        sections: dict[str, dict[str, str]] = {}
         loaded: list[Path] = []
         for path in self._filter_readable_paths():
-            # Mirror the JSON/TOML parsers: in non-strict mode a
-            # malformed file is skipped (best effort), in strict mode
-            # the error propagates.
+            # Merge only complete files. A failed parse can leave options
+            # already populated in the ConfigParser instance.
+            parser = configparser.ConfigParser(
+                allow_no_value=True,
+                strict=self._strict,
+            )
             try:
-                read_ok = parser.read([path])
-            except (configparser.Error, OSError):
+                if not parser.read([path]):
+                    continue
+            # Before Python 3.13 a continuation after a valueless option
+            # raises AttributeError instead of a configparser.Error.
+            except (configparser.Error, UnicodeDecodeError, AttributeError):
                 if self._strict:
-                    raise
+                    raise ConfigurationError(
+                        "invalid INI file",
+                        file_path=str(path),
+                        reason="invalid_file",
+                    ) from None
                 continue
-            loaded.extend(Path(f) for f in read_ok)
+
+            defaults.update(parser.defaults())
+            for section in parser.sections():
+                sections.setdefault(section, {}).update(
+                    own_section_items(parser, section)
+                )
+            loaded.append(path)
+
         self._loaded_files = tuple(loaded)
-
-        result: dict[str, Any] = dict(
-            parser.items(parser.default_section, raw=True),
-        )
-        for section in parser.sections():
-            result[section] = own_section_items(parser, section)
-
-        self._values = result
-        return result
+        self._values = {**defaults, **sections}
+        return self._values
 
     def _convert(self, key: str, value: Any, kind: ValueKind) -> Any:
         """Convert INI string values based on expected kind."""

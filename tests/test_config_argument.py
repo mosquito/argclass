@@ -10,6 +10,7 @@ Priority chain: declared defaults < config_files < --config file
 """
 
 import json
+import traceback
 from pathlib import Path
 
 import pytest
@@ -190,14 +191,40 @@ class TestErrors:
         cli = make_cli()(config_argument="--config")
         with pytest.raises(argclass.ConfigurationError) as exc_info:
             cli.parse_args(["--config", "/no/such/file.ini"])
-        assert "/no/such/file.ini" in str(exc_info.value)
+        assert exc_info.value.reason == "unreadable_file"
+        assert exc_info.value.file_path == "/no/such/file.ini"
 
-    def test_malformed_explicit_file_raises(self, tmp_path):
+    @pytest.mark.parametrize("explicit", [False, True], ids=["preset", "flag"])
+    @pytest.mark.parametrize(
+        "contents",
+        [
+            b"private-marker without a section header\n",
+            b"[private-marker]\nx = 1\nx = 2\n",
+            b"[DEFAULT]\nworkers = private-marker\xff\n",
+            b"[section]\nprivate-marker\n  continuation\n",
+        ],
+        ids=["syntax", "duplicate", "encoding", "valueless-continuation"],
+    )
+    def test_invalid_ini_has_safe_file_error(
+        self, tmp_path, explicit, contents
+    ):
         bad = tmp_path / "bad.ini"
-        bad.write_text("this is not an ini file at all\n")
-        cli = make_cli()(config_argument="--config")
-        with pytest.raises(argclass.ConfigurationError):
-            cli.parse_args(["--config", str(bad)])
+        bad.write_bytes(contents)
+        cli = make_cli()
+        with pytest.raises(argclass.ConfigurationError) as caught:
+            if explicit:
+                cli(config_argument="--config").parse_args(
+                    ["--config", str(bad)]
+                )
+            else:
+                cli(config_files=[bad], strict_config=True)
+
+        assert caught.value.reason == "invalid_file"
+        assert caught.value.file_path == str(bad)
+        assert "private-marker" not in str(caught.value)
+        assert "private-marker" not in "".join(
+            traceback.format_exception(caught.value)
+        )
 
     def test_positional_config_argument_rejected(self):
         with pytest.raises(argclass.ArgumentDefinitionError):
