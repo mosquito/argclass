@@ -21,7 +21,6 @@ Each test class covers one finding:
 """
 
 import argparse
-import configparser
 import enum
 from pathlib import Path
 
@@ -217,7 +216,7 @@ class TestDefaultsParserStrictness:
 
     def test_malformed_ini_non_strict_skipped(self, tmp_path):
         bad = tmp_path / "bad.ini"
-        bad.write_text("no section header\n")
+        bad.write_text("[sec]\npartial = ignore me\n= invalid option\n")
         good = tmp_path / "good.ini"
         good.write_text("[sec]\nkey = value\n")
         parser = argclass.INIDefaultsParser([bad, good], strict=False)
@@ -229,7 +228,7 @@ class TestDefaultsParserStrictness:
         bad = tmp_path / "bad.ini"
         bad.write_text("no section header\n")
         parser = argclass.INIDefaultsParser([bad], strict=True)
-        with pytest.raises(configparser.Error):
+        with pytest.raises(argclass.ConfigurationError):
             parser.parse()
 
     def test_malformed_json_non_strict_skipped(self, tmp_path):

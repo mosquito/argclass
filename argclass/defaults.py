@@ -4,6 +4,7 @@ import ast
 import configparser
 import json
 import os
+import sys
 from abc import ABC, abstractmethod
 from enum import IntEnum
 from pathlib import Path
@@ -154,6 +155,38 @@ class AbstractDefaultsParser(ABC):
         return value
 
 
+def _ini_error_message(
+    error: configparser.Error | UnicodeDecodeError | AttributeError,
+) -> str:
+    """Describe the error without copying any text from the file."""
+    if isinstance(error, UnicodeDecodeError):
+        return "invalid text encoding"
+
+    lineno = getattr(error, "lineno", None)
+    if (
+        lineno is None
+        and isinstance(error, configparser.ParsingError)
+        and error.errors
+    ):
+        lineno = error.errors[0][0]
+
+    if isinstance(error, configparser.MissingSectionHeaderError):
+        reason = "missing section header"
+    elif isinstance(error, configparser.DuplicateSectionError):
+        reason = "duplicate section"
+    elif isinstance(error, configparser.DuplicateOptionError):
+        reason = "duplicate option"
+    elif (
+        sys.version_info >= (3, 13)
+        and isinstance(error, configparser.MultilineContinuationError)
+    ) or (isinstance(error, AttributeError) and error.name == "append"):
+        reason = "continuation after an option without a value"
+    else:
+        reason = "invalid INI syntax"
+
+    return f"line {lineno}: {reason}" if lineno is not None else reason
+
+
 class INIDefaultsParser(AbstractDefaultsParser):
     """Parse INI configuration files for default values.
 
@@ -174,33 +207,44 @@ class INIDefaultsParser(AbstractDefaultsParser):
     BOOL_TRUE_VALUES = TEXT_TRUE_VALUES
 
     def parse(self) -> Mapping[str, Any]:
-        parser = configparser.ConfigParser(
-            allow_no_value=True,
-            strict=self._strict,
-        )
-
+        defaults: dict[str, Any] = {}
+        sections: dict[str, dict[str, str]] = {}
         loaded: list[Path] = []
         for path in self._filter_readable_paths():
-            # Mirror the JSON/TOML parsers: in non-strict mode a
-            # malformed file is skipped (best effort), in strict mode
-            # the error propagates.
+            # Merge only complete files. A failed parse can leave options
+            # already populated in the ConfigParser instance.
+            parser = configparser.ConfigParser(
+                allow_no_value=True,
+                strict=self._strict,
+            )
             try:
-                read_ok = parser.read([path])
-            except (configparser.Error, OSError):
+                if not parser.read([path]):
+                    continue
+            # Before Python 3.13 a continuation after a valueless option
+            # raises AttributeError instead of a configparser.Error.
+            except (
+                configparser.Error,
+                UnicodeDecodeError,
+                AttributeError,
+            ) as e:
                 if self._strict:
-                    raise
+                    raise ConfigurationError(
+                        _ini_error_message(e),
+                        file_path=str(path),
+                        reason="invalid_file",
+                    ) from None
                 continue
-            loaded.extend(Path(f) for f in read_ok)
+
+            defaults.update(parser.defaults())
+            for section in parser.sections():
+                sections.setdefault(section, {}).update(
+                    own_section_items(parser, section)
+                )
+            loaded.append(path)
+
         self._loaded_files = tuple(loaded)
-
-        result: dict[str, Any] = dict(
-            parser.items(parser.default_section, raw=True),
-        )
-        for section in parser.sections():
-            result[section] = own_section_items(parser, section)
-
-        self._values = result
-        return result
+        self._values = {**defaults, **sections}
+        return self._values
 
     def _convert(self, key: str, value: Any, kind: ValueKind) -> Any:
         """Convert INI string values based on expected kind."""
