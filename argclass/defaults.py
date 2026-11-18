@@ -163,6 +163,13 @@ def _ini_error_message(
         return "invalid text encoding"
 
     lineno = getattr(error, "lineno", None)
+    if (
+        lineno is None
+        and isinstance(error, configparser.ParsingError)
+        and error.errors
+    ):
+        lineno = error.errors[0][0]
+
     if isinstance(error, configparser.MissingSectionHeaderError):
         reason = "missing section header"
     elif isinstance(error, configparser.DuplicateSectionError):
@@ -176,8 +183,6 @@ def _ini_error_message(
         reason = "continuation after an option without a value"
     else:
         reason = "invalid INI syntax"
-        if isinstance(error, configparser.ParsingError) and error.errors:
-            lineno = error.errors[0][0]
 
     return f"line {lineno}: {reason}" if lineno is not None else reason
 

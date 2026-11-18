@@ -163,9 +163,7 @@ class ConfigurationError(ArgclassError):
     Attributes:
         file_path: Path to the configuration file that caused the error.
         section: The config section (e.g., INI section) where error occurred.
-        reason: File error category, when available. A malformed INI file
-            has reason "invalid_file". A missing or unreadable explicitly
-            requested file has reason "unreadable_file".
+        reason: File error category (``invalid_file`` or ``unreadable_file``).
 
     Example::
 

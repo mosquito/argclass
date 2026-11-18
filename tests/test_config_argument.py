@@ -188,12 +188,30 @@ class TestLifecycle:
 
 
 class TestErrors:
-    def test_missing_explicit_file_raises(self):
+    @pytest.mark.parametrize("entry", ["missing", "directory"])
+    def test_unreadable_explicit_file_raises(self, tmp_path, entry):
+        path = tmp_path / entry
+        if entry == "directory":
+            path.mkdir()
         cli = make_cli()(config_argument="--config")
         with pytest.raises(argclass.ConfigurationError) as exc_info:
-            cli.parse_args(["--config", "/no/such/file.ini"])
+            cli.parse_args(["--config", str(path)])
         assert exc_info.value.reason == "unreadable_file"
-        assert exc_info.value.file_path == "/no/such/file.ini"
+        assert exc_info.value.file_path == str(path)
+
+    def test_malformed_explicit_json_keeps_decoder_error_as_cause(
+        self, tmp_path
+    ):
+        path = tmp_path / "app.json"
+        path.write_text("{")
+        cli = make_cli()(
+            config_parser_class=argclass.JSONDefaultsParser,
+            config_argument="--config",
+        )
+        with pytest.raises(argclass.ConfigurationError) as exc_info:
+            cli.parse_args(["--config", str(path)])
+        assert exc_info.value.file_path == str(path)
+        assert isinstance(exc_info.value.__cause__, json.JSONDecodeError)
 
     @pytest.mark.parametrize("explicit", [False, True], ids=["preset", "flag"])
     @pytest.mark.parametrize(
