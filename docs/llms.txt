@@ -17,7 +17,7 @@ content extraction.
 - [Config Files](https://docs.argclass.com/_sources/config-files.md.txt): INI, JSON, and TOML defaults via config_files= and config_argument=
 - [Config File Syntax](https://docs.argclass.com/_sources/config-file-reference.md.txt): On-disk layout: sections for groups and subcommands, booleans, lists
 - [Generating Config Files](https://docs.argclass.com/_sources/config-generation.md.txt): Writing INI/JSON/TOML/.env from a parser, the inverse of reading
-- [Environment Variables](https://docs.argclass.com/_sources/environment.md.txt): Automatic env var binding with prefixes
+- [Environment Variables](https://docs.argclass.com/_sources/environment.md.txt): Automatic env var binding with prefixes, lists and booleans
 - [Secrets](https://docs.argclass.com/_sources/secrets.md.txt): Secret masking to prevent accidental exposure in logs
 - [API Reference](https://docs.argclass.com/api.html): Full API documentation with all classes and functions
 
@@ -159,6 +159,8 @@ parser = CLI(auto_env_var_prefix="APP_")
 parser.parse_args()
 parser.sanitize_env(only_secrets=True)
 ```
+
+An argument with `nargs` reads its env value as a Python literal sequence (`APP_PORT=[8080, 8081]`), the same syntax INI files use, because neither carries native arrays (JSON and TOML do). A plain value without a comma is one element (`APP_ORIGIN=https://a.example` gives `["https://a.example"]`), an empty value is an empty list, and a value that starts with `[`, `(` or `{` or carries a comma must parse as a literal, otherwise `UnexpectedConfigValue` names the variable. `type=` converts each element (failure raises `TypeConversionError`); `converter=` runs after parsing on the complete value, for every source.
 
 ### Config files as argument defaults
 

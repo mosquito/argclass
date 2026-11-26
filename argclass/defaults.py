@@ -38,7 +38,13 @@ class ValueKind(IntEnum):
 class UnexpectedConfigValue(ConfigurationError):
     """Config value doesn't match expected type."""
 
-    def __init__(self, key: str, expected: ValueKind, value: Any):
+    def __init__(
+        self,
+        key: str,
+        expected: ValueKind,
+        value: Any,
+        hint: str | None = None,
+    ):
         self.value = repr(value)
         self.expected = expected
         self.key = key  # Backward compatibility alias
@@ -46,7 +52,7 @@ class UnexpectedConfigValue(ConfigurationError):
             f"expected {expected.name}, "
             f"got {type(value).__name__}: {self.value}",
             field_name=key,
-            hint=f"Provide a value of type {expected.name}",
+            hint=hint or f"Provide a value of type {expected.name}",
         )
 
 

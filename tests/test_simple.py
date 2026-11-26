@@ -643,6 +643,60 @@ def test_nargs_env_var_str():
     assert parser.nargs == frozenset({"a", "b", "c"})
 
 
+class TestNargsEnvVarValues:
+    """Environment values for an argument with ``nargs`` are Python
+    literal sequences. A plain value is one element; a broken sequence
+    is an error that names the variable."""
+
+    class Parser(argclass.Parser):
+        origins: list[str] = argclass.Argument(
+            type=str,
+            nargs="*",
+            env_var="TEST_ORIGINS",
+            default=[],
+        )
+
+    def test_plain_value_is_one_element(self, monkeypatch):
+        monkeypatch.setenv("TEST_ORIGINS", "https://a.example")
+        parser = self.Parser()
+        parser.parse_args([])
+        assert parser.origins == ["https://a.example"]
+
+    def test_literal_list(self, monkeypatch):
+        monkeypatch.setenv("TEST_ORIGINS", "['https://a.example', 'b']")
+        parser = self.Parser()
+        parser.parse_args([])
+        assert parser.origins == ["https://a.example", "b"]
+
+    def test_empty_value_is_empty_list(self, monkeypatch):
+        monkeypatch.setenv("TEST_ORIGINS", "")
+        parser = self.Parser()
+        parser.parse_args([])
+        assert parser.origins == []
+
+    def test_broken_literal_reports_the_variable(self, monkeypatch):
+        monkeypatch.setenv("TEST_ORIGINS", "['a', 'b'")
+        with pytest.raises(argclass.UnexpectedConfigValue) as exc_info:
+            self.Parser().parse_args([])
+        message = str(exc_info.value)
+        assert "TEST_ORIGINS" in message
+        assert "Python literal sequence" in message
+
+    def test_element_type_failure_reports_the_variable(self, monkeypatch):
+        class Parser(argclass.Parser):
+            ports: list[int] = argclass.Argument(
+                type=int,
+                nargs="*",
+                env_var="TEST_PORTS",
+                default=[],
+            )
+
+        monkeypatch.setenv("TEST_PORTS", "['http']")
+        with pytest.raises(argclass.TypeConversionError) as exc_info:
+            Parser().parse_args([])
+        assert "TEST_PORTS" in str(exc_info.value)
+
+
 def test_nargs_config_list(tmp_path):
     class Parser(argclass.Parser):
         nargs: FrozenSet[int] = argclass.Argument(

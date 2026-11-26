@@ -103,6 +103,55 @@ The most common mistake is using `nargs="+"` when you want to allow empty lists.
 | `--files` without values errors | Use `nargs="*"` for zero-or-more |
 | Comma-separated values | CLI uses spaces: `--files a.txt b.txt` |
 | Default `[]` with `nargs="+"` | Requires at least one value when flag is used |
+| List in an env var or INI file | Write a Python literal: `["a.txt", "b.txt"]` |
+
+:::{warning}
+Environment variables and INI files carry a list as a Python literal, because
+neither format has a native array. A value that starts with `[`, `(` or `{`,
+or that carries a comma, must parse as a literal, otherwise
+`UnexpectedConfigValue` is raised. A plain environment value without a comma
+becomes a list of one element: `APP_FILES=a.txt` gives `["a.txt"]`. JSON and
+TOML carry arrays natively, so no literal is needed there. See
+[Environment Variables](environment.md) and [Config Files](config-files.md).
+:::
+
+<!--- name: test_pitfall_list_sources --->
+```python
+import os
+import argclass
+from tempfile import NamedTemporaryFile
+from pathlib import Path
+
+class Parser(argclass.Parser):
+    files: list[str] = argclass.Argument(nargs="*", default=[])
+
+with NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as f:
+    f.write("[DEFAULT]\n")
+    f.write('files = ["a.txt", "b.txt"]\n')
+    config_path = f.name
+
+parser = Parser(config_files=[config_path])
+parser.parse_args([])
+assert parser.files == ["a.txt", "b.txt"]
+
+# One plain env value is one element.
+os.environ["APP_FILES"] = "a.txt"
+parser = Parser(auto_env_var_prefix="APP_")
+parser.parse_args([])
+assert parser.files == ["a.txt"]
+
+# A comma is not a separator.
+os.environ["APP_FILES"] = "a.txt,b.txt"
+try:
+    Parser(auto_env_var_prefix="APP_").parse_args([])
+except argclass.UnexpectedConfigValue as e:
+    assert "APP_FILES" in str(e)
+else:
+    raise AssertionError("the comma-separated value must raise")
+
+del os.environ["APP_FILES"]
+Path(config_path).unlink()
+```
 
 :::{tip}
 Use `nargs="*"` if the flag can appear with zero values (`--files` alone is valid).
