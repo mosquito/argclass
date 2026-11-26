@@ -373,6 +373,9 @@ class Parser(argclass.Parser):
     origin: list[str] = argclass.Argument(nargs="*", default=[])
     port: list[int] = argclass.Argument(type=int, nargs="*", default=[])
 
+class TableParser(argclass.Parser):
+    value: list[str] = argclass.Argument(nargs="*", default=[])
+
 os.environ["APP_ORIGIN"] = "https://a.example"
 os.environ["APP_PORT"] = "[8080, 8081]"
 
@@ -384,6 +387,20 @@ assert parser.port == [8080, 8081]
 
 del os.environ["APP_ORIGIN"]
 del os.environ["APP_PORT"]
+
+# Every accepted row of the table above.
+for raw, expected in (
+    ('["a", "b"]', ["a", "b"]),
+    ("(1, 2)", ["1", "2"]),
+    ("https://a.example", ["https://a.example"]),
+    ("", []),
+):
+    os.environ["APP_VALUE"] = raw
+    table = TableParser(auto_env_var_prefix="APP_")
+    table.parse_args([])
+    assert table.value == expected, raw
+
+del os.environ["APP_VALUE"]
 ```
 
 A broken sequence raises an error that names the variable:
@@ -396,14 +413,15 @@ import argclass
 class Parser(argclass.Parser):
     origin: list[str] = argclass.Argument(nargs="*", default=[])
 
-os.environ["APP_ORIGIN"] = "a,b"
-
-try:
-    Parser(auto_env_var_prefix="APP_").parse_args([])
-except argclass.UnexpectedConfigValue as e:
-    assert "APP_ORIGIN" in str(e)
-else:
-    raise AssertionError("the broken value must raise")
+# Both rejected rows of the table above.
+for raw in ("a,b", '["a", "b"'):
+    os.environ["APP_ORIGIN"] = raw
+    try:
+        Parser(auto_env_var_prefix="APP_").parse_args([])
+    except argclass.UnexpectedConfigValue as e:
+        assert "APP_ORIGIN" in str(e)
+    else:
+        raise AssertionError(f"{raw} must raise")
 
 del os.environ["APP_ORIGIN"]
 ```
@@ -423,11 +441,34 @@ Environment=APP_ORIGIN=["https://a.example", "https://b.example"]
 Environment=APP_PORT=[8080, 8081]
 ```
 
+`converter=` runs after parsing, on the complete value, and it runs for a
+value that came from the environment as well:
+
+<!--- name: test_env_list_converter --->
+```python
+import os
+import argclass
+
+class Parser(argclass.Parser):
+    port: frozenset = argclass.Argument(
+        type=int,
+        nargs="*",
+        converter=frozenset,
+        default=[],
+    )
+
+os.environ["APP_PORT"] = "[8080, 8081, 8080]"
+
+parser = Parser(auto_env_var_prefix="APP_")
+parser.parse_args([])
+
+assert parser.port == frozenset({8080, 8081})
+
+del os.environ["APP_PORT"]
+```
+
 :::{seealso}
-`converter=` runs after parsing, on the complete value, for every source
-(CLI, environment, config file). Use it to build a `frozenset` or another
-container from the list. See [Config Files](config-files.md) for the file
-syntax of the same values.
+See [Config Files](config-files.md) for the file syntax of the same values.
 :::
 
 ## Boolean Environment Variables

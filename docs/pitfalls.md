@@ -115,6 +115,44 @@ TOML carry arrays natively, so no literal is needed there. See
 [Environment Variables](environment.md) and [Config Files](config-files.md).
 :::
 
+<!--- name: test_pitfall_list_sources --->
+```python
+import os
+import argclass
+from tempfile import NamedTemporaryFile
+from pathlib import Path
+
+class Parser(argclass.Parser):
+    files: list[str] = argclass.Argument(nargs="*", default=[])
+
+with NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as f:
+    f.write("[DEFAULT]\n")
+    f.write('files = ["a.txt", "b.txt"]\n')
+    config_path = f.name
+
+parser = Parser(config_files=[config_path])
+parser.parse_args([])
+assert parser.files == ["a.txt", "b.txt"]
+
+# One plain env value is one element.
+os.environ["APP_FILES"] = "a.txt"
+parser = Parser(auto_env_var_prefix="APP_")
+parser.parse_args([])
+assert parser.files == ["a.txt"]
+
+# A comma is not a separator.
+os.environ["APP_FILES"] = "a.txt,b.txt"
+try:
+    Parser(auto_env_var_prefix="APP_").parse_args([])
+except argclass.UnexpectedConfigValue as e:
+    assert "APP_FILES" in str(e)
+else:
+    raise AssertionError("the comma-separated value must raise")
+
+del os.environ["APP_FILES"]
+Path(config_path).unlink()
+```
+
 :::{tip}
 Use `nargs="*"` if the flag can appear with zero values (`--files` alone is valid).
 Use `nargs="+"` if at least one value is required when the flag is used.

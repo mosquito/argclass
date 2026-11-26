@@ -168,6 +168,47 @@ environment value without a comma becomes a list of one element; see
 after parsing. Both run for every source: the command line, environment
 variables and config files.
 
+<!--- name: test_every_source_conversion --->
+```python
+import os
+import argclass
+from tempfile import NamedTemporaryFile
+from pathlib import Path
+
+class Parser(argclass.Parser):
+    port: frozenset = argclass.Argument(
+        type=int,
+        nargs="*",
+        converter=frozenset,
+        env_var="APP_PORT",
+        default=[],
+    )
+
+with NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as f:
+    f.write("[DEFAULT]\n")
+    f.write("port = [8080, 8081]\n")
+    config_path = f.name
+
+# From the config file: literal, then type, then converter.
+parser = Parser(config_files=[config_path])
+parser.parse_args([])
+assert parser.port == frozenset({8080, 8081})
+
+# From the environment: the same pipeline.
+os.environ["APP_PORT"] = "[9090, 9091]"
+parser = Parser(config_files=[config_path])
+parser.parse_args([])
+assert parser.port == frozenset({9090, 9091})
+del os.environ["APP_PORT"]
+
+# From the command line: values are separated by spaces.
+parser = Parser(config_files=[config_path])
+parser.parse_args(["--port", "1", "2"])
+assert parser.port == frozenset({1, 2})
+
+Path(config_path).unlink()
+```
+
 ### INI Complex Types
 
 All INI values are strings. For lists, use Python literal syntax:
