@@ -227,7 +227,7 @@ Path(config_path).unlink()
 
 | Parameter | Applied to | Use Case |
 |-----------|-----------|----------|
-| `type` | Each value (CLI or config) | Convert int, float, Path, URL |
+| `type` | Each value (CLI, env or config) | Convert int, float, Path, URL |
 | `converter` | Final result after parsing | Convert list→set, aggregate |
 
 **Error handling:** Type conversion errors propagate immediately:

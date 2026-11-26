@@ -408,7 +408,14 @@ else:
 del os.environ["APP_ORIGIN"]
 ```
 
-In a systemd unit, quote the literal so the shell keeps it in one value:
+In a shell, quote the literal, because it carries spaces:
+
+```sh
+export APP_ORIGIN='["https://a.example", "https://b.example"]'
+export APP_PORT='[8080, 8081]'
+```
+
+A systemd unit needs no quotes; `Environment=` keeps the complete value:
 
 ```ini
 [Service]
