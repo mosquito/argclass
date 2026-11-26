@@ -14,7 +14,7 @@ from typing import (
 )
 from collections.abc import Mapping
 
-from .exceptions import ComplexTypeError
+from .exceptions import ComplexTypeError, TypeConversionError
 from .types import (
     CONTAINER_TYPES,
     TEXT_TRUE_VALUES,
@@ -178,11 +178,88 @@ def nargs_is_list(argument: Any) -> bool:
     return isinstance(nargs, int) and nargs >= 1
 
 
-def coerce_env_default(raw: Any, argument: Any) -> Any:
+# A value that starts with one of these characters, or that carries a
+# comma, is an attempt to write a sequence. Such a value must parse as
+# a Python literal; it is never read as a single element.
+SEQUENCE_PREFIXES = "[({"
+
+
+def coerce_env_list(
+    raw: str,
+    argument: Any,
+    env_var: str | None = None,
+) -> list[Any]:
+    """Read an environment value for an argument with ``nargs``.
+
+    The value is a Python literal sequence, for example
+    ``["first", "second"]``. A plain value without a sequence prefix
+    and without a comma becomes a list of one element. An empty value
+    becomes an empty list.
+
+    Every element is converted with ``argument.type``.
+
+    Raises:
+        UnexpectedConfigValue: The value looks like a sequence, but it
+            is not a valid Python literal.
+        TypeConversionError: An element does not convert to
+            ``argument.type``.
+    """
+    # Imported here, because ``argclass.defaults`` imports this module.
+    from .defaults import UnexpectedConfigValue, ValueKind
+
+    field = env_var or getattr(argument, "env_var", None) or "environment"
+    text = raw.strip()
+    if not text:
+        return []
+
+    try:
+        value: Any = ast.literal_eval(text)
+    except (ValueError, SyntaxError) as e:
+        if text[0] in SEQUENCE_PREFIXES or "," in text:
+            raise UnexpectedConfigValue(
+                field,
+                ValueKind.SEQUENCE,
+                raw,
+                hint=(
+                    "Write a Python literal sequence, for example "
+                    f"{field}=\"['first', 'second']\", or a single "
+                    "value without a comma"
+                ),
+            ) from e
+        value = text
+
+    if isinstance(value, (list, tuple, set, frozenset)):
+        items = list(value)
+    else:
+        # One scalar is one element. The raw text is kept, so ``type``
+        # reads the same string the command line gives it.
+        items = [text]
+
+    item_type = argument.type or str
+    result = []
+    for item in items:
+        try:
+            result.append(item_type(item))
+        except Exception as e:
+            raise TypeConversionError(
+                f"cannot convert an element of {field}",
+                field_name=field,
+                value=item,
+                target_type=item_type if isinstance(item_type, type) else None,
+                hint=f"Correct the value of {field}",
+            ) from e
+    return result
+
+
+def coerce_env_default(
+    raw: Any,
+    argument: Any,
+    env_var: str | None = None,
+) -> Any:
     """Coerce a raw env-var string into the value argparse would bind.
 
     Mirrors the conversions ``Parser._add_argument`` applies after
-    reading ``os.getenv``: ``ast.literal_eval`` for sequence-typed
+    reading ``os.getenv``: :func:`coerce_env_list` for sequence-typed
     arguments, :func:`parse_bool` for ``store_true``/``store_false``
     actions, and ``argument.type`` for the scalar fallback.
 
@@ -192,13 +269,8 @@ def coerce_env_default(raw: Any, argument: Any) -> Any:
     """
     if not isinstance(raw, str):
         return raw
-    if raw and nargs_is_list(argument):
-        try:
-            return list(
-                map(argument.type or str, ast.literal_eval(raw)),
-            )
-        except Exception:
-            return raw
+    if nargs_is_list(argument):
+        return coerce_env_list(raw, argument, env_var)
     if argument.action in (
         Actions.STORE_TRUE,
         Actions.STORE_FALSE,

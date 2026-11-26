@@ -752,7 +752,11 @@ class Parser(AbstractParser, Base):
             # otherwise silently become the integer ``0`` here).
             raw = os.environ.get(argument.env_var)
             if raw is not None:
-                kwargs["default"] = coerce_env_default(raw, argument)
+                kwargs["default"] = coerce_env_default(
+                    raw,
+                    argument,
+                    argument.env_var,
+                )
                 self._used_env_vars.add(argument.env_var)
                 if argument.secret:
                     self._used_secret_env_vars.add(argument.env_var)

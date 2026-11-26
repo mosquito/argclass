@@ -56,7 +56,7 @@ _PAGES: list[tuple[str, str, str, bool]] = [
     (
         "environment",
         "Environment Variables",
-        "Automatic env var binding with prefixes",
+        "Automatic env var binding with prefixes, lists and booleans",
         False,
     ),
     (

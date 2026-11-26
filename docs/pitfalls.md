@@ -103,6 +103,17 @@ The most common mistake is using `nargs="+"` when you want to allow empty lists.
 | `--files` without values errors | Use `nargs="*"` for zero-or-more |
 | Comma-separated values | CLI uses spaces: `--files a.txt b.txt` |
 | Default `[]` with `nargs="+"` | Requires at least one value when flag is used |
+| List in an env var or INI file | Write a Python literal: `["a.txt", "b.txt"]` |
+
+:::{warning}
+Environment variables and INI files carry a list as a Python literal, because
+neither format has a native array. A value that starts with `[`, `(` or `{`,
+or that carries a comma, must parse as a literal, otherwise
+`UnexpectedConfigValue` is raised. A plain environment value without a comma
+becomes a list of one element: `APP_FILES=a.txt` gives `["a.txt"]`. JSON and
+TOML carry arrays natively, so no literal is needed there. See
+[Environment Variables](environment.md) and [Config Files](config-files.md).
+:::
 
 :::{tip}
 Use `nargs="*"` if the flag can appear with zero values (`--files` alone is valid).

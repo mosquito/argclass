@@ -154,9 +154,19 @@ Use `TOMLDefaultsParser`
 | **INI** | `ast.literal_eval` syntax | All strings | `INIDefaultsParser` |
 | **JSON** | Native arrays/objects | int, float, bool, null | `JSONDefaultsParser` |
 | **TOML** | Native arrays/tables | int, float, bool, datetime | `TOMLDefaultsParser` |
+| **Environment** | `ast.literal_eval` syntax | All strings | built into the parser |
 
 All parsers validate that config values match expected types. If a value doesn't match
 (e.g., a string where a list is expected), `UnexpectedConfigValue` is raised.
+
+INI files and environment variables carry every value as a string, so a list
+needs the Python literal syntax. JSON and TOML carry arrays natively. An
+environment value without a comma becomes a list of one element; see
+[Environment Variables](environment.md) for the complete rules.
+
+`type=` converts a single token and `converter=` converts the complete value
+after parsing. Both run for every source: the command line, environment
+variables and config files.
 
 ### INI Complex Types
 

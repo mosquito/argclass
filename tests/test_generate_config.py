@@ -1603,13 +1603,80 @@ class TestCoerceEnvValue:
         )
         assert coerce_env_default("[1, 2, 3]", arg) == [1, 2, 3]
 
-    def test_list_with_bad_literal_returns_raw(self):
+    def test_scalar_becomes_one_element_list(self):
+        """A plain value is one element, not a string. A string here
+        would make ``set(value)`` split the value into characters."""
+        arg = argclass.TypedArgument(
+            type=str,
+            nargs=argclass.Nargs.ONE_OR_MORE,
+        )
+        assert coerce_env_default("https://a.example", arg) == [
+            "https://a.example",
+        ]
+
+    def test_scalar_literal_becomes_one_element_list(self):
         arg = argclass.TypedArgument(
             type=int,
             nargs=argclass.Nargs.ONE_OR_MORE,
         )
-        # Not parseable as a literal — return the raw string.
-        assert coerce_env_default("not-a-list", arg) == "not-a-list"
+        assert coerce_env_default("5", arg) == [5]
+
+    def test_tuple_literal_becomes_list(self):
+        arg = argclass.TypedArgument(
+            type=int,
+            nargs=argclass.Nargs.ZERO_OR_MORE,
+        )
+        assert coerce_env_default("(1, 2)", arg) == [1, 2]
+
+    def test_empty_value_becomes_empty_list(self):
+        arg = argclass.TypedArgument(
+            type=str,
+            nargs=argclass.Nargs.ZERO_OR_MORE,
+        )
+        assert coerce_env_default("", arg) == []
+        assert coerce_env_default("   ", arg) == []
+
+    def test_broken_sequence_literal_raises(self):
+        """A value that starts a sequence must parse as a literal."""
+        arg = argclass.TypedArgument(
+            type=int,
+            nargs=argclass.Nargs.ONE_OR_MORE,
+        )
+        with pytest.raises(argclass.UnexpectedConfigValue) as exc_info:
+            coerce_env_default("[1, 2", arg, "APP_ITEMS")
+        message = str(exc_info.value)
+        assert "APP_ITEMS" in message
+        assert "Python literal sequence" in message
+
+    def test_comma_separated_value_raises(self):
+        """Commas are not a separator; the message shows the syntax."""
+        arg = argclass.TypedArgument(
+            type=str,
+            nargs=argclass.Nargs.ONE_OR_MORE,
+        )
+        with pytest.raises(argclass.UnexpectedConfigValue) as exc_info:
+            coerce_env_default("a,b", arg, "APP_ITEMS")
+        assert "APP_ITEMS" in str(exc_info.value)
+
+    def test_element_type_failure_raises(self):
+        arg = argclass.TypedArgument(
+            type=int,
+            nargs=argclass.Nargs.ONE_OR_MORE,
+        )
+        with pytest.raises(argclass.TypeConversionError) as exc_info:
+            coerce_env_default('["x"]', arg, "APP_ITEMS")
+        assert "APP_ITEMS" in str(exc_info.value)
+
+    def test_error_names_the_argument_env_var(self):
+        """Without an explicit name, the argument supplies it."""
+        arg = argclass.TypedArgument(
+            type=str,
+            nargs=argclass.Nargs.ONE_OR_MORE,
+            env_var="APP_ITEMS",
+        )
+        with pytest.raises(argclass.UnexpectedConfigValue) as exc_info:
+            coerce_env_default("[1, 2", arg)
+        assert "APP_ITEMS" in str(exc_info.value)
 
     def test_bool_store_true_action(self):
         arg = argclass.TypedArgument(action=argclass.Actions.STORE_TRUE)

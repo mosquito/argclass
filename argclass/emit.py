@@ -147,7 +147,7 @@ def current_value(
     if env_var:
         raw = os.environ.get(env_var)
         if raw is not None:
-            return coerce_env_default(raw, argument)
+            return coerce_env_default(raw, argument, env_var)
     if owner is not None:
         value = getattr(owner, "_config_value")(name, argument, section=section)
         if value is not None:
