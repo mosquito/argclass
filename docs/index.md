@@ -9,6 +9,10 @@
 
 :::{note}
 For offline access, you can download the full documentation as a PDF: <a href="_static/argclass.pdf">**Download PDF Documentation**</a>
+
+For LLM agents: <a href="/llms.txt">**llms.txt**</a> is an index of the
+documentation as plain Markdown. <a href="/llms-full.txt">**llms-full.txt**</a>
+contains the pages in one file.
 :::
 ```
 
@@ -70,6 +74,62 @@ if __name__ == "__main__":
 $ python server.py --host 0.0.0.0 --port 9000 --debug
 Starting server on 0.0.0.0:9000
 ```
+
+## One Parser, Four Sources
+
+One parser class configures the program from four sources: default config
+files, a config file that the user selects, environment variables, and the
+command line.
+
+<!--- name: test_index_four_sources --->
+```python
+import os
+import argclass
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+class Server(argclass.Parser):
+    host: str = "127.0.0.1"
+    port: int = 8080
+    workers: int = 1
+    debug: bool = False
+
+with TemporaryDirectory() as tmp:
+    defaults = Path(tmp, "defaults.ini")
+    defaults.write_text("[DEFAULT]\nhost = file.example\nport = 9000\n")
+    user = Path(tmp, "user.ini")
+    user.write_text("[DEFAULT]\nport = 9100\nworkers = 4\n")
+    os.environ["APP_WORKERS"] = "8"
+
+    server = Server(
+        config_files=[defaults],
+        config_argument="--config",
+        auto_env_var_prefix="APP_",
+    )
+    server.parse_args(["--config", str(user), "--debug"])
+
+del os.environ["APP_WORKERS"]
+
+assert server.host == "file.example"  # default config file
+assert server.port == 9100            # file from --config
+assert server.workers == 8            # environment variable
+assert server.debug is True           # command line
+```
+
+Priority grows from left to right. The rightmost value in a row wins.
+
+| Argument  | Class default | `config_files=` | `--config` file | Environment | Command line | Result         |
+|-----------|---------------|-----------------|-----------------|-------------|--------------|----------------|
+| `host`    | `127.0.0.1`   | `file.example`  |                 |             |              | `file.example` |
+| `port`    | `8080`        | `9000`          | `9100`          |             |              | `9100`         |
+| `workers` | `1`           |                 | `4`             | `8`         |              | `8`            |
+| `debug`   | `False`       |                 |                 |             | `--debug`    | `True`         |
+
+:::{tip}
+Do not override `__init__` in a parser class. Pass `config_files`,
+`config_argument`, and `auto_env_var_prefix` where you create the instance.
+See [Parser Options](quickstart.md#parser-options).
+:::
 
 ## Why argclass?
 
