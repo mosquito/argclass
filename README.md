@@ -36,6 +36,94 @@ assert server.debug is True
 $ python server.py --host 0.0.0.0 --port 9000 --debug
 ```
 
+## One Parser, Four Sources
+
+One parser class configures the program from four sources: default config
+files, a config file that the user selects, environment variables, and the
+command line.
+
+<!--- name: test_readme_four_sources --->
+```python
+import os
+import argclass
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+class Server(argclass.Parser):
+    host: str = "127.0.0.1"
+    port: int = 8080
+    workers: int = 1
+    debug: bool = False
+
+with TemporaryDirectory() as tmp:
+    defaults = Path(tmp, "defaults.ini")
+    defaults.write_text("[DEFAULT]\nhost = file.example\nport = 9000\n")
+    user = Path(tmp, "user.ini")
+    user.write_text("[DEFAULT]\nport = 9100\nworkers = 4\n")
+    os.environ["APP_WORKERS"] = "8"
+
+    server = Server(
+        config_files=[defaults],
+        config_argument="--config",
+        auto_env_var_prefix="APP_",
+    )
+    server.parse_args(["--config", str(user), "--debug"])
+
+del os.environ["APP_WORKERS"]
+
+assert server.host == "file.example"  # default config file
+assert server.port == 9100            # file from --config
+assert server.workers == 8            # environment variable
+assert server.debug is True           # command line
+```
+
+Priority grows from left to right. The rightmost value in a row wins.
+
+| Argument  | Class default | `config_files=` | `--config` file | Environment | Command line | Result         |
+|-----------|---------------|-----------------|-----------------|-------------|--------------|----------------|
+| `host`    | `127.0.0.1`   | `file.example`  |                 |             |              | `file.example` |
+| `port`    | `8080`        | `9000`          | `9100`          |             |              | `9100`         |
+| `workers` | `1`           |                 | `4`             | `8`         |              | `8`            |
+| `debug`   | `False`       |                 |                 |             | `--debug`    | `True`         |
+
+### Do Not Override `__init__`
+
+Pass `config_files`, `config_argument`, and `auto_env_var_prefix` where you
+create the parser instance. Do not override `__init__` to set them. A parser
+with fixed options is hard to test. As a subcommand, it ignores the
+environment prefix of the parent parser.
+
+Without `__init__`, the same class is the main parser of one program and a
+subcommand of a different program:
+
+<!--- name: test_readme_no_init --->
+```python
+import os
+import argclass
+
+class Serve(argclass.Parser):
+    port: int = 8080
+
+class Tool(argclass.Parser):
+    serve = Serve()
+
+os.environ["SERVE_PORT"] = "9000"
+os.environ["TOOL_SERVE_PORT"] = "9100"
+
+# Main parser
+serve = Serve(auto_env_var_prefix="SERVE_")
+serve.parse_args([])
+assert serve.port == 9000
+
+# Subcommand of a different parser
+tool = Tool(auto_env_var_prefix="TOOL_")
+tool.parse_args(["serve"])
+assert tool.serve.port == 9100
+
+del os.environ["SERVE_PORT"]
+del os.environ["TOOL_SERVE_PORT"]
+```
+
 ## Features
 
 | Feature | argclass | argparse | click/typer |
@@ -392,3 +480,8 @@ Full documentation at **[docs.argclass.com](https://docs.argclass.com)**:
 - [Environment Variables](https://docs.argclass.com/environment.html)
 - [Secrets](https://docs.argclass.com/secrets.html)
 - [API Reference](https://docs.argclass.com/api.html)
+
+For LLM agents: [llms.txt](https://docs.argclass.com/llms.txt) is an index of
+the documentation as plain Markdown.
+[llms-full.txt](https://docs.argclass.com/llms-full.txt) contains the pages in
+one file.

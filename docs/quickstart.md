@@ -212,6 +212,44 @@ del os.environ["TEST_DB_PORT"]
 
 Usage: `TEST_DB_HOST=prod.example.com python app.py`
 
+## Parser Options
+
+Pass `config_files`, `config_argument`, and `auto_env_var_prefix` where you
+create the parser instance. Do not override `__init__` to set them. A parser
+with fixed options is hard to test. As a subcommand, it ignores the
+environment prefix of the parent parser.
+
+Without `__init__`, the same class is the main parser of one program and a
+subcommand of a different program:
+
+<!--- name: test_quickstart_parser_options --->
+```python
+import os
+import argclass
+
+class Serve(argclass.Parser):
+    port: int = 8080
+
+class Tool(argclass.Parser):
+    serve = Serve()
+
+os.environ["SERVE_PORT"] = "9000"
+os.environ["TOOL_SERVE_PORT"] = "9100"
+
+# Main parser
+serve = Serve(auto_env_var_prefix="SERVE_")
+serve.parse_args([])
+assert serve.port == 9000
+
+# Subcommand of a different parser
+tool = Tool(auto_env_var_prefix="TOOL_")
+tool.parse_args(["serve"])
+assert tool.serve.port == 9100
+
+del os.environ["SERVE_PORT"]
+del os.environ["TOOL_SERVE_PORT"]
+```
+
 ## Quick Reference
 
 | Pattern | Syntax | Result |
