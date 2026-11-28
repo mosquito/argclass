@@ -10,6 +10,8 @@ Priority chain: declared defaults < config_files < --config file
 """
 
 import json
+import sys
+import traceback
 from pathlib import Path
 
 import pytest
@@ -186,18 +188,90 @@ class TestLifecycle:
 
 
 class TestErrors:
-    def test_missing_explicit_file_raises(self):
+    @pytest.mark.parametrize("entry", ["missing", "directory"])
+    def test_unreadable_explicit_file_raises(self, tmp_path, entry):
+        path = tmp_path / entry
+        if entry == "directory":
+            path.mkdir()
         cli = make_cli()(config_argument="--config")
         with pytest.raises(argclass.ConfigurationError) as exc_info:
-            cli.parse_args(["--config", "/no/such/file.ini"])
-        assert "/no/such/file.ini" in str(exc_info.value)
+            cli.parse_args(["--config", str(path)])
+        assert exc_info.value.reason == "unreadable_file"
+        assert exc_info.value.file_path == str(path)
 
-    def test_malformed_explicit_file_raises(self, tmp_path):
+    def test_malformed_explicit_json_keeps_decoder_error_as_cause(
+        self, tmp_path
+    ):
+        path = tmp_path / "app.json"
+        path.write_text("{")
+        cli = make_cli()(
+            config_parser_class=argclass.JSONDefaultsParser,
+            config_argument="--config",
+        )
+        with pytest.raises(argclass.ConfigurationError) as exc_info:
+            cli.parse_args(["--config", str(path)])
+        assert exc_info.value.file_path == str(path)
+        assert isinstance(exc_info.value.__cause__, json.JSONDecodeError)
+
+    @pytest.mark.parametrize("explicit", [False, True], ids=["preset", "flag"])
+    @pytest.mark.parametrize(
+        ("contents", "expected"),
+        [
+            (
+                b"; comment\n\nprivate-marker = value\n",
+                "line 3: missing section header",
+            ),
+            (
+                b"[private-marker]\n[private-marker]\n",
+                "line 2: duplicate section",
+            ),
+            (
+                b"[s]\nprivate-marker = 1\nprivate-marker = 2\n",
+                "line 3: duplicate option",
+            ),
+            (
+                b"[a]\n= private-marker\n[b]\n= second error\n",
+                "line 2: invalid INI syntax",
+            ),
+            (
+                b"[DEFAULT]\nworkers = private-marker\xff\n",
+                "invalid text encoding",
+            ),
+            (
+                b"[section]\nprivate-marker\n  continuation\n",
+                ("line 3: " if sys.version_info >= (3, 13) else "")
+                + "continuation after an option without a value",
+            ),
+        ],
+        ids=[
+            "header",
+            "section",
+            "option",
+            "syntax",
+            "encoding",
+            "continuation",
+        ],
+    )
+    def test_invalid_ini_has_safe_file_error(
+        self, tmp_path, explicit, contents, expected
+    ):
         bad = tmp_path / "bad.ini"
-        bad.write_text("this is not an ini file at all\n")
-        cli = make_cli()(config_argument="--config")
-        with pytest.raises(argclass.ConfigurationError):
-            cli.parse_args(["--config", str(bad)])
+        bad.write_bytes(contents)
+        cli = make_cli()
+        with pytest.raises(argclass.ConfigurationError) as caught:
+            if explicit:
+                cli(config_argument="--config").parse_args(
+                    ["--config", str(bad)]
+                )
+            else:
+                cli(config_files=[bad], strict_config=True)
+
+        assert caught.value.reason == "invalid_file"
+        assert caught.value.file_path == str(bad)
+        assert str(caught.value) == f"({bad}) {expected}"
+        assert "private-marker" not in "".join(
+            traceback.format_exception(caught.value)
+        )
 
     def test_positional_config_argument_rejected(self):
         with pytest.raises(argclass.ArgumentDefinitionError):

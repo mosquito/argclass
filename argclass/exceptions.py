@@ -1,6 +1,6 @@
 """Exception classes for argclass with rich context for debugging."""
 
-from typing import Any
+from typing import Any, Literal
 
 
 class ArgclassError(Exception):
@@ -163,6 +163,7 @@ class ConfigurationError(ArgclassError):
     Attributes:
         file_path: Path to the configuration file that caused the error.
         section: The config section (e.g., INI section) where error occurred.
+        reason: File error category (``invalid_file`` or ``unreadable_file``).
 
     Example::
 
@@ -185,7 +186,9 @@ class ConfigurationError(ArgclassError):
         file_path: str | None = None,
         section: str | None = None,
         hint: str | None = None,
+        reason: Literal["invalid_file", "unreadable_file"] | None = None,
     ):
+        self.reason = reason
         self.file_path = file_path
         self.section = section
         super().__init__(message, field_name=field_name, hint=hint)

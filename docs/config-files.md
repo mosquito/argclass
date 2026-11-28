@@ -90,7 +90,14 @@ What you need to know:
 - **Missing or broken file is an error.** A path the user passes
   explicitly that does not exist or cannot be parsed raises
   `ConfigurationError` — unlike `config_files`, which is a lenient
-  search list.
+  search list. A missing or unreadable explicit file has
+  `reason="unreadable_file"`. Malformed INI files, including files with
+  decoding errors, have `reason="invalid_file"` for both strict
+  `config_files` and `config_argument`. The error includes the file path
+  and the cause. Syntax errors include the line number when available.
+  For example, a repeated option on line 4 gives
+  `(app.ini) line 4: duplicate option`. A decoding error gives
+  `(app.ini) invalid text encoding`. Neither message quotes the input.
 - **Required arguments** are satisfied by a value from the file.
 
 Fine print:
@@ -466,12 +473,14 @@ parser1 = Parser(config_files=[config_path], strict_config=False)
 parser1.parse_args([])
 assert parser1.host == "second.example.com"
 
-# Strict mode: raises DuplicateOptionError
+# Strict mode reports the invalid file
 try:
     parser2 = Parser(config_files=[config_path], strict_config=True)
     assert False, "Should have raised"
-except Exception as e:
-    assert "DuplicateOptionError" in type(e).__name__
+except argclass.ConfigurationError as error:
+    assert error.reason == "invalid_file"
+    assert error.message == "line 4: duplicate option"
+    assert error.file_path == str(Path(config_path).resolve())
 
 Path(config_path).unlink()
 ```
@@ -480,7 +489,7 @@ Path(config_path).unlink()
 
 | Format | `strict_config=False` (default) | `strict_config=True` |
 |--------|--------------------------------|---------------------|
-| **INI** | Duplicate keys: last wins | Raises `DuplicateOptionError` |
+| **INI** | Duplicate keys: last wins | Raises `ConfigurationError` |
 | **JSON** | Parse errors: silently skipped | Raises `JSONDecodeError` |
 | **TOML** | Parse errors: silently skipped | Raises parse exception |
 

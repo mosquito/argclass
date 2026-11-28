@@ -1045,6 +1045,7 @@ class Parser(AbstractParser, Base):
             raise ConfigurationError(
                 "configuration file does not exist or is not readable",
                 file_path=str(file),
+                reason="unreadable_file",
                 hint="Check the path passed via "
                 f"{'/'.join(self._config_argument)}.",
             )
